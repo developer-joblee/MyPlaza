@@ -68,15 +68,20 @@ client/   Vite + React (UI) + PixiJS (jogo, fora do React)
 
 ## Editando o mapa
 
-O mapa é ASCII em `shared/src/map.ts` (`#` cerca, `.` grama, `~` água,
-`=` ponte, `-` trilha, `T` árvore, `B` arbusto, `R` pedra, `F` flores,
-`S` girassol, `o` mesa, `c` cadeira, `r` tapete, `H` casinha). Todas as
-linhas precisam ter o mesmo comprimento; os spawns ficam em `SPAWN_TILES`.
+Os mapas são ASCII em `shared/src/scenarios.ts`, um por cenário (Praça,
+Escritório e Ruínas), cada um com sua legenda `charToTile` e spawns
+próprios. Todas as linhas precisam ter o mesmo comprimento. No cenário
+Ruínas o visual é uma imagem única da cena (`client/public/tiles/ruins/`);
+o ASCII define apenas a colisão (`#` sólido, `.` livre).
 
 ## Créditos de assets
 
-- **Terreno e objetos**: [Sprout Lands — Basic pack](https://cupnooble.itch.io/sprout-lands-asset-pack),
+- **Praça (terreno e objetos)**: [Sprout Lands — Basic pack](https://cupnooble.itch.io/sprout-lands-asset-pack),
   by **Cup Nooble** — uso não-comercial, conforme a licença do pack.
+- **Ruínas (cena e objetos)**: [Pixel Art Top Down — Basic](https://cainos.itch.io/pixel-art-top-down-basic),
+  by **Cainos** — licença CC0.
+- **Interiores modernos (Estúdio)**: [Modern Interiors — free](https://limezu.itch.io/moderninteriors),
+  by **LimeZu** — uso não-comercial, conforme a licença do pack.
 - **Personagem**: Prototype_Character (pack local do projeto).
 
 > Atenção: a licença do Sprout Lands Basic é **não-comercial**. Para uso

@@ -2,7 +2,7 @@ import { AVATAR_RADIUS, MOVE_SPEED } from '@together/shared';
 import { Avatar } from './Avatar';
 import type { CharacterFrames } from './sprites';
 import type { Keyboard } from './input';
-import type { Tilemap } from './Tilemap';
+import type { TilemapBase } from './TilemapBase';
 
 export class LocalPlayer {
   readonly avatar: Avatar;
@@ -20,7 +20,7 @@ export class LocalPlayer {
   }
 
   /** Move com colisão por eixo separado. Retorna true se a posição mudou. */
-  update(dt: number, keyboard: Keyboard, tilemap: Tilemap): boolean {
+  update(dt: number, keyboard: Keyboard, tilemap: TilemapBase): boolean {
     const { x: ax, y: ay } = keyboard.axis;
     this.avatar.setMotion(ax, ay, ax !== 0 || ay !== 0);
     this.avatar.update(dt);

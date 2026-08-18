@@ -5,14 +5,14 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from '@together/shared';
-import { registerHandlers } from './handlers';
+import { registerHandlers, type SocketData } from './handlers';
 
 const httpServer = createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('toGether signaling server');
 });
 
-const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
+const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(httpServer, {
   cors: { origin: '*' },
 });
 

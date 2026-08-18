@@ -1,6 +1,7 @@
 import { TILE_SIZE } from './constants';
 
 export enum TileType {
+  // Praça (Sprout Lands)
   Grass = 0,
   Water = 1,
   Bridge = 2,
@@ -15,60 +16,36 @@ export enum TileType {
   Chair = 11,
   Rug = 12,
   House = 13,
+  // Escritório (render procedural)
+  Floor = 14,
+  Wall = 15,
+  Desk = 16,
+  Plant = 17,
+  Carpet = 18,
+  // Estúdio (Modern Interiors)
+  FloorLounge = 19,
+  FloorMeeting = 20,
+  FloorKitchen = 21,
+  Workstation = 22,
+  Sofa = 23,
+  Shelf = 24,
+  Counter = 25,
+  Fridge = 26,
+  Globe = 27,
+  WallWindow = 28,
+  WallArt = 29,
+  WallBoard = 30,
 }
 
-const CHAR_TO_TILE: Record<string, TileType> = {
-  '.': TileType.Grass,
-  '~': TileType.Water,
-  '=': TileType.Bridge,
-  '-': TileType.Path,
-  '#': TileType.Fence,
-  T: TileType.Tree,
-  B: TileType.Bush,
-  R: TileType.Rock,
-  F: TileType.Flower,
-  S: TileType.Sunflower,
-  o: TileType.Table,
-  c: TileType.Chair,
-  r: TileType.Rug,
-  H: TileType.House,
-};
-
-/**
- * Jardim da equipe, 40x26 (assets Sprout Lands, by Cup Nooble).
- * `#` cerca, `.` grama, `~` água, `=` ponte, `-` trilha de terra,
- * `T` árvore, `B` arbusto, `R` pedra, `F` flores (caminhável),
- * `S` girassol, `o` mesa, `c` cadeira, `r` tapete (caminhável),
- * `H` casinha (footprint sólido; o sprite se estende para cima).
- */
-const MAP_ROWS = [
-  '########################################',
-  '#..............................~~~.....#',
-  '#..T........................T..~~~.F...#',
-  '#..............................~~~..T..#',
-  '#..............................~~~.....#',
-  '#..HHH.........................===.....#',
-  '#.........---------------------===.....#',
-  '#..rrr..S.-....................~~~.rr..#',
-  '#..rrr....-....................~~~.rr..#',
-  '#..rrr....-....................~~~.oc..#',
-  '#.........-....................~~~.c...#',
-  '#.B.......-....T...............~~~.....#',
-  '#.........-....................~~~..T..#',
-  '#.R.......-.........F..........~~~.....#',
-  '#.........-....................~~~.F...#',
-  '#.........-....................~~~.....#',
-  '#.S.......-..coc..coc..........~~~..B..#',
-  '#.........-....................===.....#',
-  '#.........---------------------===.F...#',
-  '#....~~........rr..............~~~.....#',
-  '#...~~~~......rr...............~~~..R..#',
-  '#....~~........................~~~.....#',
-  '#...................T..........~~~.....#',
-  '#..B...........................~~~...T.#',
-  '#..............................~~~.....#',
-  '########################################',
-];
+/** Tiles que se comportam como parede (cap + face no tema modern). */
+export function isWallLike(tile: TileType): boolean {
+  return (
+    tile === TileType.Wall ||
+    tile === TileType.WallWindow ||
+    tile === TileType.WallArt ||
+    tile === TileType.WallBoard
+  );
+}
 
 export interface WorldMap {
   cols: number;
@@ -78,16 +55,21 @@ export interface WorldMap {
   tiles: TileType[][];
 }
 
-export function parseMap(): WorldMap {
-  const rows = MAP_ROWS.length;
-  const cols = MAP_ROWS[0].length;
-  const tiles: TileType[][] = MAP_ROWS.map((row, y) => {
+export function buildMap(
+  rows: readonly string[],
+  charToTile: Readonly<Record<string, TileType>>,
+  defaultTile: TileType,
+  mapName: string,
+): WorldMap {
+  const rowCount = rows.length;
+  const cols = rows[0].length;
+  const tiles: TileType[][] = rows.map((row, y) => {
     if (row.length !== cols) {
-      throw new Error(`Linha ${y} do mapa tem ${row.length} colunas, esperado ${cols}`);
+      throw new Error(`Mapa '${mapName}': linha ${y} tem ${row.length} colunas, esperado ${cols}`);
     }
-    return [...row].map((ch) => CHAR_TO_TILE[ch] ?? TileType.Grass);
+    return [...row].map((ch) => charToTile[ch] ?? defaultTile);
   });
-  return { cols, rows, widthPx: cols * TILE_SIZE, heightPx: rows * TILE_SIZE, tiles };
+  return { cols, rows: rowCount, widthPx: cols * TILE_SIZE, heightPx: rowCount * TILE_SIZE, tiles };
 }
 
 export function isSolid(tile: TileType): boolean {
@@ -101,13 +83,20 @@ export function isSolid(tile: TileType): boolean {
     case TileType.Table:
     case TileType.Chair:
     case TileType.House:
+    case TileType.Wall:
+    case TileType.Desk:
+    case TileType.Plant:
+    case TileType.Workstation:
+    case TileType.Sofa:
+    case TileType.Shelf:
+    case TileType.Counter:
+    case TileType.Fridge:
+    case TileType.Globe:
+    case TileType.WallWindow:
+    case TileType.WallArt:
+    case TileType.WallBoard:
       return true;
     default:
       return false;
   }
 }
-
-/** Tiles (col, row) onde novos players nascem — tapetes em frente à casinha. */
-export const SPAWN_TILES: ReadonlyArray<readonly [number, number]> = [
-  [3, 7], [4, 7], [5, 7], [3, 8], [4, 8], [5, 8], [3, 9], [4, 9], [5, 9],
-];

@@ -1,9 +1,13 @@
 import { Application, Container } from 'pixi.js';
-import { TICK_RATE, parseMap, type PlayerState } from '@together/shared';
+import { SCENARIOS, TICK_RATE, parseMap, type PlayerState, type ScenarioId } from '@together/shared';
 import type { AppSocket } from '../net/socket';
 import { useStore } from '../state/store';
 import { Keyboard } from './input';
+import { TilemapBase } from './TilemapBase';
 import { Tilemap } from './Tilemap';
+import { OfficeTilemap } from './OfficeTilemap';
+import { RuinsTilemap, loadRuinsTextures, type RuinsTextures } from './RuinsTilemap';
+import { ModernTilemap, loadModernTextures, type ModernTextures } from './ModernTilemap';
 import { LocalPlayer } from './LocalPlayer';
 import { RemotePlayer } from './RemotePlayer';
 import { loadCharacterFrames, type CharacterFrames } from './sprites';
@@ -19,7 +23,7 @@ export class Game {
   private app: Application;
   private world = new Container();
   private playersLayer = new Container();
-  private tilemap: Tilemap;
+  private tilemap: TilemapBase;
   private keyboard = new Keyboard();
   private local: LocalPlayer;
   private remotes = new Map<string, RemotePlayer>();
@@ -36,12 +40,22 @@ export class Game {
     app: Application,
     private socket: AppSocket,
     private frames: CharacterFrames,
-    tilesets: Tilesets,
+    themeAssets: Tilesets | RuinsTextures | ModernTextures | null,
     selfName: string,
     selfColor: number,
+    scenarioId: ScenarioId,
   ) {
     this.app = app;
-    this.tilemap = new Tilemap(parseMap(), tilesets);
+    const map = parseMap(scenarioId);
+    const theme = SCENARIOS[scenarioId].theme;
+    this.tilemap =
+      theme === 'garden'
+        ? new Tilemap(map, themeAssets as Tilesets)
+        : theme === 'ruins'
+          ? new RuinsTilemap(map, themeAssets as RuinsTextures)
+          : theme === 'modern'
+            ? new ModernTilemap(map, themeAssets as ModernTextures)
+            : new OfficeTilemap(map);
     this.local = new LocalPlayer(frames, selfName, selfColor);
 
     this.playersLayer.sortableChildren = true;
@@ -66,11 +80,20 @@ export class Game {
     socket: AppSocket,
     selfName: string,
     selfColor: number,
+    scenarioId: ScenarioId,
   ): Promise<Game> {
     const app = new Application();
-    const [frames, tilesets] = await Promise.all([
+    const theme = SCENARIOS[scenarioId].theme;
+    const [frames, themeAssets] = await Promise.all([
       loadCharacterFrames(),
-      loadTilesets(),
+      // o escritório é procedural — não carrega texturas de tiles
+      theme === 'garden'
+        ? loadTilesets()
+        : theme === 'ruins'
+          ? loadRuinsTextures()
+          : theme === 'modern'
+            ? loadModernTextures()
+            : Promise.resolve(null),
       app.init({
         resizeTo: container,
         backgroundColor: 0x1f2129,
@@ -80,7 +103,7 @@ export class Game {
       }),
     ]);
     container.appendChild(app.canvas);
-    return new Game(app, socket, frames, tilesets, selfName, selfColor);
+    return new Game(app, socket, frames, themeAssets, selfName, selfColor, scenarioId);
   }
 
   private bindSocket(): void {

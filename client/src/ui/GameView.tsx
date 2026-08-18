@@ -20,7 +20,7 @@ export function GameView() {
     const container = containerRef.current;
     if (!container) return;
 
-    const { selfName, selfColor } = useStore.getState();
+    const { selfName, selfColor, selfScenario } = useStore.getState();
     const socket = createSocket();
     runtime.socket = socket;
     const unbindStore = bindStoreToSocket(socket);
@@ -40,7 +40,7 @@ export function GameView() {
       useStore.getState().setMicAvailable(mic !== null);
       useStore.getState().setMicEnabled(mic !== null);
 
-      game = await Game.create(container, socket, selfName, selfColor);
+      game = await Game.create(container, socket, selfName, selfColor, selfScenario);
       if (cancelled) {
         game.destroy();
         game = null;
@@ -57,7 +57,7 @@ export function GameView() {
       runtime.peerManager = peerManager;
 
       socket.on('connect', () => {
-        socket.emit('join', selfName, selfColor);
+        socket.emit('join', selfName, selfColor, selfScenario);
         if (mic && socket.id) detector?.add(socket.id, mic);
       });
       socket.connect();

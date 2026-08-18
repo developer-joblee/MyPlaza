@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AVATAR_COLORS, type ChatMessage } from '@together/shared';
+import { AVATAR_COLORS, DEFAULT_SCENARIO, type ChatMessage, type ScenarioId } from '@together/shared';
 
 export interface RosterEntry {
   id: string;
@@ -16,6 +16,7 @@ interface AppState {
   phase: 'join' | 'playing';
   selfName: string;
   selfColor: number;
+  selfScenario: ScenarioId;
   selfId: string | null;
   connected: boolean;
   roster: RosterEntry[];
@@ -31,7 +32,8 @@ interface AppState {
   /** zoom alvo da câmera, em % */
   zoomPct: number;
 
-  join: (name: string, color: number) => void;
+  join: (name: string, color: number, scenario: ScenarioId) => void;
+  setScenario: (id: ScenarioId) => void;
   setSelf: (id: string | null, connected: boolean) => void;
   setRoster: (roster: RosterEntry[]) => void;
   upsertRosterEntry: (entry: RosterEntry) => void;
@@ -53,6 +55,7 @@ export const useStore = create<AppState>((set) => ({
   phase: 'join',
   selfName: '',
   selfColor: AVATAR_COLORS[0],
+  selfScenario: DEFAULT_SCENARIO,
   selfId: null,
   connected: false,
   roster: [],
@@ -66,7 +69,9 @@ export const useStore = create<AppState>((set) => ({
   focusedScreenId: null,
   zoomPct: 100,
 
-  join: (name, color) => set({ phase: 'playing', selfName: name, selfColor: color }),
+  join: (name, color, scenario) =>
+    set({ phase: 'playing', selfName: name, selfColor: color, selfScenario: scenario }),
+  setScenario: (id) => set({ selfScenario: id }),
   setSelf: (id, connected) => set({ selfId: id, connected }),
   setRoster: (roster) => set({ roster }),
   upsertRosterEntry: (entry) =>

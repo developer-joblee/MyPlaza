@@ -1,58 +1,83 @@
 import {
   CHAT_HISTORY_LIMIT,
-  SPAWN_TILES,
+  SCENARIOS,
   TILE_SIZE,
   parseMap,
   type ChatMessage,
   type PlayerState,
+  type ScenarioId,
+  type WorldMap,
 } from '@together/shared';
 
-const map = parseMap();
-const players = new Map<string, PlayerState>();
-const chatHistory: ChatMessage[] = [];
-let spawnIndex = 0;
+export class World {
+  readonly map: WorldMap;
+  private readonly spawnTiles: ReadonlyArray<readonly [number, number]>;
+  private readonly players = new Map<string, PlayerState>();
+  private readonly chatHistory: ChatMessage[] = [];
+  private spawnIndex = 0;
 
-export function addPlayer(id: string, name: string, color: number): PlayerState {
-  const [tx, ty] = SPAWN_TILES[spawnIndex % SPAWN_TILES.length];
-  spawnIndex++;
-  const player: PlayerState = {
-    id,
-    name,
-    color,
-    x: tx * TILE_SIZE + TILE_SIZE / 2,
-    y: ty * TILE_SIZE + TILE_SIZE / 2,
-  };
-  players.set(id, player);
-  return player;
-}
+  constructor(readonly scenarioId: ScenarioId) {
+    this.map = parseMap(scenarioId);
+    this.spawnTiles = SCENARIOS[scenarioId].spawnTiles;
+  }
 
-export function removePlayer(id: string): boolean {
-  return players.delete(id);
-}
+  addPlayer(id: string, name: string, color: number): PlayerState {
+    const [tx, ty] = this.spawnTiles[this.spawnIndex % this.spawnTiles.length];
+    this.spawnIndex++;
+    const player: PlayerState = {
+      id,
+      name,
+      color,
+      x: tx * TILE_SIZE + TILE_SIZE / 2,
+      y: ty * TILE_SIZE + TILE_SIZE / 2,
+    };
+    this.players.set(id, player);
+    return player;
+  }
 
-export function movePlayer(id: string, x: number, y: number): PlayerState | undefined {
-  const player = players.get(id);
-  if (!player) return undefined;
-  player.x = Math.max(0, Math.min(map.widthPx, x));
-  player.y = Math.max(0, Math.min(map.heightPx, y));
-  return player;
-}
+  removePlayer(id: string): boolean {
+    return this.players.delete(id);
+  }
 
-export function getPlayers(): PlayerState[] {
-  return [...players.values()];
-}
+  movePlayer(id: string, x: number, y: number): PlayerState | undefined {
+    const player = this.players.get(id);
+    if (!player) return undefined;
+    player.x = Math.max(0, Math.min(this.map.widthPx, x));
+    player.y = Math.max(0, Math.min(this.map.heightPx, y));
+    return player;
+  }
 
-export function hasPlayer(id: string): boolean {
-  return players.has(id);
-}
+  getPlayers(): PlayerState[] {
+    return [...this.players.values()];
+  }
 
-export function addChatMessage(msg: ChatMessage): void {
-  chatHistory.push(msg);
-  if (chatHistory.length > CHAT_HISTORY_LIMIT) {
-    chatHistory.splice(0, chatHistory.length - CHAT_HISTORY_LIMIT);
+  hasPlayer(id: string): boolean {
+    return this.players.has(id);
+  }
+
+  getPlayer(id: string): PlayerState | undefined {
+    return this.players.get(id);
+  }
+
+  addChatMessage(msg: ChatMessage): void {
+    this.chatHistory.push(msg);
+    if (this.chatHistory.length > CHAT_HISTORY_LIMIT) {
+      this.chatHistory.splice(0, this.chatHistory.length - CHAT_HISTORY_LIMIT);
+    }
+  }
+
+  getChatHistory(): ChatMessage[] {
+    return this.chatHistory;
   }
 }
 
-export function getChatHistory(): ChatMessage[] {
-  return chatHistory;
+const worlds = new Map<ScenarioId, World>();
+
+export function getWorld(id: ScenarioId): World {
+  let world = worlds.get(id);
+  if (!world) {
+    world = new World(id);
+    worlds.set(id, world);
+  }
+  return world;
 }

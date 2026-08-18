@@ -1,5 +1,6 @@
-import { Container, Sprite, Texture } from 'pixi.js';
-import { TILE_SIZE, TileType, isSolid, type WorldMap } from '@together/shared';
+import { Sprite, Texture } from 'pixi.js';
+import { TILE_SIZE, TileType, type WorldMap } from '@together/shared';
+import { TilemapBase } from './TilemapBase';
 import type { BlobSet, Tilesets } from './tilesets';
 
 const SCALE = 2; // tiles de 16px -> 32px
@@ -14,47 +15,17 @@ function hash(x: number, y: number): number {
   return (h ^ (h >> 16)) >>> 0;
 }
 
-export class Tilemap {
-  /** camada de chão (abaixo dos players) */
-  readonly view = new Container();
-  /** sprites altos para o layer com y-sort do Game */
-  readonly props: Sprite[] = [];
-
+export class Tilemap extends TilemapBase {
   private waterSprites: Sprite[] = [];
   private waterTimer = 0;
   private waterFrame = 0;
 
   constructor(
-    private map: WorldMap,
+    map: WorldMap,
     private ts: Tilesets,
   ) {
+    super(map);
     this.build();
-  }
-
-  // ------------------------------------------------------------- colisão
-
-  private tileAt(x: number, y: number): TileType | null {
-    if (x < 0 || y < 0 || x >= this.map.cols || y >= this.map.rows) return null;
-    return this.map.tiles[y][x];
-  }
-
-  isSolidAt(tileX: number, tileY: number): boolean {
-    const t = this.tileAt(tileX, tileY);
-    return t === null ? true : isSolid(t);
-  }
-
-  /** Colisão de um círculo (aproximado por AABB) contra tiles sólidos. */
-  collidesCircle(x: number, y: number, radius: number): boolean {
-    const minTx = Math.floor((x - radius) / TILE_SIZE);
-    const maxTx = Math.floor((x + radius) / TILE_SIZE);
-    const minTy = Math.floor((y - radius) / TILE_SIZE);
-    const maxTy = Math.floor((y + radius) / TILE_SIZE);
-    for (let ty = minTy; ty <= maxTy; ty++) {
-      for (let tx = minTx; tx <= maxTx; tx++) {
-        if (this.isSolidAt(tx, ty)) return true;
-      }
-    }
-    return false;
   }
 
   // ------------------------------------------------------------- render
@@ -309,7 +280,7 @@ export class Tilemap {
   }
 
   /** Anima a água. Chamar a cada frame do ticker. */
-  animate(dt: number): void {
+  override animate(dt: number): void {
     this.waterTimer += dt;
     if (this.waterTimer < WATER_FRAME_S) return;
     this.waterTimer %= WATER_FRAME_S;
