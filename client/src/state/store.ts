@@ -28,6 +28,8 @@ interface AppState {
   /** ids dos players dentro do alcance de voz */
   nearbyIds: string[];
   focusedScreenId: string | null;
+  /** zoom alvo da câmera, em % */
+  zoomPct: number;
 
   join: (name: string, color: number) => void;
   setSelf: (id: string | null, connected: boolean) => void;
@@ -44,6 +46,7 @@ interface AppState {
   setSpeaking: (id: string, v: boolean) => void;
   setNearbyIds: (ids: string[]) => void;
   setFocusedScreen: (peerId: string | null) => void;
+  setZoomPct: (pct: number) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -61,6 +64,7 @@ export const useStore = create<AppState>((set) => ({
   speaking: {},
   nearbyIds: [],
   focusedScreenId: null,
+  zoomPct: 100,
 
   join: (name, color) => set({ phase: 'playing', selfName: name, selfColor: color }),
   setSelf: (id, connected) => set({ selfId: id, connected }),
@@ -92,4 +96,5 @@ export const useStore = create<AppState>((set) => ({
     set((s) => (Boolean(s.speaking[id]) === v ? s : { speaking: { ...s.speaking, [id]: v } })),
   setNearbyIds: (ids) => set({ nearbyIds: ids }),
   setFocusedScreen: (peerId) => set({ focusedScreenId: peerId }),
+  setZoomPct: (pct) => set({ zoomPct: pct }),
 }));

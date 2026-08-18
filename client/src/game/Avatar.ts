@@ -15,8 +15,8 @@ const SCALE = 1.5;
 const FEET_Y = 14;
 const WALK_FRAME_S = 0.12;
 const IDLE_FRAME_S = 0.45;
-/** A linha "side" da spritesheet olha para a ESQUERDA */
-const SHEET_SIDE_FACES_LEFT = true;
+/** A linha "side" da spritesheet olha para a DIREITA */
+const SHEET_SIDE_FACES_LEFT = false;
 const FRAME_DISPLAY_H = 32 * SCALE;
 
 /** Visual compartilhado entre o player local e os remotos. */

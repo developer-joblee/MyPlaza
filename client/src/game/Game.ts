@@ -1,6 +1,7 @@
 import { Application, Container } from 'pixi.js';
 import { TICK_RATE, parseMap, type PlayerState } from '@together/shared';
 import type { AppSocket } from '../net/socket';
+import { useStore } from '../state/store';
 import { Keyboard } from './input';
 import { Tilemap } from './Tilemap';
 import { LocalPlayer } from './LocalPlayer';
@@ -9,6 +10,9 @@ import { loadCharacterFrames, type CharacterFrames } from './sprites';
 
 const CAMERA_LERP_RATE = 8;
 const SEND_INTERVAL = 1 / TICK_RATE;
+const ZOOM_LERP_RATE = 10;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2.5;
 
 export class Game {
   private app: Application;
@@ -23,6 +27,8 @@ export class Game {
   private camX = 0;
   private camY = 0;
   private cameraSnapped = false;
+  private zoom = 1;
+  private targetZoom = 1;
   private unbinders: Array<() => void> = [];
 
   private constructor(
@@ -42,9 +48,15 @@ export class Game {
     this.app.stage.addChild(this.world);
 
     this.keyboard.attach();
+    this.app.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     this.bindSocket();
     this.app.ticker.add(this.tick);
   }
+
+  private onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    this.zoomBy(Math.exp(-e.deltaY * 0.0012));
+  };
 
   static async create(
     container: HTMLElement,
@@ -156,10 +168,24 @@ export class Game {
       this.camY += (targetY - this.camY) * t;
     }
 
+    const zt = 1 - Math.exp(-ZOOM_LERP_RATE * dt);
+    this.zoom += (this.targetZoom - this.zoom) * zt;
+
+    this.world.scale.set(this.zoom);
     this.world.position.set(
-      Math.round(screenW / 2 - this.camX),
-      Math.round(screenH / 2 - this.camY),
+      Math.round(screenW / 2 - this.camX * this.zoom),
+      Math.round(screenH / 2 - this.camY * this.zoom),
     );
+  }
+
+  /** Define o zoom alvo (suavizado no ticker) e sincroniza a UI. */
+  setZoom(target: number): void {
+    this.targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, target));
+    useStore.getState().setZoomPct(Math.round(this.targetZoom * 100));
+  }
+
+  zoomBy(factor: number): void {
+    this.setZoom(this.targetZoom * factor);
   }
 
   /** Distância (px) do player local a cada player remoto. */
@@ -181,6 +207,7 @@ export class Game {
 
   destroy(): void {
     for (const unbind of this.unbinders) unbind();
+    this.app.canvas.removeEventListener('wheel', this.onWheel);
     this.keyboard.detach();
     this.app.ticker.remove(this.tick);
     this.app.destroy(true, { children: true, texture: true });

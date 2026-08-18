@@ -11,6 +11,7 @@ import { Chat } from './Chat';
 import { Hud } from './Hud';
 import { MediaControls } from './MediaControls';
 import { ScreenShareView } from './ScreenShareView';
+import { ZoomControls } from './ZoomControls';
 
 export function GameView() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,6 +84,7 @@ export function GameView() {
       <ScreenShareView />
       <Chat />
       <MediaControls />
+      <ZoomControls />
     </div>
   );
 }
