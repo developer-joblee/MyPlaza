@@ -74,6 +74,22 @@ próprios. Todas as linhas precisam ter o mesmo comprimento. No cenário
 Ruínas o visual é uma imagem única da cena (`client/public/tiles/ruins/`);
 o ASCII define apenas a colisão (`#` sólido, `.` livre).
 
+## Deploy (Railway)
+
+Um serviço só: o server serve o build estático do client e o Socket.IO na
+mesma origem. O Nixpacks detecta tudo pelos scripts da raiz:
+
+- **Build**: `npm install && npm run build` (automático)
+- **Start**: `npm start` (automático — roda `tsx` no server, que respeita `process.env.PORT`)
+- Node 20+ (declarado em `engines`)
+
+Nenhuma variável de ambiente é necessária. O TLS do Railway já satisfaz o
+requisito de HTTPS do microfone/compartilhamento de tela.
+
+> Voz/tela são P2P — o servidor só sinaliza. Se alguém da equipe estiver
+> atrás de rede corporativa restritiva e a voz não conectar, adicione um
+> servidor TURN ao `RTC_CONFIG` em `client/src/webrtc/PeerManager.ts`.
+
 ## Créditos de assets
 
 - **Praça (terreno e objetos)**: [Sprout Lands — Basic pack](https://cupnooble.itch.io/sprout-lands-asset-pack),
