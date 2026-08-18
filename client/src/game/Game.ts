@@ -7,6 +7,7 @@ import { Tilemap } from './Tilemap';
 import { LocalPlayer } from './LocalPlayer';
 import { RemotePlayer } from './RemotePlayer';
 import { loadCharacterFrames, type CharacterFrames } from './sprites';
+import { loadTilesets, type Tilesets } from './tilesets';
 
 const CAMERA_LERP_RATE = 8;
 const SEND_INTERVAL = 1 / TICK_RATE;
@@ -35,16 +36,18 @@ export class Game {
     app: Application,
     private socket: AppSocket,
     private frames: CharacterFrames,
+    tilesets: Tilesets,
     selfName: string,
     selfColor: number,
   ) {
     this.app = app;
-    this.tilemap = new Tilemap(parseMap());
+    this.tilemap = new Tilemap(parseMap(), tilesets);
     this.local = new LocalPlayer(frames, selfName, selfColor);
 
     this.playersLayer.sortableChildren = true;
     this.world.addChild(this.tilemap.view, this.playersLayer);
     this.playersLayer.addChild(this.local.avatar.view);
+    for (const prop of this.tilemap.props) this.playersLayer.addChild(prop);
     this.app.stage.addChild(this.world);
 
     this.keyboard.attach();
@@ -65,8 +68,9 @@ export class Game {
     selfColor: number,
   ): Promise<Game> {
     const app = new Application();
-    const [frames] = await Promise.all([
+    const [frames, tilesets] = await Promise.all([
       loadCharacterFrames(),
+      loadTilesets(),
       app.init({
         resizeTo: container,
         backgroundColor: 0x1f2129,
@@ -76,7 +80,7 @@ export class Game {
       }),
     ]);
     container.appendChild(app.canvas);
-    return new Game(app, socket, frames, selfName, selfColor);
+    return new Game(app, socket, frames, tilesets, selfName, selfColor);
   }
 
   private bindSocket(): void {
@@ -131,6 +135,7 @@ export class Game {
 
     const moved = this.local.update(dt, this.keyboard, this.tilemap);
     for (const remote of this.remotes.values()) remote.update(dt);
+    this.tilemap.animate(dt);
 
     // envio de posição com throttle
     this.sendAccumulator += dt;

@@ -68,6 +68,16 @@ client/   Vite + React (UI) + PixiJS (jogo, fora do React)
 
 ## Editando o mapa
 
-O mapa é ASCII em `shared/src/map.ts` (`#` parede, `.` chão, `,` carpete,
-`D` mesa, `T` mesa de reunião, `P` planta). Todas as linhas precisam ter o
-mesmo comprimento; os spawns ficam em `SPAWN_TILES`.
+O mapa é ASCII em `shared/src/map.ts` (`#` cerca, `.` grama, `~` água,
+`=` ponte, `-` trilha, `T` árvore, `B` arbusto, `R` pedra, `F` flores,
+`S` girassol, `o` mesa, `c` cadeira, `r` tapete, `H` casinha). Todas as
+linhas precisam ter o mesmo comprimento; os spawns ficam em `SPAWN_TILES`.
+
+## Créditos de assets
+
+- **Terreno e objetos**: [Sprout Lands — Basic pack](https://cupnooble.itch.io/sprout-lands-asset-pack),
+  by **Cup Nooble** — uso não-comercial, conforme a licença do pack.
+- **Personagem**: Prototype_Character (pack local do projeto).
+
+> Atenção: a licença do Sprout Lands Basic é **não-comercial**. Para uso
+> comercial, contate o autor (Discord: `cup_nooble`).
