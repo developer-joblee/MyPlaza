@@ -67,5 +67,6 @@ export class OfficeTilemap extends TilemapBase {
     }
 
     this.view.addChild(g);
+    this.view.cacheAsTexture(true);
   }
 }

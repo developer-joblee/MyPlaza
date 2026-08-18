@@ -109,4 +109,8 @@ export class Avatar {
   setSpeaking(speaking: boolean): void {
     this.speakingRing.visible = speaking;
   }
+
+  destroy(): void {
+    this.view.destroy({ children: true });
+  }
 }

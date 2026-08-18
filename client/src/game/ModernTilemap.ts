@@ -173,6 +173,7 @@ export class ModernTilemap extends TilemapBase {
     this.buildRugs();
     // 3) móveis (runs + singles)
     this.buildFurniture();
+    this.view.cacheAsTexture(true);
   }
 
   // ------------------------------------------------------------- paredes

@@ -109,7 +109,7 @@ export class Game {
   private bindSocket(): void {
     const onSnapshot = (players: PlayerState[]) => {
       // reset completo (cobre também reconexões)
-      for (const remote of this.remotes.values()) remote.avatar.view.destroy();
+      for (const remote of this.remotes.values()) remote.avatar.destroy();
       this.remotes.clear();
 
       for (const p of players) {
@@ -127,7 +127,7 @@ export class Game {
     const onLeft = (id: string) => {
       const remote = this.remotes.get(id);
       if (remote) {
-        remote.avatar.view.destroy();
+        remote.avatar.destroy();
         this.remotes.delete(id);
       }
     };
@@ -238,6 +238,6 @@ export class Game {
     this.app.canvas.removeEventListener('wheel', this.onWheel);
     this.keyboard.detach();
     this.app.ticker.remove(this.tick);
-    this.app.destroy(true, { children: true, texture: true });
+    this.app.destroy(true, { children: true, texture: false });
   }
 }

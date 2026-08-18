@@ -60,6 +60,7 @@ export class RuinsTilemap extends TilemapBase {
       sprite.zIndex = inst.y + inst.base;
       this.props.push(sprite);
     }
+    this.view.cacheAsTexture(true);
   }
 }
 
