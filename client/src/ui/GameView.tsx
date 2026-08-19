@@ -29,7 +29,7 @@ export function GameView() {
     let game: Game | null = null;
     let voice: VoiceRoom | null = null;
     let onConnect: (() => void) | null = null;
-    let onDisconnect: (() => void) | null = null;
+    let onDisconnect: ((reason: string) => void) | null = null;
 
     void (async () => {
       // permissão de mic no gesto do usuário (o clique em "Entrar"), e antes de
@@ -67,9 +67,11 @@ export function GameView() {
       // join já tenha rodado) e o handler antigo nunca era removido no cleanup
       onConnect = () => {
         socket.emit('join', selfName, selfColor, selfScenario);
+        // socket novo = chance nova: zera o backoff antes de tentar
+        voice?.onSocketReconnected();
         void voice?.onSocketConnected();
       };
-      onDisconnect = () => voice?.onSocketDisconnected();
+      onDisconnect = (reason: string) => voice?.onSocketDisconnected(reason);
       socket.on('connect', onConnect);
       socket.on('disconnect', onDisconnect);
       socket.connect();

@@ -26,8 +26,15 @@ import { volumeForDistance } from './proximity';
 import { requestVoiceToken } from './token';
 
 const VIDEO_RADIUS = PROXIMITY_RADIUS + PROXIMITY_HYSTERESIS;
-/** Tentativas de reconexão nossas (a do próprio SDK acontece antes disso) */
-const MAX_RECONNECT_ATTEMPTS = 5;
+/**
+ * Backoff das nossas tentativas (a reconexão do próprio SDK acontece antes).
+ * Não existe número máximo de tentativas de propósito: desistir deixava a voz
+ * morta com o socket saudável, e o usuário só descobria tentando falar.
+ */
+const RECONNECT_BASE_MS = 1500;
+const RECONNECT_MAX_MS = 30000;
+/** Recusa por rate limit é "espere", não falha: o bucket do servidor recarrega. */
+const RATE_LIMIT_WAIT_MS = 4000;
 
 interface PeerTimers {
   audioOutSince: number | null;
@@ -66,6 +73,9 @@ export class VoiceRoom {
   private noiseFilterTried = false;
   private noiseFilter: { setEnabled: (on: boolean) => Promise<unknown>; destroy: () => Promise<void> } | null = null;
   private reconnectAttempts = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** histórico de quedas — o usuário não sabia dizer se caíam juntos ou não */
+  private drops: Array<{ em: string; motivo: string }> = [];
   private destroyed = false;
   /**
    * Contador de geração: todo await no caminho de voz pode ser atravessado por
@@ -92,15 +102,18 @@ export class VoiceRoom {
     const gen = ++this.gen;
     const socketId = this.socket.id;
 
-    // reconexão com id novo: a identidade antiga virou órfã e ninguém mais
-    // assinaria ela — a voz morreria em silêncio com a sala "conectada"
-    if (this.room && this.identity !== socketId) await this.teardownRoom();
-    if (gen !== this.gen || this.destroyed) return;
-    if (this.room) return; // mesma identidade, sala já de pé
+    // sala saudável com a identidade atual: nada a fazer
+    if (this.room && this.identity === socketId) return;
 
     const store = useStore.getState();
-    store.setVoiceStatus('connecting');
+    store.setVoiceStatus(this.room ? 'reconnecting' : 'connecting');
 
+    /**
+     * TOKEN PRIMEIRO, teardown depois. Antes o `await teardownRoom()` vinha
+     * aqui, e o `room.disconnect()` dele é justamente a janela (segundos, com
+     * round-trip de sinalização) em que o socket caía — aí o emit do token ia
+     * para o `sendBuffer` e só falhava por timeout. Pedir antes fecha a janela.
+     */
     const res = await requestVoiceToken(this.socket);
     if (gen !== this.gen || this.destroyed) return;
 
@@ -108,12 +121,28 @@ export class VoiceRoom {
       store.setVoiceStatus(res.reason === 'not-configured' ? 'unavailable' : 'error');
       if (res.reason !== 'not-configured') {
         console.warn('[voice] token recusado:', res.reason);
-        this.scheduleReconnect(gen);
+        // rate limit não é falha: o bucket do servidor recarrega sozinho
+        // o servidor manda quanto esperar; não precisamos adivinhar
+        this.scheduleReconnect(
+          gen,
+          res.reason === 'rate-limited'
+            ? Math.max(res.retryAfterMs ?? 0, RATE_LIMIT_WAIT_MS)
+            : undefined,
+        );
       }
       return;
     }
-    // token emitido para o socket anterior não serve
-    if (res.identity !== this.socket.id) return;
+    // token emitido para o socket anterior não serve — mas isso é um retry,
+    // não um beco sem saída: antes daqui saía um `return` silencioso que
+    // deixava a voz morta até a próxima reconexão de socket
+    if (res.identity !== this.socket.id) {
+      this.scheduleReconnect(gen);
+      return;
+    }
+
+    // só agora a sala velha morre — com o token já em mão
+    if (this.room) await this.teardownRoom();
+    if (gen !== this.gen || this.destroyed) return;
 
     const room = new Room({
       adaptiveStream: true,
@@ -155,19 +184,38 @@ export class VoiceRoom {
     this.interval ??= setInterval(() => this.tick(), VOICE_TICK_MS);
   }
 
-  onSocketDisconnected(): void {
+  onSocketDisconnected(reason?: string): void {
+    this.registrarQueda(`socket: ${reason ?? 'sem motivo'}`);
     // não derruba a sala: o SDK tem reconexão própria e o socket volta logo.
     // O tick para de reconciliar (ver a guarda em tick) e os volumes congelam.
     useStore.getState().setVoiceStatus(this.room ? 'reconnecting' : 'idle');
   }
 
-  private scheduleReconnect(gen: number): void {
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
-    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 15000);
+  /**
+   * Reagenda indefinidamente, com backoff limitado. Sem teto de tentativas: se
+   * o socket está de pé, sempre existe chance de a voz voltar, e desistir era
+   * exatamente o que deixava a chamada muda até recarregar a página.
+   */
+  private scheduleReconnect(gen: number, waitMs?: number): void {
+    if (this.destroyed || this.retryTimer !== null) return;
+    const delay =
+      waitMs ?? Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempts, RECONNECT_MAX_MS);
     this.reconnectAttempts++;
-    setTimeout(() => {
-      if (gen === this.gen && !this.destroyed && this.socket.connected) void this.onSocketConnected();
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (gen !== this.gen || this.destroyed) return;
+      // socket caído: o handler de `connect` vai chamar de novo, não insiste aqui
+      if (this.socket.connected) void this.onSocketConnected();
     }, delay);
+  }
+
+  /** Socket novo é chance nova: zera o backoff (antes ele só zerava no sucesso). */
+  onSocketReconnected(): void {
+    this.reconnectAttempts = 0;
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 
   private async teardownRoom(): Promise<void> {
@@ -185,6 +233,18 @@ export class VoiceRoom {
     this.lastDistance.clear();
     this.roomSpeakers.clear();
     this.clearAllSpeaking();
+
+    // estado de UI que sobrevivia ao teardown e ficava mentindo:
+    const store = useStore.getState();
+    // telas remotas ficavam renderizando um tile com faixa morta, para sempre
+    for (const screen of store.remoteScreens) store.removeRemoteScreen(screen.peerId);
+    // vizinhos com ids do socket antigo (o HUD mostrava gente que já saiu)
+    store.setNearbyIds([]);
+    // ESTE era quebra permanente: com `screenSharing` preso em true o
+    // startScreenShare() retornava cedo para sempre e o usuário não conseguia
+    // mais compartilhar até recarregar a página
+    this.screenSharing = false;
+    store.setSharing(false);
     if (!room) return;
     room.removeAllListeners();
     try {
@@ -199,6 +259,8 @@ export class VoiceRoom {
     this.gen++; // invalida qualquer await em vôo
     if (this.interval) clearInterval(this.interval);
     this.interval = null;
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     delete (window as unknown as Record<string, unknown>).__togetherVoice;
     const store = useStore.getState();
     store.setVoiceStatus('idle');
@@ -223,9 +285,13 @@ export class VoiceRoom {
     room.on(RoomEvent.Reconnected, () => useStore.getState().setVoiceStatus('connected'));
     room.on(RoomEvent.Disconnected, (reason) => {
       if (this.destroyed || room !== this.room) return;
+      this.registrarQueda(`sala: ${reason ?? 'sem motivo'}`);
       console.warn('[voice] sala desconectada:', reason);
       const gen = this.gen;
       void this.teardownRoom().then(() => {
+        // sem esta guarda, um teardown lento sobrescreve o 'connected' de uma
+        // sala NOVA com 'error' e ainda queima uma tentativa dela
+        if (this.destroyed || gen !== this.gen) return;
         useStore.getState().setVoiceStatus('error');
         this.scheduleReconnect(gen);
       });
@@ -279,6 +345,9 @@ export class VoiceRoom {
     if (!el) return;
     this.audioEls.delete(identity);
     if (track) track.detach(el);
+    // remover do DOM NAO para a reprodução nem solta o stream
+    el.pause();
+    el.srcObject = null;
     el.remove();
   }
 
@@ -317,9 +386,16 @@ export class VoiceRoom {
     // uma vez por sessão: trocar de dispositivo mantém o processor na faixa
     if (!this.noiseFilterTried && useStore.getState().noiseFilter) {
       this.noiseFilterTried = true;
+      const gen = this.gen;
       void import('./krisp').then(async ({ applyNoiseFilter }) => {
         const handle = await applyNoiseFilter(track);
-        if (this.destroyed) {
+        /**
+         * Guarda de geração: sem ela, um filtro em vôo durante uma reconexão se
+         * atribuía a uma faixa da sala MORTA — e como o teardown zera
+         * `noiseFilterTried`, a sala nova criava um SEGUNDO processador. O
+         * perdedor vazava worker + ~2MB de wasm para sempre.
+         */
+        if (this.destroyed || gen !== this.gen) {
           void handle?.destroy();
           return;
         }
@@ -587,6 +663,11 @@ export class VoiceRoom {
 
   // --------------------------------------------------------------- diagnóstico
 
+  private registrarQueda(motivo: string): void {
+    this.drops.push({ em: new Date().toISOString(), motivo });
+    if (this.drops.length > 20) this.drops.shift();
+  }
+
   private debugState() {
     const room = this.room;
     const distances = this.getDistances();
@@ -598,6 +679,11 @@ export class VoiceRoom {
       canPlaybackAudio: room?.canPlaybackAudio ?? null,
       micIntent: this.micIntent,
       deafened: this.deafened,
+      quedas: this.drops.length,
+      ultimaQueda: this.drops[this.drops.length - 1] ?? null,
+      historico: this.drops,
+      tentativasDeReconexao: this.reconnectAttempts,
+      retryPendente: this.retryTimer !== null,
       sharing: this.screenSharing,
       participants: [...(room?.remoteParticipants.values() ?? [])].map((p) => ({
         identity: p.identity,

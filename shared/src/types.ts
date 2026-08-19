@@ -21,4 +21,10 @@ export interface ChatMessage {
  */
 export type VoiceTokenResponse =
   | { ok: true; url: string; token: string; room: string; identity: string }
-  | { ok: false; reason: 'not-configured' | 'not-joined' | 'rate-limited' | 'error' };
+  | {
+      ok: false;
+      /** `socket-down` e `timeout` são do cliente; o servidor nunca os emite */
+      reason: 'not-configured' | 'not-joined' | 'rate-limited' | 'error' | 'socket-down' | 'timeout';
+      /** quando recusado por limite: quanto esperar, em ms (o cliente não precisa adivinhar) */
+      retryAfterMs?: number;
+    };

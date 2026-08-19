@@ -63,6 +63,15 @@ const httpServer = createServer((req, res) => {
 
 const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(httpServer, {
   cors: { origin: '*' },
+  /**
+   * O default de 20s derruba a conexão sempre que o navegador congela a aba em
+   * segundo plano (o Chrome suspende o JS e o pong não sai) ou a rede engasga —
+   * e cada queda dessas derruba a chamada, porque a identidade da voz é o
+   * socket.id. 60s tolera o soluço; o ping segue a cada 25s, então uma queda
+   * real continua sendo detectada em pouco mais de um minuto.
+   */
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 io.on('connection', (socket) => {
