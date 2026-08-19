@@ -1,5 +1,5 @@
 import { Application, Container } from 'pixi.js';
-import { SCENARIOS, TICK_RATE, parseMap, type PlayerState, type ScenarioId } from '@together/shared';
+import { SCENARIOS, TICK_RATE, TILE_SIZE, parseMap, type PlayerState, type ScenarioId } from '@together/shared';
 import type { AppSocket } from '../net/socket';
 import { useStore } from '../state/store';
 import { Keyboard } from './input';
@@ -68,6 +68,18 @@ export class Game {
     this.app.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     this.bindSocket();
     this.app.ticker.add(this.tick);
+
+    (window as unknown as Record<string, unknown>).__togetherPos = () => this.selfPosition;
+  }
+
+  /** Posição do player local, em px do mundo e em tiles. Debug no console. */
+  get selfPosition(): { x: number; y: number; tileX: number; tileY: number } {
+    return {
+      x: Math.round(this.local.x),
+      y: Math.round(this.local.y),
+      tileX: Math.floor(this.local.x / TILE_SIZE),
+      tileY: Math.floor(this.local.y / TILE_SIZE),
+    };
   }
 
   private onWheel = (e: WheelEvent) => {

@@ -15,9 +15,17 @@ export interface RuinsTextures {
 }
 
 /**
+ * A arte do pack é de 16px/tile e a cena é usada 1:1 como imagem de chão.
+ * Desenhamos em 2x para que 1 tile de arte = TILE_SIZE (32px) na tela, igual
+ * aos outros cenários — assim a grade de colisão casa 1:1 com a arte e o
+ * avatar fica na proporção certa.
+ */
+const ART_SCALE = 2;
+
+/**
  * Instâncias dos props altos, extraídas pixel a pixel da cena original
- * ("Scene Overview" do pack). x/y em px do mundo; `base` é o offset do
- * pé do sprite (para o y-sort com os players).
+ * ("Scene Overview" do pack). x/y/base em px da ARTE (escala 1), convertidos
+ * para o mundo por ART_SCALE; `base` é o offset do pé do sprite (y-sort).
  */
 const PROP_INSTANCES: Array<{ tex: PropName; x: number; y: number; base: number }> = [
   { tex: 'tree0', x: 613, y: 107, base: 131 },
@@ -52,15 +60,19 @@ export class RuinsTilemap extends TilemapBase {
     super(map);
 
     const ground = new Sprite(tx.ground);
+    ground.scale.set(ART_SCALE);
     this.view.addChild(ground);
+    // sem cacheAsTexture: o chão já é um único sprite (1 draw call), e cachear
+    // 1856x2240 na resolução do renderer custaria dezenas de MB de VRAM em troca
+    // de nada.
 
     for (const inst of PROP_INSTANCES) {
       const sprite = new Sprite(tx.props[inst.tex]);
-      sprite.position.set(inst.x, inst.y);
-      sprite.zIndex = inst.y + inst.base;
+      sprite.scale.set(ART_SCALE);
+      sprite.position.set(inst.x * ART_SCALE, inst.y * ART_SCALE);
+      sprite.zIndex = (inst.y + inst.base) * ART_SCALE;
       this.props.push(sprite);
     }
-    this.view.cacheAsTexture(true);
   }
 }
 
