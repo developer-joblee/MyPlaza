@@ -30,25 +30,31 @@ export async function probeMic(deviceId?: string): Promise<boolean> {
   }
 }
 
-/** Entradas de áudio disponíveis. Só devolve labels úteis após a permissão. */
+/**
+ * Entradas de áudio disponíveis. Só devolve labels úteis após a permissão.
+ *
+ * A entrada sintética `default` é mantida na lista de propósito: quando o
+ * microfone abre sem restrição de dispositivo, é ela que o navegador usa e é
+ * ela que o `getSettings().deviceId` reporta — filtrá-la deixaria a linha em
+ * uso sem marcação. Além disso, "seguir o padrão do sistema" é uma escolha
+ * legítima (é o que Discord e Zoom oferecem). Já `communications` é um alias
+ * do Windows que só confunde, e sai.
+ */
 export async function listMics(): Promise<MicDevice[]> {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const inputs = devices.filter((d) => d.kind === 'audioinput');
+    const inputs = devices
+      .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'communications');
 
-    // o Chrome entrega uma entrada sintética 'default' que aponta para um
-    // dispositivo real; colapsa nela em vez de mostrar a linha duplicada
-    const synthetic = inputs.find((d) => d.deviceId === 'default');
-    const defaultGroup = synthetic?.groupId;
-
-    return inputs
-      .filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications')
-      .map((d, i) => ({
+    return inputs.map((d, i) => {
+      const isDefault = d.deviceId === 'default';
+      return {
         deviceId: d.deviceId,
         groupId: d.groupId,
-        label: d.label || `Microfone ${i + 1}`,
-        isDefault: d.groupId === defaultGroup,
-      }));
+        label: isDefault ? 'Padrão do sistema' : d.label || `Microfone ${i + 1}`,
+        isDefault,
+      };
+    });
   } catch (err) {
     console.warn('[voice] falha ao listar microfones:', err);
     return [];

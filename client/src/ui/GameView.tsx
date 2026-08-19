@@ -9,6 +9,7 @@ import type { VoiceRoom } from '../voice/VoiceRoom';
 import { Chat } from './Chat';
 import { Hud } from './Hud';
 import { MediaControls } from './MediaControls';
+import { Notices } from './Notices';
 import { ScreenShareView } from './ScreenShareView';
 import { ZoomControls } from './ZoomControls';
 
@@ -94,6 +95,7 @@ export function GameView() {
       <Hud />
       <ScreenShareView />
       <Chat />
+      <Notices />
       <MediaControls />
       <ZoomControls />
     </div>

@@ -8,7 +8,10 @@ function isTypingTarget(e: KeyboardEvent): boolean {
   return (
     t instanceof HTMLInputElement ||
     t instanceof HTMLTextAreaElement ||
-    (t instanceof HTMLElement && t.isContentEditable)
+    (t instanceof HTMLElement && t.isContentEditable) ||
+    // painéis que usam as setas para navegar (ex.: a lista de microfones):
+    // sem isto, navegar a lista moveria o avatar ao mesmo tempo
+    (t instanceof HTMLElement && t.closest('[data-capture-keys]') !== null)
   );
 }
 

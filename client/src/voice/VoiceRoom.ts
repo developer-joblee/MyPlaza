@@ -1,4 +1,6 @@
 import {
+  createAudioAnalyser,
+  LocalAudioTrack,
   RemoteAudioTrack,
   RemoteVideoTrack,
   Room,
@@ -57,6 +59,8 @@ export class VoiceRoom {
   private deafened = false;
   private micIntent = true;
   private screenSharing = false;
+  /** analisador do mic local, para o medidor de nível da UI */
+  private micAnalyser: { calculateVolume: () => number; cleanup: () => Promise<void> } | null = null;
   private reconnectAttempts = 0;
   private destroyed = false;
   /**
@@ -164,6 +168,8 @@ export class VoiceRoom {
 
   private async teardownRoom(): Promise<void> {
     const room = this.room;
+    void this.micAnalyser?.cleanup();
+    this.micAnalyser = null;
     this.room = null;
     this.identity = null;
     this.timers.clear();
@@ -200,6 +206,7 @@ export class VoiceRoom {
     room.on(RoomEvent.ActiveSpeakersChanged, this.onActiveSpeakers);
     room.on(RoomEvent.ParticipantDisconnected, this.onParticipantLeft);
     room.on(RoomEvent.LocalTrackUnpublished, this.onLocalUnpublished);
+    room.on(RoomEvent.LocalTrackPublished, this.onLocalPublished);
     room.on(RoomEvent.AudioPlaybackStatusChanged, () => {
       useStore.getState().setAudioBlocked(!room.canPlaybackAudio);
     });
@@ -250,6 +257,40 @@ export class VoiceRoom {
     useStore.getState().removeRemoteScreen(participant.identity);
     this.setSpeaking(participant.identity, false);
   };
+
+  /** (re)cria o analisador quando o mic é publicado — inclusive após trocar de device */
+  private onLocalPublished = (pub: { source: Track.Source; track?: unknown }) => {
+    if (pub.source !== Track.Source.Microphone) return;
+    const track = pub.track;
+    if (!(track instanceof LocalAudioTrack)) return;
+
+    // qual entrada está de fato em uso: sem isto, na primeira sessão nenhuma
+    // linha da lista aparece selecionada (a preferência salva ainda é nula)
+    const actual = track.mediaStreamTrack.getSettings().deviceId;
+    if (actual) {
+      this.opts.micDeviceId = actual;
+      useStore.getState().setActiveMicId(actual);
+    }
+
+    void this.micAnalyser?.cleanup();
+    try {
+      // do próprio SDK: evita um segundo AudioContext nosso
+      this.micAnalyser = createAudioAnalyser(track, { smoothingTimeConstant: 0.4 });
+    } catch (err) {
+      console.warn('[voice] medidor de nível indisponível:', err);
+      this.micAnalyser = null;
+    }
+  };
+
+  /** Nível do microfone local, 0..1. Lido por rAF na UI (nunca via store). */
+  getMicLevel(): number {
+    if (!this.micAnalyser || !this.micIntent || this.deafened) return 0;
+    try {
+      return Math.min(1, this.micAnalyser.calculateVolume());
+    } catch {
+      return 0;
+    }
+  }
 
   private onLocalUnpublished = (pub: { source: Track.Source }) => {
     // cobre o "parar de compartilhar" da barra do próprio navegador
@@ -414,11 +455,22 @@ export class VoiceRoom {
       // internamente faz replaceTrack: não derruba nada do outro lado
       await room.switchActiveDevice('audioinput', deviceId);
       store.setActiveMicId(deviceId);
+      // o analisador aponta para a faixa antiga; recria a partir da atual
+      const pub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (pub) this.onLocalPublished(pub as { source: Track.Source; track?: unknown });
     } catch (err) {
       console.warn('[voice] falha ao trocar de microfone:', err);
     } finally {
       store.setMicSwitching(false);
     }
+  }
+
+  /** Relista as entradas (chamado no `devicechange` e ao abrir o painel). */
+  async refreshDevices(): Promise<void> {
+    const { listMics } = await import('./mic');
+    const devices = await listMics();
+    if (this.destroyed) return;
+    useStore.getState().setMicDevices(devices);
   }
 
   async startScreenShare(): Promise<boolean> {
