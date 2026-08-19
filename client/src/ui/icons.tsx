@@ -91,13 +91,16 @@ export function SpeakerIcon() {
   );
 }
 
-/** Porta com seta saindo — "sair da sessão". */
-export function ExitIcon() {
+/**
+ * Fone virado para baixo — o gesto universal de "encerrar". O traço fino do
+ * handset clássico some a 22px, então é uma silhueta cheia, inclinada.
+ */
+export function HangupIcon() {
   return (
-    <svg {...base}>
-      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
-      <path d="M10 8l-4 4 4 4" />
-      <line x1="6" y1="12" x2="15" y2="12" />
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <g transform="rotate(135 12 12)">
+        <path d="M6.6 10.8c1.2 2.4 3.2 4.4 5.6 5.6l1.9-1.9c.3-.3.7-.4 1.1-.2 1.1.4 2.3.6 3.5.6.6 0 1 .4 1 1v3c0 .6-.4 1-1 1C10.4 19.9 4.1 13.6 4.1 5.8c0-.6.4-1 1-1h3c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.2 1.1l-1.9 1.9z" />
+      </g>
     </svg>
   );
 }

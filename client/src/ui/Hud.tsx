@@ -1,5 +1,4 @@
 import { useStore } from '../state/store';
-import { ExitIcon } from './icons';
 import { colorToCss } from './util';
 
 export function Hud() {
@@ -8,7 +7,6 @@ export function Hud() {
   const connected = useStore((s) => s.connected);
   const speaking = useStore((s) => s.speaking);
   const nearbyIds = useStore((s) => s.nearbyIds);
-  const leave = useStore((s) => s.leave);
 
   const sorted = [...roster].sort((a, b) =>
     a.id === selfId ? -1 : b.id === selfId ? 1 : a.name.localeCompare(b.name),
@@ -24,15 +22,6 @@ export function Hud() {
           className={`conn-dot${connected ? ' on' : ''}`}
           title={connected ? 'Conectado' : 'Desconectado'}
         />
-        <button
-          type="button"
-          className="hud-exit"
-          onClick={leave}
-          aria-label="Sair e voltar para a tela inicial"
-          title="Sair"
-        >
-          <ExitIcon />
-        </button>
       </h2>
       <ul className="roster">
         {sorted.map((p) => (

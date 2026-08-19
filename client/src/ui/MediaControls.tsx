@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { AudioSettings } from './AudioSettings';
-import { HeadphonesIcon, MicIcon, ScreenIcon, SlidersIcon } from './icons';
+import { HangupIcon, HeadphonesIcon, MicIcon, ScreenIcon, SlidersIcon } from './icons';
 
 export function MediaControls() {
   const micAvailable = useStore((s) => s.micAvailable);
@@ -12,6 +12,7 @@ export function MediaControls() {
   const voiceStatus = useStore((s) => s.voiceStatus);
   const speaking = useStore((s) => s.speaking);
   const selfId = useStore((s) => s.selfId);
+  const leave = useStore((s) => s.leave);
 
   // visibilidade de painel é estado local (o Chat já faz assim), não da store
   const [open, setOpen] = useState(false);
@@ -78,8 +79,6 @@ export function MediaControls() {
           <ScreenIcon />
         </button>
 
-        <span className="media-divider" aria-hidden="true" />
-
         <button
           ref={triggerRef}
           type="button"
@@ -94,6 +93,19 @@ export function MediaControls() {
           <SlidersIcon />
           {voiceStatus === 'reconnecting' && <span className="media-btn-badge busy" aria-hidden="true" />}
           {voiceStatus === 'error' && <span className="media-btn-badge error" aria-hidden="true" />}
+        </button>
+
+        {/* a divisória isola a ação destrutiva dos controles que se alternam */}
+        <span className="media-divider" aria-hidden="true" />
+
+        <button
+          type="button"
+          className="media-btn danger"
+          onClick={leave}
+          aria-label="Sair e voltar para a tela inicial"
+          title="Sair"
+        >
+          <HangupIcon />
         </button>
       </div>
     </>
