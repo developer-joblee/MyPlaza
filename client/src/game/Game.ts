@@ -250,6 +250,10 @@ export class Game {
     this.app.canvas.removeEventListener('wheel', this.onWheel);
     this.keyboard.detach();
     this.app.ticker.remove(this.tick);
+    // senão o hook sobrevive à sessão e consulta um Game já destruído
+    delete (window as unknown as Record<string, unknown>).__togetherPos;
+    // texture:false de propósito: as texturas de sprite/tileset são cacheadas em
+    // nível de módulo e reusadas pela próxima sessão (sair e voltar)
     this.app.destroy(true, { children: true, texture: false });
   }
 }

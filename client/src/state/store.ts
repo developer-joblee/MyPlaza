@@ -57,6 +57,8 @@ interface AppState {
   zoomPct: number;
 
   join: (name: string, color: number, scenario: ScenarioId) => void;
+  /** volta para a tela inicial zerando o estado da sessão */
+  leave: () => void;
   setScenario: (id: ScenarioId) => void;
   setSelf: (id: string | null, connected: boolean) => void;
   setRoster: (roster: RosterEntry[]) => void;
@@ -117,6 +119,36 @@ export const useStore = create<AppState>((set) => ({
 
   join: (name, color, scenario) =>
     set({ phase: 'playing', selfName: name, selfColor: color, selfScenario: scenario }),
+
+  /**
+   * Zera tudo que pertence à sessão. Sair troca `phase`, o que desmonta o
+   * GameView e dispara a limpeza dele (socket, sala de voz, app do Pixi).
+   * Nome/cor/cenário ficam para a tela de entrada vir preenchida, e
+   * `noiseFilter` fica porque é preferência do usuário, não estado de sessão.
+   */
+  leave: () =>
+    set({
+      phase: 'join',
+      selfId: null,
+      connected: false,
+      roster: [],
+      chat: [],
+      micAvailable: false,
+      micEnabled: true,
+      deafened: false,
+      voiceStatus: 'idle',
+      audioBlocked: false,
+      micDevices: [],
+      activeMicId: null,
+      micSwitching: false,
+      noiseFilterActive: false,
+      sharing: false,
+      remoteScreens: [],
+      speaking: {},
+      nearbyIds: [],
+      focusedScreenId: null,
+      zoomPct: 100,
+    }),
   setScenario: (id) => set({ selfScenario: id }),
   setSelf: (id, connected) => set({ selfId: id, connected }),
   setRoster: (roster) => set({ roster }),

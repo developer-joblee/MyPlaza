@@ -18,11 +18,17 @@ const SCENARIO_EMOJI: Record<ScenarioId, string> = {
 
 export function JoinScreen() {
   const join = useStore((s) => s.join);
-  const [name, setName] = useState('');
+  // quem acabou de sair volta com nome, cor e cenário já preenchidos
+  const [name, setName] = useState(() => useStore.getState().selfName);
   const [color, setColor] = useState<number>(
-    AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+    () =>
+      useStore.getState().selfName
+        ? useStore.getState().selfColor
+        : AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
   );
-  const [scenario, setScenario] = useState<ScenarioId>(DEFAULT_SCENARIO);
+  const [scenario, setScenario] = useState<ScenarioId>(
+    () => useStore.getState().selfScenario ?? DEFAULT_SCENARIO,
+  );
 
   const canJoin = name.trim().length > 0;
 

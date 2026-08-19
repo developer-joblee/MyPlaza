@@ -174,6 +174,10 @@ export class VoiceRoom {
     const room = this.room;
     void this.micAnalyser?.cleanup();
     this.micAnalyser = null;
+    // sem isto o worker/wasm do Krisp acumularia a cada sair-e-voltar
+    void this.noiseFilter?.destroy();
+    this.noiseFilter = null;
+    this.noiseFilterTried = false;
     this.room = null;
     this.identity = null;
     for (const identity of [...this.audioEls.keys()]) this.detachAudio(identity);

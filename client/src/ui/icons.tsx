@@ -91,6 +91,17 @@ export function SpeakerIcon() {
   );
 }
 
+/** Porta com seta saindo — "sair da sessão". */
+export function ExitIcon() {
+  return (
+    <svg {...base}>
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+      <path d="M10 8l-4 4 4 4" />
+      <line x1="6" y1="12" x2="15" y2="12" />
+    </svg>
+  );
+}
+
 export function WarningIcon() {
   return (
     <svg {...base}>
