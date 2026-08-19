@@ -27,6 +27,9 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
   '.woff2': 'font/woff2',
+  // sem isto o WebAssembly.instantiateStreaming recusa o arquivo (e o fallback
+  // de SPA devolveria index.html com 200, disfarçando o erro)
+  '.wasm': 'application/wasm',
 };
 
 const httpServer = createServer((req, res) => {

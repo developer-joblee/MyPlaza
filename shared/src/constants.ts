@@ -14,8 +14,26 @@ export const PROXIMITY_RADIUS = TILE_SIZE * 5;
 /** Margem extra antes de considerar "fora de alcance" */
 export const PROXIMITY_HYSTERESIS = TILE_SIZE * 1.5;
 
-/** Tempo fora de alcance antes de fechar a conexão P2P */
+/** Tempo fora de alcance antes de cortar o vídeo de tela */
 export const DISCONNECT_GRACE_MS = 2000;
+
+/**
+ * Raio de *subscrição* de áudio — bem maior que o audível de propósito.
+ * `volumeForDistance()` já devolve 0 além de PROXIMITY_RADIUS, então a faixa
+ * entre os dois fica assinada e inaudível: é pré-carregamento. Precisa ser
+ * maior que (latência de subscrição × MOVE_SPEED): 240px de folga ÷ 170px/s
+ * = 1,4s, contra ~0,8s de pior caso para assinar.
+ */
+export const AUDIO_SUBSCRIBE_RADIUS = PROXIMITY_RADIUS * 2.5;
+
+/** Tempo fora do raio de subscrição antes de desassinar o áudio */
+export const AUDIO_SUBSCRIBE_GRACE_MS = 8000;
+
+/** Teto de streams de áudio assinados ao mesmo tempo (os mais próximos ganham) */
+export const MAX_AUDIO_SUBSCRIPTIONS = 16;
+
+/** Intervalo do tick que reconcilia subscrição e volume por distância */
+export const VOICE_TICK_MS = 250;
 
 export const CHAT_HISTORY_LIMIT = 100;
 export const CHAT_MAX_LENGTH = 500;

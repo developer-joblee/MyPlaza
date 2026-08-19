@@ -11,10 +11,17 @@ import {
   type ServerToClientEvents,
 } from '@together/shared';
 import { getWorld } from './world';
+import { mintVoiceToken, voiceConfigured } from './voice';
 
 export interface SocketData {
   scenarioId?: ScenarioId;
+  lastTokenAt?: number;
+  tokenCount?: number;
 }
+
+/** Assinar JWT é barato, mas este é o único endpoint de computação sem autenticação. */
+const TOKEN_MIN_INTERVAL_MS = 1000;
+const TOKEN_MAX_PER_SOCKET = 30;
 
 type IoServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
@@ -62,6 +69,34 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     };
     world.addChatMessage(msg);
     io.to(scenarioId).emit('chat:message', msg);
+  });
+
+  socket.on('voice:token', async (ack) => {
+    if (typeof ack !== 'function') return;
+    if (!voiceConfigured) return ack({ ok: false, reason: 'not-configured' });
+
+    const scenarioId = socket.data.scenarioId;
+    if (!scenarioId) return ack({ ok: false, reason: 'not-joined' });
+
+    const now = Date.now();
+    socket.data.tokenCount = (socket.data.tokenCount ?? 0) + 1;
+    if (
+      now - (socket.data.lastTokenAt ?? 0) < TOKEN_MIN_INTERVAL_MS ||
+      socket.data.tokenCount > TOKEN_MAX_PER_SOCKET
+    ) {
+      return ack({ ok: false, reason: 'rate-limited' });
+    }
+    socket.data.lastTokenAt = now;
+
+    try {
+      const name = getWorld(scenarioId).getPlayer(socket.id)?.name ?? 'Anônimo';
+      const { url, token, room } = await mintVoiceToken(socket.id, name, scenarioId);
+      console.log(`[voice] token -> ${socket.id} (${room})`); // sem o token, sem a secret
+      ack({ ok: true, url, token, room, identity: socket.id });
+    } catch (err) {
+      console.error('[voice] falha ao emitir token:', err);
+      ack({ ok: false, reason: 'error' });
+    }
   });
 
   socket.on('rtc:signal', (payload) => {

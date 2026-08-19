@@ -1,4 +1,4 @@
-import type { ChatMessage, PlayerState, SignalPayload } from './types';
+import type { ChatMessage, PlayerState, SignalPayload, VoiceTokenResponse } from './types';
 import type { ScenarioId } from './scenarios';
 
 export interface ServerToClientEvents {
@@ -15,4 +15,9 @@ export interface ClientToServerEvents {
   move: (x: number, y: number) => void;
   'chat:send': (text: string) => void;
   'rtc:signal': (payload: Omit<SignalPayload, 'from'>) => void;
+  /**
+   * Pede credenciais de voz. Só por ack — sem payload, para o cliente não
+   * poder influenciar sala nem identidade (ambas vêm do socket no servidor).
+   */
+  'voice:token': (ack: (res: VoiceTokenResponse) => void) => void;
 }

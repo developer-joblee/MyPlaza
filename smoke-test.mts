@@ -75,6 +75,44 @@ try {
   if (leftId !== bob.id) fail('player:left inválido');
   results.push('saída OK');
 
+  // voz: pedir token ANTES de entrar deve ser recusado
+  const c: Socket = io(URL);
+  await waitConnect(c, 'conexão C');
+  const beforeJoin = await wait<any>('token sem join', (done) =>
+    c.emit('voice:token', (res: any) => done(res)),
+  );
+  if (beforeJoin.ok !== false || !['not-joined', 'not-configured'].includes(beforeJoin.reason)) {
+    fail(`token sem join deveria ser recusado, veio: ${JSON.stringify(beforeJoin)}`);
+  }
+  results.push(`token sem join recusado (${beforeJoin.reason}) OK`);
+
+  // voz: depois de entrar, depende de haver credenciais no ambiente
+  c.emit('join', 'Carol', 0x457b9d);
+  const afterJoin = await wait<any>('token com join', (done) =>
+    c.emit('voice:token', (res: any) => done(res)),
+  );
+  if (afterJoin.ok === true) {
+    if (!afterJoin.url?.startsWith('ws') || !afterJoin.token || afterJoin.identity !== c.id) {
+      fail(`token inválido: ${JSON.stringify({ ...afterJoin, token: '[oculto]' })}`);
+    }
+    if (!afterJoin.room?.endsWith('-plaza')) fail(`sala inesperada: ${afterJoin.room}`);
+    results.push(`token emitido para a sala "${afterJoin.room}" OK`);
+
+    // segundo pedido imediato deve bater no rate limit
+    const again = await wait<any>('rate limit', (done) =>
+      c.emit('voice:token', (res: any) => done(res)),
+    );
+    if (again.ok !== false || again.reason !== 'rate-limited') {
+      fail(`rate limit não aplicado: ${JSON.stringify({ ...again, token: '[oculto]' })}`);
+    }
+    results.push('rate limit do token OK');
+  } else if (afterJoin.reason === 'not-configured') {
+    results.push('voz não configurada — recusa limpa OK (sem LIVEKIT_* no ambiente)');
+  } else {
+    fail(`token com join falhou: ${JSON.stringify(afterJoin)}`);
+  }
+  c.disconnect();
+
   console.log(results.map((r) => '✓ ' + r).join('\n'));
   console.log('SMOKE TEST PASSOU');
   process.exit(0);
