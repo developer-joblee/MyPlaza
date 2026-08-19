@@ -87,7 +87,10 @@ export class VoiceRoom {
 
   constructor(
     private socket: AppSocket,
-    private getDistances: () => Map<string, number>,
+    private getAudioInfo: () => {
+      selfZone: string | null;
+      peers: Map<string, { distance: number; zone: string | null }>;
+    },
     private opts: { micAvailable: boolean; micDeviceId: string | null },
   ) {
     this.micIntent = opts.micAvailable;
@@ -320,7 +323,10 @@ export class VoiceRoom {
       // subscrição nova entra com volume 1: sem isto, os primeiros pacotes de
       // alguém distante chegam a todo volume por um tick (estalo audível)
       const dist = this.lastDistance.get(participant.identity);
-      track.setVolume(this.deafened || dist === undefined ? 0 : volumeForDistance(dist));
+      const naSala = this.getAudioInfo().selfZone !== null;
+      track.setVolume(
+        this.deafened || dist === undefined ? 0 : naSala ? 1 : volumeForDistance(dist),
+      );
     } else if (track instanceof RemoteVideoTrack && pub.source === Track.Source.ScreenShare) {
       // guarda a faixa, não um MediaStream montado à mão: com adaptiveStream o
       // SDK decide encaminhar o vídeo olhando os elementos passados em attach()
@@ -465,11 +471,13 @@ export class VoiceRoom {
    * em gente que você não ouve. O local sempre passa.
    */
   private reconcileSpeaking(): void {
-    const distances = this.getDistances();
+    const { selfZone, peers } = this.getAudioInfo();
     const want = new Set<string>();
     for (const id of this.roomSpeakers) {
-      const dist = distances.get(id);
-      if (id === this.identity || (dist !== undefined && dist <= PROXIMITY_RADIUS)) want.add(id);
+      const p = peers.get(id);
+      const audivel =
+        p !== undefined && p.zone === selfZone && (selfZone !== null || p.distance <= PROXIMITY_RADIUS);
+      if (id === this.identity || audivel) want.add(id);
     }
     for (const id of this.appliedSpeaking) if (!want.has(id)) this.setSpeaking(id, false);
     for (const id of want) if (!this.appliedSpeaking.has(id)) this.setSpeaking(id, true);
@@ -492,13 +500,24 @@ export class VoiceRoom {
     const room = this.room;
     if (this.destroyed || !room || !this.socket.connected) return;
 
-    const distances = this.getDistances();
+    const { selfZone, peers } = this.getAudioInfo();
     const now = performance.now();
 
-    // candidatos a áudio: dentro do raio de subscrição, os mais próximos primeiro
-    const ranked = [...distances.entries()]
-      .filter(([, d]) => d <= AUDIO_SUBSCRIBE_RADIUS)
-      .sort((a, b) => a[1] - b[1])
+    /**
+     * A REGRA, num lugar só: você ouve alguém quando estão na mesma zona.
+     *
+     * `null` significa área aberta, então `null === null` faz duas pessoas em
+     * área aberta se ouvirem por proximidade, como antes. Se você está numa
+     * sala e a pessoa não (ou está em outra), os ids diferem e não há áudio —
+     * nem colada na parede. É isso que faz a sala ser fechada.
+     */
+    const mesmaZona = (zone: string | null) => zone === selfZone;
+
+    // candidatos a áudio: mesma zona e, na área aberta, dentro do raio.
+    // Numa sala a distância não importa: a sala inteira se ouve.
+    const ranked = [...peers.entries()]
+      .filter(([, p]) => mesmaZona(p.zone) && (selfZone !== null || p.distance <= AUDIO_SUBSCRIBE_RADIUS))
+      .sort((a, b) => a[1].distance - b[1].distance)
       .slice(0, MAX_AUDIO_SUBSCRIPTIONS);
     const audioWanted = new Set(ranked.map(([id]) => id));
 
@@ -506,25 +525,29 @@ export class VoiceRoom {
 
     for (const participant of room.remoteParticipants.values()) {
       const id = participant.identity;
-      const dist = distances.get(id);
+      const info = peers.get(id);
+      const dist = info?.distance;
       const timers = this.timers.get(id) ?? { audioOutSince: null, videoOutSince: null };
       this.timers.set(id, timers);
 
       // saiu do mundo (ou é fantasma de um reload anterior): corta tudo
-      if (dist === undefined) {
+      if (dist === undefined || info === undefined) {
         this.setSubscribed(participant, Track.Source.Microphone, false);
         this.setSubscribed(participant, Track.Source.ScreenShare, false);
         this.lastDistance.delete(id);
         continue;
       }
       this.lastDistance.set(id, dist);
-      if (dist <= PROXIMITY_RADIUS) nearby.push(id);
+      // o badge "voz" no HUD tem de refletir a mesma regra, senão mente
+      if (mesmaZona(info.zone) && (selfZone !== null || dist <= PROXIMITY_RADIUS)) nearby.push(id);
 
       // --- áudio: assina generoso, atenua preciso
       if (!this.deafened && audioWanted.has(id)) {
         timers.audioOutSince = null;
         this.setSubscribed(participant, Track.Source.Microphone, true);
-        participant.setVolume(volumeForDistance(dist));
+        // numa sala todos se ouvem igual (quem está na ponta da mesa ouve como
+        // quem está ao lado); na área aberta vale a rampa por distância
+        participant.setVolume(selfZone !== null ? 1 : volumeForDistance(dist));
       } else {
         participant.setVolume(0);
         timers.audioOutSince ??= now;
@@ -533,7 +556,7 @@ export class VoiceRoom {
       }
 
       // --- vídeo de tela: portão mais apertado, sem fade a proteger
-      if (dist <= VIDEO_RADIUS) {
+      if (mesmaZona(info.zone) && (selfZone !== null || dist <= VIDEO_RADIUS)) {
         timers.videoOutSince = null;
         this.setSubscribed(participant, Track.Source.ScreenShare, true);
       } else {
@@ -670,7 +693,7 @@ export class VoiceRoom {
 
   private debugState() {
     const room = this.room;
-    const distances = this.getDistances();
+    const { selfZone, peers } = this.getAudioInfo();
     return {
       status: useStore.getState().voiceStatus,
       state: room?.state ?? 'sem sala',
@@ -679,6 +702,7 @@ export class VoiceRoom {
       canPlaybackAudio: room?.canPlaybackAudio ?? null,
       micIntent: this.micIntent,
       deafened: this.deafened,
+      zona: selfZone,
       quedas: this.drops.length,
       ultimaQueda: this.drops[this.drops.length - 1] ?? null,
       historico: this.drops,
@@ -687,7 +711,8 @@ export class VoiceRoom {
       sharing: this.screenSharing,
       participants: [...(room?.remoteParticipants.values() ?? [])].map((p) => ({
         identity: p.identity,
-        distance: distances.get(p.identity) ?? null,
+        distance: peers.get(p.identity)?.distance ?? null,
+        zona: peers.get(p.identity)?.zone ?? null,
         volume: p.getVolume() ?? null,
         audioSubscribed: p.getTrackPublication(Track.Source.Microphone)?.isSubscribed ?? false,
         videoSubscribed: p.getTrackPublication(Track.Source.ScreenShare)?.isSubscribed ?? false,

@@ -2,6 +2,25 @@ import { TileType, buildMap, type WorldMap } from './map';
 
 export type ScenarioId = 'office' | 'plaza' | 'ruins' | 'studio';
 
+/**
+ * Zona de áudio: dentro dela só se ouve quem também está dentro. Quem está
+ * fora não ouve nada do que se fala lá, nem colado na parede — para ouvir,
+ * precisa entrar.
+ *
+ * Para criar uma zona num mapa novo: desenhe um retângulo que cubra o piso da
+ * sala **e a porta**. Incluir a porta é de propósito — quem para na soleira
+ * conta como dentro, o que evita um limbo onde ninguém se ouve. As paredes
+ * dentro do retângulo não incomodam, porque não são caminháveis.
+ */
+export interface AudioZone {
+  /** curto e estável; aparece no diagnóstico */
+  id: string;
+  /** nome exibido para o jogador */
+  label: string;
+  /** retângulo em tiles, INCLUSIVO: [colInicial, linhaInicial, colFinal, linhaFinal] */
+  rect: readonly [number, number, number, number];
+}
+
 export interface ScenarioDef {
   id: ScenarioId;
   label: string;
@@ -11,6 +30,25 @@ export interface ScenarioDef {
   charToTile: Readonly<Record<string, TileType>>;
   defaultTile: TileType;
   spawnTiles: ReadonlyArray<readonly [number, number]>;
+  /** Sem zonas (ou lista vazia) = o cenário todo funciona por proximidade. */
+  audioZones?: readonly AudioZone[];
+}
+
+/**
+ * Em que zona está este tile — `null` significa área aberta, onde vale a
+ * proximidade normal. Duas pessoas se ouvem quando o resultado disto é igual
+ * para as duas (inclusive quando é `null` nas duas: ambas na área aberta).
+ */
+export function audioZoneAt(
+  scenarioId: ScenarioId,
+  tileX: number,
+  tileY: number,
+): AudioZone | null {
+  for (const zone of SCENARIOS[scenarioId].audioZones ?? []) {
+    const [x0, y0, x1, y1] = zone.rect;
+    if (tileX >= x0 && tileX <= x1 && tileY >= y0 && tileY <= y1) return zone;
+  }
+  return null;
 }
 
 export const DEFAULT_SCENARIO: ScenarioId = 'plaza';
@@ -24,9 +62,9 @@ const OFFICE_ROWS = [
   '#,,,,,,.......#..............#',
   '#,,,,,,.......#....TTTT......#',
   '#,,,,,,.......#....TTTT......#',
-  '#..............,.............#',
+  '#............................#',
   '#.............#..............#',
-  '######..######......P........#',
+  '######..#######....P.........#',
   '#.............######..########',
   '#..DD...DD....#..............#',
   '#..DD...DD....#...,,,,,,,,...#',
@@ -55,9 +93,9 @@ const PLAZA_ROWS = [
   '#..T........................T..~~~.F...#',
   '#..............................~~~..T..#',
   '#..............................~~~.....#',
-  '#..HHH.........................===.....#',
+  '#..HHH.........................~~~.....#',
   '#.........---------------------===.....#',
-  '#..rrr..S.-....................~~~.rr..#',
+  '#..rrr..S.-....................===.rr..#',
   '#..rrr....-....................~~~.rr..#',
   '#..rrr....-....................~~~.oc..#',
   '#.........-....................~~~.c...#',
@@ -69,9 +107,9 @@ const PLAZA_ROWS = [
   '#.S.......-..coc..coc..........~~~..B..#',
   '#.........-....................===.....#',
   '#.........---------------------===.F...#',
-  '#....~~........rr..............~~~.....#',
+  '#...~~~........rr..............~~~.....#',
   '#...~~~~......rr...............~~~..R..#',
-  '#....~~........................~~~.....#',
+  '#....~~~.......................~~~.....#',
   '#...................T..........~~~.....#',
   '#..B...........................~~~...T.#',
   '#..............................~~~.....#',
@@ -172,18 +210,18 @@ const RUINS_ROWS = [
  * `g` globo, `P` planta.
  */
 const STUDIO_ROWS = [
-  '####ww####ww####ww##########bb######',
-  '#hhhhhhhh..............#ttttttttLLt#',
-  '#hhhhhhhh..............#tgttttttttt#',
-  '#hssshhhh..WW..WW..WW..#tttcccctttt#',
-  '#hrrrhhhh..............#tttooootttt#',
-  '#hrrrhhhh..............#tttcccctttt#',
-  '#hsshhhhh..............#ttttttttttP#',
-  '#hhhhhhhh..WW..WW..WW..#ttttttttttt#',
-  '#hhhhhhhh..............###q##..#####',
+  '####ww####ww####ww##########b#######',
+  '#hhhhhhhh...............#tttttttLLt#',
+  '#hhhhhhhh...............#tgtttttttt#',
+  '#hssshhhh...W...W...W...#tttccccttt#',
+  '#hrrrhhhh...............#tttoooottt#',
+  '#hrrrhhhh...............#tttccccttt#',
+  '#hsshhhhh...............#tttttttttP#',
+  '#hhhhhhhh...W...W...W...#tttttttttt#',
+  '#hhhhhhhh...............##q##..#####',
   '#P.................................#',
   '#..................................#',
-  '#..........WW..WW..WW....WW..WW....#',
+  '#..........W...W...W...W...W.......#',
   '#..................................#',
   '#.................................P#',
   '#..................................#',
@@ -279,6 +317,18 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDef> = {
     // Tapete do lounge.
     spawnTiles: [
       [2, 4], [3, 4], [4, 4], [2, 5], [3, 5], [4, 5],
+    ],
+    /**
+     * As duas salas fechadas do Estúdio. Cada retângulo inclui a linha da porta
+     * (linha 8 na reunião, linha 15 na copa), então quem para na soleira já
+     * conta como dentro.
+     *
+     * O lounge (piso `h`) de propósito NÃO é zona: ele é só um piso diferente,
+     * sem parede separando do open space — acusticamente é o mesmo ambiente.
+     */
+    audioZones: [
+      { id: 'reuniao', label: 'Sala de reunião', rect: [25, 1, 34, 8] },
+      { id: 'copa', label: 'Copa', rect: [26, 15, 34, 22] },
     ],
   },
   ruins: {

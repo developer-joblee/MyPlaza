@@ -25,6 +25,8 @@ export class Avatar {
   private sprite: Sprite;
   private shadow: Sprite;
   private speakingRing: Graphics;
+  /** só o player local tem: o círculo de alcance de voz */
+  private proximityRing: Graphics | null = null;
   private label: Text;
 
   private facing: Facing = 'down';
@@ -40,11 +42,11 @@ export class Avatar {
     opts: { showProximityRadius?: boolean } = {},
   ) {
     if (opts.showProximityRadius) {
-      const radius = new Graphics()
+      this.proximityRing = new Graphics()
         .circle(0, 0, PROXIMITY_RADIUS)
         .fill({ color: 0xffffff, alpha: 0.05 })
         .stroke({ width: 1.5, color: 0xffffff, alpha: 0.18 });
-      this.view.addChild(radius);
+      this.view.addChild(this.proximityRing);
     }
 
     // anel "falando" no chão, sob a sombra
@@ -104,6 +106,14 @@ export class Avatar {
     }
     this.sprite.texture = set[this.frameIndex % set.length];
     this.sprite.scale.x = this.flipX ? -SCALE : SCALE;
+  }
+
+  /**
+   * Dentro de uma zona de áudio o círculo mentiria (o alcance passa a ser a
+   * sala, não um raio), então ele é escondido.
+   */
+  setProximityVisible(visible: boolean): void {
+    if (this.proximityRing) this.proximityRing.visible = visible;
   }
 
   setSpeaking(speaking: boolean): void {

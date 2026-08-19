@@ -83,6 +83,47 @@ próprios. Todas as linhas precisam ter o mesmo comprimento. No cenário
 Ruínas o visual é uma imagem única da cena (`client/public/tiles/ruins/`);
 o ASCII define apenas a colisão (`#` sólido, `.` livre).
 
+## Zonas de áudio (salas fechadas)
+
+Por padrão a voz é por proximidade: o volume cai com a distância. Uma **zona**
+sobrepõe isso — dentro dela só se ouve quem também está dentro, e quem está fora
+não ouve nada, nem colado na parede. Para ouvir, precisa entrar.
+
+A regra inteira é uma comparação, em `client/src/voice/VoiceRoom.ts`:
+
+```ts
+const mesmaZona = (zone: string | null) => zone === selfZone;
+```
+
+`null` é "área aberta", então duas pessoas fora de qualquer sala continuam se
+ouvindo por proximidade (`null === null`). Dentro de uma sala o volume é **plano**:
+quem está na ponta da mesa ouve como quem está ao lado.
+
+### Criando uma zona num mapa
+
+Adicione `audioZones` ao cenário em `shared/src/scenarios.ts`, com um retângulo
+em tiles (inclusivo) que cubra o piso da sala **e a porta**:
+
+```ts
+audioZones: [
+  { id: 'reuniao', label: 'Sala de reunião', rect: [25, 1, 34, 8] },
+],
+```
+
+Incluir a linha da porta é de propósito: quem para na soleira conta como dentro,
+o que evita um limbo onde ninguém se ouve. Paredes dentro do retângulo não
+incomodam, porque não são caminháveis. Cenário sem `audioZones` funciona como
+antes, 100% por proximidade — hoje só o Estúdio tem zonas (reunião e copa).
+
+Dentro de uma sala o círculo de alcance do avatar desaparece (ele mentiria, já
+que o alcance passa a ser a sala) e o HUD mostra o nome dela.
+
+> Quem impõe é o SFU: fora da zona o cliente desassina e o servidor **para de
+> enviar** aquele áudio — não é volume zero com o som chegando. Mas quem pede a
+> subscrição é o assinante, então um cliente modificado ainda poderia escutar.
+> É o mesmo nível de confiança da proximidade; para impor de fato, o servidor
+> teria que gerenciar as permissões via LiveKit.
+
 ## Deploy (Railway)
 
 Um serviço só: o server serve o build estático do client e o Socket.IO na

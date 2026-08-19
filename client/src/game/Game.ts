@@ -1,5 +1,13 @@
 import { Application, Container } from 'pixi.js';
-import { SCENARIOS, TICK_RATE, TILE_SIZE, parseMap, type PlayerState, type ScenarioId } from '@together/shared';
+import {
+  SCENARIOS,
+  TICK_RATE,
+  TILE_SIZE,
+  audioZoneAt,
+  parseMap,
+  type PlayerState,
+  type ScenarioId,
+} from '@together/shared';
 import type { AppSocket } from '../net/socket';
 import { useStore } from '../state/store';
 import { Keyboard } from './input';
@@ -34,6 +42,9 @@ export class Game {
   private cameraSnapped = false;
   private zoom = 1;
   private targetZoom = 1;
+  private scenarioId: ScenarioId;
+  /** zona do tick anterior, para só avisar quando muda */
+  private lastZone: string | null | undefined = undefined;
   private unbinders: Array<() => void> = [];
 
   private constructor(
@@ -46,6 +57,7 @@ export class Game {
     scenarioId: ScenarioId,
   ) {
     this.app = app;
+    this.scenarioId = scenarioId;
     const map = parseMap(scenarioId);
     const theme = SCENARIOS[scenarioId].theme;
     this.tilemap =
@@ -187,7 +199,26 @@ export class Game {
     }
 
     this.updateCamera(dt);
+    this.updateZoneIndicator();
   };
+
+  /**
+   * A bolinha de alcance ao redor do avatar representa a proximidade. Dentro de
+   * uma zona ela passaria a mentir (o conjunto audível deixa de ser um círculo
+   * e vira a sala), então ela some — e a UI mostra o nome da sala no lugar.
+   */
+  private updateZoneIndicator(): void {
+    const zone = audioZoneAt(
+      this.scenarioId,
+      Math.floor(this.local.x / TILE_SIZE),
+      Math.floor(this.local.y / TILE_SIZE),
+    );
+    const id = zone?.id ?? null;
+    if (id === this.lastZone) return;
+    this.lastZone = id;
+    this.local.avatar.setProximityVisible(id === null);
+    useStore.getState().setAudioZone(zone ? zone.label : null);
+  }
 
   private updateCamera(dt: number): void {
     const screenW = this.app.renderer.width / this.app.renderer.resolution;
@@ -235,6 +266,32 @@ export class Game {
       out.set(id, Math.hypot(remote.x - this.local.x, remote.y - this.local.y));
     }
     return out;
+  }
+
+  /** Em que zona de áudio está esta posição do mundo (null = área aberta). */
+  private zoneIdAt(x: number, y: number): string | null {
+    return (
+      audioZoneAt(this.scenarioId, Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE))?.id ?? null
+    );
+  }
+
+  /**
+   * Tudo que a voz precisa para decidir quem ouve quem: distância e zona.
+   * Um só percurso e uma só fonte de verdade — a regra de audibilidade em si
+   * fica no VoiceRoom, que é o dono do áudio.
+   */
+  getAudioInfo(): {
+    selfZone: string | null;
+    peers: Map<string, { distance: number; zone: string | null }>;
+  } {
+    const peers = new Map<string, { distance: number; zone: string | null }>();
+    for (const [id, remote] of this.remotes) {
+      peers.set(id, {
+        distance: Math.hypot(remote.x - this.local.x, remote.y - this.local.y),
+        zone: this.zoneIdAt(remote.x, remote.y),
+      });
+    }
+    return { selfZone: this.zoneIdAt(this.local.x, this.local.y), peers };
   }
 
   setSpeaking(id: string, speaking: boolean): void {

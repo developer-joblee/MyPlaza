@@ -7,6 +7,7 @@ export function Hud() {
   const connected = useStore((s) => s.connected);
   const speaking = useStore((s) => s.speaking);
   const nearbyIds = useStore((s) => s.nearbyIds);
+  const audioZone = useStore((s) => s.audioZone);
 
   const sorted = [...roster].sort((a, b) =>
     a.id === selfId ? -1 : b.id === selfId ? 1 : a.name.localeCompare(b.name),
@@ -23,6 +24,11 @@ export function Hud() {
           title={connected ? 'Conectado' : 'Desconectado'}
         />
       </h2>
+      {audioZone && (
+        <div className="hud-zone" title="Só quem está nesta sala ouve o que se fala aqui">
+          🔇 {audioZone}
+        </div>
+      )}
       <ul className="roster">
         {sorted.map((p) => (
           <li key={p.id}>

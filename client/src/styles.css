@@ -1160,3 +1160,20 @@ button {
   width: 20px;
   height: 20px;
 }
+
+/* ------------------------------------------------------ Zona de áudio (sala) */
+
+.hud-zone {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(244, 162, 97, 0.14);
+  border: 1px solid rgba(244, 162, 97, 0.4);
+  color: #ffd9b0;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}

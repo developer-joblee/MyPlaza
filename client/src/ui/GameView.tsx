@@ -60,7 +60,7 @@ export function GameView() {
       // paralelo com os assets do Pixi e nunca baixado se a voz não configurar
       const { VoiceRoom } = await import('../voice/VoiceRoom');
       if (cancelled) return;
-      voice = new VoiceRoom(socket, () => game!.getDistances(), { micAvailable, micDeviceId });
+      voice = new VoiceRoom(socket, () => game!.getAudioInfo(), { micAvailable, micDeviceId });
       runtime.voice = voice;
 
       // handlers explícitos e removíveis: a ordem importa (o token exige que o
