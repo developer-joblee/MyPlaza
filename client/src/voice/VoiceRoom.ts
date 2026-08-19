@@ -53,6 +53,8 @@ export class VoiceRoom {
   private timers = new Map<string, PeerTimers>();
   /** distância do último tick, para dar volume certo a uma subscrição nova */
   private lastDistance = new Map<string, number>();
+  /** elementos <audio> por participante — o SDK não os cria (ver onTrackSubscribed) */
+  private audioEls = new Map<string, HTMLAudioElement>();
   /** último ActiveSpeakers cru do servidor (sala inteira, não só quem ouvimos) */
   private roomSpeakers = new Set<string>();
   private appliedSpeaking = new Set<string>();
@@ -174,6 +176,7 @@ export class VoiceRoom {
     this.micAnalyser = null;
     this.room = null;
     this.identity = null;
+    for (const identity of [...this.audioEls.keys()]) this.detachAudio(identity);
     this.timers.clear();
     this.lastDistance.clear();
     this.roomSpeakers.clear();
@@ -231,6 +234,19 @@ export class VoiceRoom {
     participant: RemoteParticipant,
   ) => {
     if (track instanceof RemoteAudioTrack) {
+      /**
+       * Anexar é OBRIGATÓRIO: o SDK não toca áudio remoto sozinho (só mantém um
+       * elemento dummy silencioso para o iOS). Sem isto a faixa fica assinada,
+       * o `setVolume` é aceito e nada sai no alto-falante — silêncio total com
+       * todos os indicadores verdes. O elemento fica oculto no DOM e é sobre
+       * ele que o `setVolume` do participante age.
+       */
+      const el = track.attach();
+      el.hidden = true;
+      el.setAttribute('data-identity', participant.identity);
+      document.body.appendChild(el);
+      this.audioEls.set(participant.identity, el);
+
       // subscrição nova entra com volume 1: sem isto, os primeiros pacotes de
       // alguém distante chegam a todo volume por um tick (estalo audível)
       const dist = this.lastDistance.get(participant.identity);
@@ -247,12 +263,23 @@ export class VoiceRoom {
     pub: RemoteTrackPublication,
     participant: RemoteParticipant,
   ) => {
-    if (track instanceof RemoteVideoTrack && pub.source === Track.Source.ScreenShare) {
+    if (track instanceof RemoteAudioTrack) {
+      this.detachAudio(participant.identity, track);
+    } else if (track instanceof RemoteVideoTrack && pub.source === Track.Source.ScreenShare) {
       useStore.getState().removeRemoteScreen(participant.identity);
     }
   };
 
+  private detachAudio(identity: string, track?: RemoteAudioTrack): void {
+    const el = this.audioEls.get(identity);
+    if (!el) return;
+    this.audioEls.delete(identity);
+    if (track) track.detach(el);
+    el.remove();
+  }
+
   private onParticipantLeft = (participant: RemoteParticipant) => {
+    this.detachAudio(participant.identity);
     this.timers.delete(participant.identity);
     this.lastDistance.delete(participant.identity);
     this.roomSpeakers.delete(participant.identity);
@@ -575,6 +602,13 @@ export class VoiceRoom {
         audioSubscribed: p.getTrackPublication(Track.Source.Microphone)?.isSubscribed ?? false,
         videoSubscribed: p.getTrackPublication(Track.Source.ScreenShare)?.isSubscribed ?? false,
         speaking: this.appliedSpeaking.has(p.identity),
+        // prova de que o som realmente chega e toca: "assinado" nao basta
+        anexado: this.audioEls.has(p.identity),
+        elVolume: this.audioEls.get(p.identity)?.volume ?? null,
+        tocando: (() => {
+          const el = this.audioEls.get(p.identity);
+          return el ? !el.paused && el.currentTime > 0 : false;
+        })(),
       })),
     };
   }
