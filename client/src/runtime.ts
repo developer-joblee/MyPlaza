@@ -1,5 +1,5 @@
 import type { AppSocket } from './net/socket';
-import type { PeerManager } from './webrtc/PeerManager';
+import type { VoiceRoom } from './voice/VoiceRoom';
 import type { Game } from './game/Game';
 
 /**
@@ -8,10 +8,10 @@ import type { Game } from './game/Game';
  */
 export const runtime: {
   socket: AppSocket | null;
-  peerManager: PeerManager | null;
+  voice: VoiceRoom | null;
   game: Game | null;
 } = {
   socket: null,
-  peerManager: null,
+  voice: null,
   game: null,
 };

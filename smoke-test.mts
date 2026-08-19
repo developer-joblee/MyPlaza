@@ -61,13 +61,6 @@ try {
   if (msg.text !== 'olá equipe!' || msg.senderName !== 'Bob') fail('chat inválido');
   results.push('chat OK');
 
-  // sinalização: B -> A com from preenchido pelo servidor
-  const sigSeen = wait<any>('A recebe sinal', (done) => a.on('rtc:signal', (p: any) => done(p)));
-  b.emit('rtc:signal', { to: a.id, description: { type: 'offer', sdp: 'x' } });
-  const sig = await sigSeen;
-  if (sig.from !== b.id || sig.description.type !== 'offer') fail('sinalização inválida');
-  results.push('sinalização OK');
-
   // B sai; A deve ver player:left
   const leftSeen = wait<string>('A vê B sair', (done) => a.on('player:left', (id: string) => done(id)));
   b.disconnect();

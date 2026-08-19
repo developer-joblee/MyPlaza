@@ -99,13 +99,6 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     }
   });
 
-  socket.on('rtc:signal', (payload) => {
-    if (!payload || typeof payload.to !== 'string') return;
-    const scenarioId = socket.data.scenarioId;
-    if (!scenarioId || !getWorld(scenarioId).hasPlayer(payload.to)) return;
-    io.to(payload.to).emit('rtc:signal', { ...payload, from: socket.id });
-  });
-
   socket.on('disconnect', () => {
     const scenarioId = socket.data.scenarioId;
     if (!scenarioId) return;

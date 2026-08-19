@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { AVATAR_COLORS, DEFAULT_SCENARIO, type ChatMessage, type ScenarioId } from '@together/shared';
+// import type: apagado na compilação, então não puxa o SDK para o chunk principal
+import type { RemoteVideoTrack } from 'livekit-client';
+import type { MicDevice } from '../voice/mic';
 
 export interface RosterEntry {
   id: string;
@@ -9,8 +12,17 @@ export interface RosterEntry {
 
 export interface RemoteScreen {
   peerId: string;
-  stream: MediaStream;
+  /** a faixa, não um MediaStream: o adaptiveStream depende de track.attach() */
+  track: RemoteVideoTrack;
 }
+
+export type VoiceStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'unavailable'
+  | 'error';
 
 interface AppState {
   phase: 'join' | 'playing';
@@ -22,7 +34,15 @@ interface AppState {
   roster: RosterEntry[];
   chat: ChatMessage[];
   micAvailable: boolean;
+  /** intenção do usuário; o mic efetivo é `micEnabled && !deafened` */
   micEnabled: boolean;
+  deafened: boolean;
+  voiceStatus: VoiceStatus;
+  /** o browser bloqueou o autoplay do áudio; precisa de um gesto */
+  audioBlocked: boolean;
+  micDevices: MicDevice[];
+  activeMicId: string | null;
+  micSwitching: boolean;
   sharing: boolean;
   remoteScreens: RemoteScreen[];
   speaking: Record<string, boolean>;
@@ -42,8 +62,14 @@ interface AppState {
   appendChat: (msg: ChatMessage) => void;
   setMicAvailable: (v: boolean) => void;
   setMicEnabled: (v: boolean) => void;
+  setDeafened: (v: boolean) => void;
+  setVoiceStatus: (v: VoiceStatus) => void;
+  setAudioBlocked: (v: boolean) => void;
+  setMicDevices: (devices: MicDevice[]) => void;
+  setActiveMicId: (id: string | null) => void;
+  setMicSwitching: (v: boolean) => void;
   setSharing: (v: boolean) => void;
-  addRemoteScreen: (peerId: string, stream: MediaStream) => void;
+  addRemoteScreen: (peerId: string, track: RemoteVideoTrack) => void;
   removeRemoteScreen: (peerId: string) => void;
   setSpeaking: (id: string, v: boolean) => void;
   setNearbyIds: (ids: string[]) => void;
@@ -62,6 +88,12 @@ export const useStore = create<AppState>((set) => ({
   chat: [],
   micAvailable: false,
   micEnabled: true,
+  deafened: false,
+  voiceStatus: 'idle',
+  audioBlocked: false,
+  micDevices: [],
+  activeMicId: null,
+  micSwitching: false,
   sharing: false,
   remoteScreens: [],
   speaking: {},
@@ -87,10 +119,16 @@ export const useStore = create<AppState>((set) => ({
   appendChat: (msg) => set((s) => ({ chat: [...s.chat.slice(-199), msg] })),
   setMicAvailable: (v) => set({ micAvailable: v }),
   setMicEnabled: (v) => set({ micEnabled: v }),
+  setDeafened: (v) => set({ deafened: v }),
+  setVoiceStatus: (v) => set({ voiceStatus: v }),
+  setAudioBlocked: (v) => set({ audioBlocked: v }),
+  setMicDevices: (devices) => set({ micDevices: devices }),
+  setActiveMicId: (id) => set({ activeMicId: id }),
+  setMicSwitching: (v) => set({ micSwitching: v }),
   setSharing: (v) => set({ sharing: v }),
-  addRemoteScreen: (peerId, stream) =>
+  addRemoteScreen: (peerId, track) =>
     set((s) => ({
-      remoteScreens: [...s.remoteScreens.filter((r) => r.peerId !== peerId), { peerId, stream }],
+      remoteScreens: [...s.remoteScreens.filter((r) => r.peerId !== peerId), { peerId, track }],
     })),
   removeRemoteScreen: (peerId) =>
     set((s) => ({
