@@ -20,7 +20,7 @@ export function GameView() {
     const container = containerRef.current;
     if (!container) return;
 
-    const { selfName, selfColor, selfScenario } = useStore.getState();
+    const { selfName, selfColor, selfScenario, selfCharacter } = useStore.getState();
     const socket = createSocket();
     runtime.socket = socket;
     const unbindStore = bindStoreToSocket(socket);
@@ -48,7 +48,14 @@ export function GameView() {
         useStore.getState().setMicDevices(devices);
       }
 
-      game = await Game.create(container, socket, selfName, selfColor, selfScenario);
+      game = await Game.create(
+        container,
+        socket,
+        selfName,
+        selfColor,
+        selfScenario,
+        selfCharacter,
+      );
       if (cancelled) {
         game.destroy();
         game = null;
@@ -66,7 +73,7 @@ export function GameView() {
       // handlers explícitos e removíveis: a ordem importa (o token exige que o
       // join já tenha rodado) e o handler antigo nunca era removido no cleanup
       onConnect = () => {
-        socket.emit('join', selfName, selfColor, selfScenario);
+        socket.emit('join', selfName, selfColor, selfScenario, selfCharacter);
         // socket novo = chance nova: zera o backoff antes de tentar
         voice?.onSocketReconnected();
         void voice?.onSocketConnected();

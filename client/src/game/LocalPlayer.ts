@@ -10,6 +10,7 @@ export class LocalPlayer {
   y = 0;
 
   constructor(frames: CharacterFrames, name: string, color: number) {
+    // as frames já vêm resolvidas para o personagem escolhido (ver Game.create)
     this.avatar = new Avatar(frames, name, color, { showProximityRadius: true });
   }
 

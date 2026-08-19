@@ -1,13 +1,41 @@
 import { useState } from 'react';
 import {
   AVATAR_COLORS,
+  CHARACTERS,
   DEFAULT_SCENARIO,
   NAME_MAX_LENGTH,
   SCENARIOS,
+  type CharacterId,
   type ScenarioId,
 } from '@together/shared';
+import { characterPreview } from '../game/characterDefs';
 import { useStore } from '../state/store';
 import { colorToCss } from './util';
+
+/**
+ * Miniatura do personagem, recortada direto da spritesheet. É CSS puro em vez
+ * de canvas para não depender de o PixiJS ter carregado: um div do tamanho do
+ * quadro, posicionado no recorte certo, ampliado com `transform: scale`.
+ */
+function CharacterSprite({ id }: { id: CharacterId }) {
+  const { sheet, x, y, w, h, zoom } = characterPreview(id);
+  return (
+    // a altura da caixa é fixa no CSS, para os cinco cartões ficarem alinhados
+    // mesmo com os personagens tendo alturas de arte diferentes
+    <span className="char-frame" style={{ width: w * zoom }}>
+      <span
+        className="char-sprite"
+        style={{
+          width: w,
+          height: h,
+          backgroundImage: `url(${sheet})`,
+          backgroundPosition: `-${x}px -${y}px`,
+          transform: `scale(${zoom})`,
+        }}
+      />
+    </span>
+  );
+}
 
 const SCENARIO_EMOJI: Record<ScenarioId, string> = {
   office: '🏢',
@@ -29,12 +57,15 @@ export function JoinScreen() {
   const [scenario, setScenario] = useState<ScenarioId>(
     () => useStore.getState().selfScenario ?? DEFAULT_SCENARIO,
   );
+  const [character, setCharacter] = useState<CharacterId>(
+    () => useStore.getState().selfCharacter,
+  );
 
   const canJoin = name.trim().length > 0;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (canJoin) join(name.trim(), color, scenario);
+    if (canJoin) join(name.trim(), color, scenario, character);
   };
 
   return (
@@ -59,6 +90,22 @@ export function JoinScreen() {
             autoFocus
             autoComplete="off"
           />
+        </div>
+
+        <span className="join-label">Personagem</span>
+        <div className="character-row">
+          {CHARACTERS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`character-card${c.id === character ? ' selected' : ''}`}
+              onClick={() => setCharacter(c.id)}
+              aria-pressed={c.id === character}
+            >
+              <CharacterSprite id={c.id} />
+              <span className="character-name">{c.label}</span>
+            </button>
+          ))}
         </div>
 
         <span className="join-label">Sua cor (nome e lista)</span>

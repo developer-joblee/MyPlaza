@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { AVATAR_COLORS, DEFAULT_SCENARIO, type ChatMessage, type ScenarioId } from '@together/shared';
+import {
+  AVATAR_COLORS,
+  DEFAULT_CHARACTER,
+  DEFAULT_SCENARIO,
+  type CharacterId,
+  type ChatMessage,
+  type ScenarioId,
+} from '@together/shared';
 // import type: apagado na compilação, então não puxa o SDK para o chunk principal
 import type { RemoteVideoTrack } from 'livekit-client';
 import type { MicDevice } from '../voice/mic';
@@ -29,6 +36,7 @@ interface AppState {
   selfName: string;
   selfColor: number;
   selfScenario: ScenarioId;
+  selfCharacter: CharacterId;
   selfId: string | null;
   connected: boolean;
   roster: RosterEntry[];
@@ -58,7 +66,7 @@ interface AppState {
   /** zoom alvo da câmera, em % */
   zoomPct: number;
 
-  join: (name: string, color: number, scenario: ScenarioId) => void;
+  join: (name: string, color: number, scenario: ScenarioId, character: CharacterId) => void;
   /** volta para a tela inicial zerando o estado da sessão */
   leave: () => void;
   setScenario: (id: ScenarioId) => void;
@@ -93,6 +101,7 @@ export const useStore = create<AppState>((set) => ({
   selfName: '',
   selfColor: AVATAR_COLORS[0],
   selfScenario: DEFAULT_SCENARIO,
+  selfCharacter: DEFAULT_CHARACTER,
   selfId: null,
   connected: false,
   roster: [],
@@ -121,13 +130,19 @@ export const useStore = create<AppState>((set) => ({
   focusedScreenId: null,
   zoomPct: 100,
 
-  join: (name, color, scenario) =>
-    set({ phase: 'playing', selfName: name, selfColor: color, selfScenario: scenario }),
+  join: (name, color, scenario, character) =>
+    set({
+      phase: 'playing',
+      selfName: name,
+      selfColor: color,
+      selfScenario: scenario,
+      selfCharacter: character,
+    }),
 
   /**
    * Zera tudo que pertence à sessão. Sair troca `phase`, o que desmonta o
    * GameView e dispara a limpeza dele (socket, sala de voz, app do Pixi).
-   * Nome/cor/cenário ficam para a tela de entrada vir preenchida, e
+   * Nome/cor/cenário/personagem ficam para a tela de entrada vir preenchida, e
    * `noiseFilter` fica porque é preferência do usuário, não estado de sessão.
    */
   leave: () =>

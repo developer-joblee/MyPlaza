@@ -1,7 +1,11 @@
+import type { CharacterId } from './constants';
+
 export interface PlayerState {
   id: string;
   name: string;
   color: number;
+  /** qual boneco desenhar; é por aqui que os outros clientes descobrem */
+  character: CharacterId;
   x: number;
   y: number;
 }

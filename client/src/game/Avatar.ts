@@ -10,27 +10,26 @@ const NAME_STYLE = new TextStyle({
   stroke: { color: 0x22242e, width: 3 },
 });
 
-const SCALE = 1.5;
 /** Deslocamento dos pés em relação ao centro lógico (posição de colisão) */
 const FEET_Y = 14;
-const WALK_FRAME_S = 0.12;
-const IDLE_FRAME_S = 0.45;
-/** A linha "side" da spritesheet olha para a DIREITA */
-const SHEET_SIDE_FACES_LEFT = false;
-const FRAME_DISPLAY_H = 32 * SCALE;
 
-/** Visual compartilhado entre o player local e os remotos. */
+/**
+ * Visual compartilhado entre o player local e os remotos.
+ *
+ * Não sabe qual personagem está desenhando: escala, ancoragem, espelhamento e
+ * ritmo de animação vêm todos do `CharacterFrames`, que já normalizou os packs
+ * (ver `sprites.ts`). Adicionar um personagem novo não mexe neste arquivo.
+ */
 export class Avatar {
   readonly view = new Container();
   private sprite: Sprite;
-  private shadow: Sprite;
+  private shadow: Sprite | Graphics;
   private speakingRing: Graphics;
   /** só o player local tem: o círculo de alcance de voz */
   private proximityRing: Graphics | null = null;
   private label: Text;
 
   private facing: Facing = 'down';
-  private flipX = false;
   private moving = false;
   private frameTimer = 0;
   private frameIndex = 0;
@@ -56,22 +55,29 @@ export class Avatar {
     this.speakingRing.visible = false;
     this.view.addChild(this.speakingRing);
 
-    this.shadow = new Sprite(frames.shadow);
-    this.shadow.anchor.set(0.5, 30 / 32);
+    // o Protótipo tem sombra desenhada na arte; os do LimeZu não, então
+    // ganham uma elipse — a única diferença de montagem entre os packs
+    if (frames.shadow) {
+      const s = new Sprite(frames.shadow);
+      s.anchor.set(0.5, 30 / 32);
+      s.scale.set(frames.scale);
+      s.alpha = 0.8;
+      this.shadow = s;
+    } else {
+      this.shadow = new Graphics().ellipse(0, -1, 8, 3.5).fill({ color: 0x000000, alpha: 0.22 });
+    }
     this.shadow.position.set(0, FEET_Y);
-    this.shadow.scale.set(SCALE);
-    this.shadow.alpha = 0.8;
     this.view.addChild(this.shadow);
 
     this.sprite = new Sprite(frames.idle.down[0]);
-    this.sprite.anchor.set(0.5, 30 / 32); // pés do personagem
+    this.sprite.anchor.set(0.5, frames.anchorY); // pés do personagem
     this.sprite.position.set(0, FEET_Y);
-    this.sprite.scale.set(SCALE);
+    this.sprite.scale.set(frames.scale);
     this.view.addChild(this.sprite);
 
     this.label = new Text({ text: name, style: NAME_STYLE });
     this.label.anchor.set(0.5, 1);
-    this.label.y = FEET_Y - FRAME_DISPLAY_H - 4;
+    this.label.y = frames.labelY;
     this.label.resolution = 2;
     this.label.tint = color;
     this.view.addChild(this.label);
@@ -87,25 +93,24 @@ export class Avatar {
     this.moving = moving;
     if (!moving) return;
     if (Math.abs(dx) >= Math.abs(dy)) {
-      this.facing = 'side';
-      this.flipX = SHEET_SIDE_FACES_LEFT ? dx > 0 : dx < 0;
+      this.facing = dx < 0 ? 'left' : 'right';
     } else {
       this.facing = dy < 0 ? 'up' : 'down';
-      this.flipX = false;
     }
   }
 
   /** Avança a animação. Chamar a cada frame do ticker. */
   update(dt: number): void {
     const set = this.moving ? this.frames.walk[this.facing] : this.frames.idle[this.facing];
-    const frameDuration = this.moving ? WALK_FRAME_S : IDLE_FRAME_S;
+    const frameDuration = this.moving ? this.frames.walkFrameS : this.frames.idleFrameS;
     this.frameTimer += dt;
     if (this.frameTimer >= frameDuration) {
       this.frameTimer %= frameDuration;
       this.frameIndex++;
     }
     this.sprite.texture = set[this.frameIndex % set.length];
-    this.sprite.scale.x = this.flipX ? -SCALE : SCALE;
+    const scale = this.frames.scale;
+    this.sprite.scale.x = this.frames.mirror[this.facing] ? -scale : scale;
   }
 
   /**
@@ -118,6 +123,28 @@ export class Avatar {
 
   setSpeaking(speaking: boolean): void {
     this.speakingRing.visible = speaking;
+  }
+
+  /**
+   * Qual quadro está na tela agora. Existe porque um lado invertido é invisível
+   * a olho nu: quando esquerda e direita usam a mesma imagem espelhada, a tela
+   * fica certa mesmo com o recorte errado. Comparar `frameX` entre andar para os
+   * dois lados é o que separa os dois casos.
+   */
+  debugFrame(): {
+    character: string;
+    facing: Facing;
+    frameX: number;
+    frameY: number;
+    scaleX: number;
+  } {
+    return {
+      character: this.frames.id,
+      facing: this.facing,
+      frameX: this.sprite.texture.frame.x,
+      frameY: this.sprite.texture.frame.y,
+      scaleX: this.sprite.scale.x,
+    };
   }
 
   destroy(): void {

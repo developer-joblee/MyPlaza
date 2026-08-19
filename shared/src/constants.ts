@@ -47,3 +47,26 @@ export const AVATAR_COLORS = [
   0xe63946, 0xf4a261, 0xe9c46a, 0x2a9d8f,
   0x457b9d, 0x8e7dbe, 0xef476f, 0x06d6a0,
 ] as const;
+
+/**
+ * Personagens disponíveis. Aqui só moram os ids e os rótulos, porque isto é
+ * protocolo: o servidor precisa validar a escolha e os outros clientes precisam
+ * saber qual boneco desenhar. Como cada um é desenhado (spritesheet, tamanho do
+ * quadro, recorte de cada direção) é assunto do cliente, em
+ * `client/src/game/sprites.ts`.
+ */
+export const CHARACTERS = [
+  { id: 'adam', label: 'Adam' },
+  { id: 'alex', label: 'Alex' },
+  { id: 'amelia', label: 'Amélia' },
+  { id: 'bob', label: 'Bob' },
+  { id: 'proto', label: 'Protótipo' },
+] as const;
+
+export type CharacterId = (typeof CHARACTERS)[number]['id'];
+
+export const DEFAULT_CHARACTER: CharacterId = 'adam';
+
+export function isCharacterId(value: unknown): value is CharacterId {
+  return CHARACTERS.some((c) => c.id === value);
+}

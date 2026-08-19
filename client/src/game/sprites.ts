@@ -1,43 +1,97 @@
 import { Assets, Rectangle, Texture } from 'pixi.js';
+import { CHARACTERS, type CharacterId } from '@together/shared';
+import {
+  CHARACTER_DEFS,
+  byFacing,
+  type CharacterDef,
+  type Facing,
+  type SheetSlice,
+} from './characterDefs';
 
-export type Facing = 'down' | 'side' | 'up';
+export type { Facing } from './characterDefs';
 
+/**
+ * O que o Avatar consome. É sempre esta forma, venha de qual pack vier: as
+ * quatro direções já resolvidas, com o espelhamento marcado onde a spritesheet
+ * não tem o lado. Assim o Avatar não precisa de nenhum `if` por personagem, e
+ * os dois formatos incompatíveis de sheet (16x32 com 4 direções do LimeZu e
+ * 32x32 com 3 do Protótipo) morrem aqui.
+ */
 export interface CharacterFrames {
+  id: CharacterId;
   idle: Record<Facing, Texture[]>;
   walk: Record<Facing, Texture[]>;
-  shadow: Texture;
+  /** espelhar na horizontal (a sheet não tem esse lado desenhado) */
+  mirror: Record<Facing, boolean>;
+  /** sombra própria; null = o Avatar desenha uma elipse */
+  shadow: Texture | null;
+  scale: number;
+  labelY: number;
+  anchorY: number;
+  idleFrameS: number;
+  walkFrameS: number;
 }
 
-const FRAME = 32;
-/** Ordem das linhas nas spritesheets do Prototype_Character */
-const ROWS: Facing[] = ['down', 'side', 'up'];
-
-function slice(sheet: Texture, cols: number): Record<Facing, Texture[]> {
-  const out = {} as Record<Facing, Texture[]>;
-  ROWS.forEach((facing, row) => {
-    out[facing] = Array.from(
-      { length: cols },
-      (_, col) =>
-        new Texture({
-          source: sheet.source,
-          frame: new Rectangle(col * FRAME, row * FRAME, FRAME, FRAME),
-        }),
-    );
-  });
-  return out;
+function cut(source: Texture, def: CharacterDef, slice: SheetSlice): Texture[] {
+  return slice.cols.map(
+    (col) =>
+      new Texture({
+        source: source.source,
+        frame: new Rectangle(col * def.frameW, slice.row * def.frameH, def.frameW, def.frameH),
+      }),
+  );
 }
 
-let cached: CharacterFrames | null = null;
+/**
+ * Cache em nível de módulo: as texturas são compartilhadas entre sessões (sair
+ * e voltar) e entre players que escolheram o mesmo boneco. É por isso que
+ * `Game.destroy()` usa `texture: false` — destruí-las aqui quebraria a próxima
+ * sessão e todos os outros avatares.
+ */
+const cache = new Map<CharacterId, CharacterFrames>();
 
-export async function loadCharacterFrames(): Promise<CharacterFrames> {
-  if (cached) return cached;
-  const [idle, walk, shadow] = await Promise.all([
-    Assets.load<Texture>('/characters/default/idle.png'),
-    Assets.load<Texture>('/characters/default/walk.png'),
-    Assets.load<Texture>('/characters/default/shadow.png'),
+export async function loadCharacterFrames(id: CharacterId): Promise<CharacterFrames> {
+  const hit = cache.get(id);
+  if (hit) return hit;
+
+  const def = CHARACTER_DEFS[id];
+  const [walkSheet, idleSheet, shadow] = await Promise.all([
+    Assets.load<Texture>(def.sheet),
+    def.idleSheet ? Assets.load<Texture>(def.idleSheet) : Promise.resolve(null),
+    def.shadowSheet ? Assets.load<Texture>(def.shadowSheet) : Promise.resolve(null),
   ]);
+
   // pixel art nítida
-  for (const t of [idle, walk, shadow]) t.source.scaleMode = 'nearest';
-  cached = { idle: slice(idle, 2), walk: slice(walk, 4), shadow };
-  return cached;
+  for (const t of [walkSheet, idleSheet, shadow]) {
+    if (t) t.source.scaleMode = 'nearest';
+  }
+
+  const build = (which: 'idle' | 'walk', source: Texture) =>
+    byFacing((f) => cut(source, def, def[which][f]));
+
+  const frames: CharacterFrames = {
+    id,
+    // sem idleSheet o idle vive na mesma sheet da caminhada (caso do LimeZu)
+    idle: build('idle', idleSheet ?? walkSheet),
+    walk: build('walk', walkSheet),
+    mirror: byFacing((f) => def.walk[f].mirror === true),
+    shadow,
+    scale: def.scale,
+    labelY: def.labelY,
+    anchorY: def.anchorY,
+    idleFrameS: def.idleFrameS,
+    walkFrameS: def.walkFrameS,
+  };
+  cache.set(id, frames);
+  return frames;
+}
+
+/**
+ * Carrega todos os personagens de uma vez. As sheets são pequenas (17 KB cada)
+ * e pré-carregar evita ter de lidar com carregamento assíncrono no meio do
+ * `addRemote`, quando alguém entra com um boneco ainda não carregado.
+ */
+export async function loadAllCharacterFrames(): Promise<Map<CharacterId, CharacterFrames>> {
+  await Promise.all(CHARACTERS.map((c) => loadCharacterFrames(c.id)));
+  return cache;
 }

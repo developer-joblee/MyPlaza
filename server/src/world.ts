@@ -3,6 +3,7 @@ import {
   SCENARIOS,
   TILE_SIZE,
   parseMap,
+  type CharacterId,
   type ChatMessage,
   type PlayerState,
   type ScenarioId,
@@ -21,13 +22,14 @@ export class World {
     this.spawnTiles = SCENARIOS[scenarioId].spawnTiles;
   }
 
-  addPlayer(id: string, name: string, color: number): PlayerState {
+  addPlayer(id: string, name: string, color: number, character: CharacterId): PlayerState {
     const [tx, ty] = this.spawnTiles[this.spawnIndex % this.spawnTiles.length];
     this.spawnIndex++;
     const player: PlayerState = {
       id,
       name,
       color,
+      character,
       x: tx * TILE_SIZE + TILE_SIZE / 2,
       y: ty * TILE_SIZE + TILE_SIZE / 2,
     };

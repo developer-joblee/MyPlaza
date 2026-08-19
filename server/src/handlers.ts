@@ -2,8 +2,10 @@ import type { Server, Socket } from 'socket.io';
 import {
   AVATAR_COLORS,
   CHAT_MAX_LENGTH,
+  DEFAULT_CHARACTER,
   DEFAULT_SCENARIO,
   NAME_MAX_LENGTH,
+  isCharacterId,
   isScenarioId,
   type ChatMessage,
   type ClientToServerEvents,
@@ -47,7 +49,7 @@ type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string
 export function registerHandlers(io: IoServer, socket: IoSocket): void {
   socket.data.connectedAt = Date.now();
 
-  socket.on('join', (rawName, color, rawScenario) => {
+  socket.on('join', (rawName, color, rawScenario, rawCharacter) => {
     if (socket.data.scenarioId !== undefined) return;
     const scenarioId = isScenarioId(rawScenario) ? rawScenario : DEFAULT_SCENARIO;
     const world = getWorld(scenarioId);
@@ -55,10 +57,12 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     const safeColor = AVATAR_COLORS.includes(color as (typeof AVATAR_COLORS)[number])
       ? color
       : AVATAR_COLORS[0];
-    const player = world.addPlayer(socket.id, name, safeColor);
+    // id desconhecido (cliente antigo ou payload adulterado) cai no padrão
+    const character = isCharacterId(rawCharacter) ? rawCharacter : DEFAULT_CHARACTER;
+    const player = world.addPlayer(socket.id, name, safeColor, character);
     socket.data.scenarioId = scenarioId;
     socket.join(scenarioId);
-    console.log(`[join] ${name} (${socket.id}) -> ${scenarioId}`);
+    console.log(`[join] ${name} (${socket.id}) -> ${scenarioId} como ${character}`);
     socket.emit('world:snapshot', world.getPlayers(), world.getChatHistory(), scenarioId);
     socket.to(scenarioId).emit('player:joined', player);
   });

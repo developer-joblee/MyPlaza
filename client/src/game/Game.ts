@@ -1,10 +1,12 @@
 import { Application, Container } from 'pixi.js';
 import {
+  DEFAULT_CHARACTER,
   SCENARIOS,
   TICK_RATE,
   TILE_SIZE,
   audioZoneAt,
   parseMap,
+  type CharacterId,
   type PlayerState,
   type ScenarioId,
 } from '@together/shared';
@@ -16,9 +18,10 @@ import { Tilemap } from './Tilemap';
 import { OfficeTilemap } from './OfficeTilemap';
 import { RuinsTilemap, loadRuinsTextures, type RuinsTextures } from './RuinsTilemap';
 import { ModernTilemap, loadModernTextures, type ModernTextures } from './ModernTilemap';
+import type { Avatar } from './Avatar';
 import { LocalPlayer } from './LocalPlayer';
 import { RemotePlayer } from './RemotePlayer';
-import { loadCharacterFrames, type CharacterFrames } from './sprites';
+import { loadAllCharacterFrames, type CharacterFrames } from './sprites';
 import { loadTilesets, type Tilesets } from './tilesets';
 
 const CAMERA_LERP_RATE = 8;
@@ -50,11 +53,13 @@ export class Game {
   private constructor(
     app: Application,
     private socket: AppSocket,
-    private frames: CharacterFrames,
+    /** frames de todos os personagens; cada player usa o que escolheu */
+    private characters: Map<CharacterId, CharacterFrames>,
     themeAssets: Tilesets | RuinsTextures | ModernTextures | null,
     selfName: string,
     selfColor: number,
     scenarioId: ScenarioId,
+    selfCharacter: CharacterId,
   ) {
     this.app = app;
     this.scenarioId = scenarioId;
@@ -68,7 +73,7 @@ export class Game {
           : theme === 'modern'
             ? new ModernTilemap(map, themeAssets as ModernTextures)
             : new OfficeTilemap(map);
-    this.local = new LocalPlayer(frames, selfName, selfColor);
+    this.local = new LocalPlayer(this.framesFor(selfCharacter), selfName, selfColor);
 
     this.playersLayer.sortableChildren = true;
     this.world.addChild(this.tilemap.view, this.playersLayer);
@@ -82,6 +87,19 @@ export class Game {
     this.app.ticker.add(this.tick);
 
     (window as unknown as Record<string, unknown>).__togetherPos = () => this.selfPosition;
+    (window as unknown as Record<string, unknown>).__togetherAvatars = () => this.avatarsDebug();
+  }
+
+  /**
+   * Que boneco e que quadro cada player está mostrando. Serve para checar duas
+   * coisas que passam batido no olho: se o personagem escolhido por cada um
+   * chegou aos outros clientes, e se esquerda e direita usam recortes distintos.
+   */
+  private avatarsDebug(): Array<{ id: string; self: boolean } & ReturnType<Avatar['debugFrame']>> {
+    return [
+      { id: this.socket.id ?? '', self: true, ...this.local.avatar.debugFrame() },
+      ...[...this.remotes].map(([id, r]) => ({ id, self: false, ...r.avatar.debugFrame() })),
+    ];
   }
 
   /** Posição do player local, em px do mundo e em tiles. Debug no console. */
@@ -99,17 +117,28 @@ export class Game {
     this.zoomBy(Math.exp(-e.deltaY * 0.0012));
   };
 
+  /**
+   * Frames do personagem pedido, caindo no padrão se o id não existir. O
+   * servidor já valida, então isto só cobre um cliente mais novo que o servidor.
+   */
+  private framesFor(id: CharacterId): CharacterFrames {
+    return this.characters.get(id) ?? this.characters.get(DEFAULT_CHARACTER)!;
+  }
+
   static async create(
     container: HTMLElement,
     socket: AppSocket,
     selfName: string,
     selfColor: number,
     scenarioId: ScenarioId,
+    selfCharacter: CharacterId,
   ): Promise<Game> {
     const app = new Application();
     const theme = SCENARIOS[scenarioId].theme;
-    const [frames, themeAssets] = await Promise.all([
-      loadCharacterFrames(),
+    const [characters, themeAssets] = await Promise.all([
+      // todos de uma vez: sai mais previsível que carregar sob demanda quando
+      // alguém entra com um boneco ainda desconhecido
+      loadAllCharacterFrames(),
       // o escritório é procedural — não carrega texturas de tiles
       theme === 'garden'
         ? loadTilesets()
@@ -127,7 +156,16 @@ export class Game {
       }),
     ]);
     container.appendChild(app.canvas);
-    return new Game(app, socket, frames, themeAssets, selfName, selfColor, scenarioId);
+    return new Game(
+      app,
+      socket,
+      characters,
+      themeAssets,
+      selfName,
+      selfColor,
+      scenarioId,
+      selfCharacter,
+    );
   }
 
   private bindSocket(): void {
@@ -172,7 +210,7 @@ export class Game {
   }
 
   private addRemote(p: PlayerState): void {
-    const remote = new RemotePlayer(this.frames, p.name, p.color, p.x, p.y);
+    const remote = new RemotePlayer(this.framesFor(p.character), p.name, p.color, p.x, p.y);
     this.remotes.set(p.id, remote);
     this.playersLayer.addChild(remote.avatar.view);
   }
@@ -309,6 +347,7 @@ export class Game {
     this.app.ticker.remove(this.tick);
     // senão o hook sobrevive à sessão e consulta um Game já destruído
     delete (window as unknown as Record<string, unknown>).__togetherPos;
+    delete (window as unknown as Record<string, unknown>).__togetherAvatars;
     // texture:false de propósito: as texturas de sprite/tileset são cacheadas em
     // nível de módulo e reusadas pela próxima sessão (sair e voltar)
     this.app.destroy(true, { children: true, texture: false });

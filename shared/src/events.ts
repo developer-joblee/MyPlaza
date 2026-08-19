@@ -1,4 +1,5 @@
 import type { ChatMessage, PlayerState, VoiceTokenResponse } from './types';
+import type { CharacterId } from './constants';
 import type { ScenarioId } from './scenarios';
 
 export interface ServerToClientEvents {
@@ -10,7 +11,8 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  join: (name: string, color: number, scenarioId?: ScenarioId) => void;
+  /** `character` é opcional: cliente antigo cai no personagem padrão */
+  join: (name: string, color: number, scenarioId?: ScenarioId, character?: CharacterId) => void;
   move: (x: number, y: number) => void;
   'chat:send': (text: string) => void;
   /**

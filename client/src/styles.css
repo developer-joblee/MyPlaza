@@ -50,7 +50,7 @@ button {
 }
 
 .join-card {
-  width: min(400px, calc(100vw - 32px));
+  width: min(500px, calc(100vw - 32px));
   padding: 36px 32px 32px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -123,8 +123,8 @@ button {
 }
 
 .color-swatch {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 3px solid transparent;
   padding: 0;
@@ -138,6 +138,62 @@ button {
 .color-swatch.selected {
   border-color: #fff;
   transform: scale(1.12);
+}
+
+.character-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 10px;
+  margin: 6px 0 26px;
+}
+
+.character-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 8px;
+  border-radius: 12px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: inherit;
+  transition: border-color 0.12s, transform 0.12s;
+}
+
+.character-card:hover {
+  transform: translateY(-1px);
+}
+
+.character-card.selected {
+  border-color: var(--mint);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/*
+ * Caixa da miniatura: altura fixa para os cinco cartões ficarem alinhados, com
+ * o sprite ancorado embaixo (todos "pisam" na mesma linha). A largura vem do
+ * recorte, e o sprite dentro é ampliado por transform.
+ */
+.char-frame {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 72px;
+  overflow: hidden;
+}
+
+.char-sprite {
+  display: block;
+  background-repeat: no-repeat;
+  /* pixel art: sem suavização ao ampliar */
+  image-rendering: pixelated;
+  transform-origin: bottom center;
+}
+
+.character-name {
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
 .scenario-row {

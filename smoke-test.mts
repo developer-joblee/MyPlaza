@@ -31,19 +31,25 @@ try {
   const snapA = wait<any[]>('snapshot A', (done) =>
     a.on('world:snapshot', (players: any[]) => done(players)),
   );
+  // sem cenário e sem personagem, como um cliente antigo faria
   a.emit('join', 'Alice', 0xe63946);
   const playersA = await snapA;
   if (playersA.length !== 1 || playersA[0].name !== 'Alice') fail('snapshot de A inválido');
-  results.push('join + snapshot OK');
+  // compatibilidade: cliente que não manda personagem cai no padrão
+  if (playersA[0].character !== 'adam') {
+    fail(`join sem personagem deveria cair no padrão, veio: ${playersA[0].character}`);
+  }
+  results.push('join + snapshot OK (personagem padrão)');
 
-  // B entra; A deve ver player:joined
+  // B entra escolhendo personagem; A deve ver player:joined com a escolha
   const joinedSeen = wait<any>('A vê B entrar', (done) =>
     a.on('player:joined', (p: any) => done(p)),
   );
-  b.emit('join', 'Bob', 0x2a9d8f);
+  b.emit('join', 'Bob', 0x2a9d8f, undefined, 'bob');
   const bob = await joinedSeen;
   if (bob.name !== 'Bob') fail('broadcast player:joined inválido');
-  results.push('broadcast de entrada OK');
+  if (bob.character !== 'bob') fail(`personagem escolhido não propagou: ${bob.character}`);
+  results.push('broadcast de entrada OK (personagem propagado)');
 
   // B se move; A deve receber
   const moved = wait<[string, number, number]>('A vê B mover', (done) =>
@@ -67,6 +73,21 @@ try {
   const leftId = await leftSeen;
   if (leftId !== bob.id) fail('player:left inválido');
   results.push('saída OK');
+
+  // personagem inválido (payload adulterado) deve cair no padrão, não quebrar
+  const d: Socket = io(URL);
+  await waitConnect(d, 'conexão D');
+  const snapD = wait<any[]>('snapshot D', (done) =>
+    d.on('world:snapshot', (players: any[]) => done(players)),
+  );
+  d.emit('join', 'Dave', 0xe9c46a, undefined, 'nao-existe' as any);
+  const dave = (await snapD).find((p) => p.name === 'Dave');
+  if (!dave) fail('Dave não entrou');
+  if (dave.character !== 'adam') {
+    fail(`personagem inválido deveria cair no padrão, veio: ${dave.character}`);
+  }
+  results.push('personagem inválido cai no padrão OK');
+  d.disconnect();
 
   // voz: pedir token ANTES de entrar deve ser recusado
   const c: Socket = io(URL);
