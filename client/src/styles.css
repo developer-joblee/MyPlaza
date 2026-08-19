@@ -1052,3 +1052,87 @@ button {
     transform: none;
   }
 }
+
+/* ------------------------------------------- Interruptor (cancelamento de ruído) */
+
+.audio-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.audio-toggle:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.audio-toggle.on {
+  border-color: var(--mint);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.audio-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.audio-toggle-track {
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 0.14s;
+  position: relative;
+}
+
+.audio-toggle.on .audio-toggle-track {
+  background: var(--mint);
+}
+
+.audio-toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.14s;
+}
+
+.audio-toggle.on .audio-toggle-knob {
+  transform: translateX(14px);
+}
+
+.audio-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.audio-toggle-text small {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audio-toggle-knob,
+  .audio-toggle-track {
+    transition: none;
+  }
+}

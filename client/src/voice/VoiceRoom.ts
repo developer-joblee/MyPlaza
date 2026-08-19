@@ -61,6 +61,8 @@ export class VoiceRoom {
   private screenSharing = false;
   /** analisador do mic local, para o medidor de nível da UI */
   private micAnalyser: { calculateVolume: () => number; cleanup: () => Promise<void> } | null = null;
+  private noiseFilterTried = false;
+  private noiseFilter: { setEnabled: (on: boolean) => Promise<unknown>; destroy: () => Promise<void> } | null = null;
   private reconnectAttempts = 0;
   private destroyed = false;
   /**
@@ -280,7 +282,52 @@ export class VoiceRoom {
       console.warn('[voice] medidor de nível indisponível:', err);
       this.micAnalyser = null;
     }
+
+    // uma vez por sessão: trocar de dispositivo mantém o processor na faixa
+    if (!this.noiseFilterTried && useStore.getState().noiseFilter) {
+      this.noiseFilterTried = true;
+      void import('./krisp').then(async ({ applyNoiseFilter }) => {
+        const handle = await applyNoiseFilter(track);
+        if (this.destroyed) {
+          void handle?.destroy();
+          return;
+        }
+        this.noiseFilter = handle;
+        useStore.getState().setNoiseFilterActive(handle !== null);
+      });
+    }
   };
+
+  /**
+   * Liga/desliga o cancelamento de ruído. Desligado nunca importa o chunk do
+   * Krisp (~2MB gzip), então quem não quer também não paga o download.
+   */
+  async setNoiseFilter(enabled: boolean): Promise<void> {
+    const { saveNoiseFilterPreference } = await import('./krisp');
+    saveNoiseFilterPreference(enabled);
+    useStore.getState().setNoiseFilter(enabled);
+
+    if (this.noiseFilter) {
+      await this.noiseFilter.setEnabled(enabled);
+      useStore.getState().setNoiseFilterActive(enabled);
+      return;
+    }
+    if (!enabled) return;
+
+    // primeira vez ligando nesta sessão: carrega e aplica agora
+    const pub = this.room?.localParticipant.getTrackPublication(Track.Source.Microphone);
+    const track = pub?.track;
+    if (!(track instanceof LocalAudioTrack)) return;
+    const { applyNoiseFilter } = await import('./krisp');
+    const handle = await applyNoiseFilter(track);
+    if (this.destroyed) {
+      void handle?.destroy();
+      return;
+    }
+    this.noiseFilter = handle;
+    this.noiseFilterTried = true;
+    useStore.getState().setNoiseFilterActive(handle !== null);
+  }
 
   /** Nível do microfone local, 0..1. Lido por rAF na UI (nunca via store). */
   getMicLevel(): number {

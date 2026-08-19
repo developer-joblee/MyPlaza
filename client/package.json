@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@livekit/krisp-noise-filter": "^0.4.4",
     "@together/shared": "*",
     "livekit-client": "^2.22.0",
     "pixi.js": "^8.6.6",

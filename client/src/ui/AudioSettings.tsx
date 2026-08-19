@@ -22,6 +22,8 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
   const deafened = useStore((s) => s.deafened);
   const micSwitching = useStore((s) => s.micSwitching);
   const voiceStatus = useStore((s) => s.voiceStatus);
+  const noiseFilter = useStore((s) => s.noiseFilter);
+  const noiseFilterActive = useStore((s) => s.noiseFilterActive);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const meterRef = useRef<HTMLSpanElement>(null);
@@ -162,6 +164,26 @@ export function AudioSettings({ onClose }: { onClose: () => void }) {
         </span>
       </div>
       <p className="audio-hint" role="status">{caption}</p>
+
+      <button
+        type="button"
+        className={`audio-toggle${noiseFilter ? ' on' : ''}`}
+        onClick={() => void runtime.voice?.setNoiseFilter(!noiseFilter)}
+        aria-pressed={noiseFilter}
+        disabled={!micAvailable}
+      >
+        <span className="audio-toggle-track" aria-hidden="true"><span className="audio-toggle-knob" /></span>
+        <span className="audio-toggle-text">
+          Cancelamento de ruído
+          <small>
+            {noiseFilter
+              ? noiseFilterActive
+                ? 'Krisp ativo — filtra teclado, ventilador e vozes de fundo'
+                : 'Carregando o filtro…'
+              : 'Só a supressão nativa do navegador (baixa ~2 MB a menos)'}
+          </small>
+        </span>
+      </button>
     </div>
   );
 }

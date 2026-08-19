@@ -43,6 +43,10 @@ interface AppState {
   micDevices: MicDevice[];
   activeMicId: string | null;
   micSwitching: boolean;
+  /** preferência do usuário para o cancelamento de ruído */
+  noiseFilter: boolean;
+  /** se o filtro está de fato rodando (pode falhar por falta de suporte) */
+  noiseFilterActive: boolean;
   sharing: boolean;
   remoteScreens: RemoteScreen[];
   speaking: Record<string, boolean>;
@@ -68,6 +72,8 @@ interface AppState {
   setMicDevices: (devices: MicDevice[]) => void;
   setActiveMicId: (id: string | null) => void;
   setMicSwitching: (v: boolean) => void;
+  setNoiseFilter: (v: boolean) => void;
+  setNoiseFilterActive: (v: boolean) => void;
   setSharing: (v: boolean) => void;
   addRemoteScreen: (peerId: string, track: RemoteVideoTrack) => void;
   removeRemoteScreen: (peerId: string) => void;
@@ -94,6 +100,14 @@ export const useStore = create<AppState>((set) => ({
   micDevices: [],
   activeMicId: null,
   micSwitching: false,
+  noiseFilter: (() => {
+    try {
+      return localStorage.getItem('together:noiseFilter') !== 'off';
+    } catch {
+      return true;
+    }
+  })(),
+  noiseFilterActive: false,
   sharing: false,
   remoteScreens: [],
   speaking: {},
@@ -125,6 +139,8 @@ export const useStore = create<AppState>((set) => ({
   setMicDevices: (devices) => set({ micDevices: devices }),
   setActiveMicId: (id) => set({ activeMicId: id }),
   setMicSwitching: (v) => set({ micSwitching: v }),
+  setNoiseFilter: (v) => set({ noiseFilter: v }),
+  setNoiseFilterActive: (v) => set({ noiseFilterActive: v }),
   setSharing: (v) => set({ sharing: v }),
   addRemoteScreen: (peerId, track) =>
     set((s) => ({
