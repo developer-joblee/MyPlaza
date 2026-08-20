@@ -53,6 +53,8 @@ interface AppState {
   micSwitching: boolean;
   /** nome da sala em que o player está; null = área aberta (proximidade normal) */
   audioZone: string | null;
+  /** há uma cadeira ao alcance e o player está de pé (mostra a dica do E) */
+  canSit: boolean;
   /** preferência do usuário para o cancelamento de ruído */
   noiseFilter: boolean;
   /** se o filtro está de fato rodando (pode falhar por falta de suporte) */
@@ -85,6 +87,7 @@ interface AppState {
   setActiveMicId: (id: string | null) => void;
   setMicSwitching: (v: boolean) => void;
   setAudioZone: (label: string | null) => void;
+  setCanSit: (v: boolean) => void;
   setNoiseFilter: (v: boolean) => void;
   setNoiseFilterActive: (v: boolean) => void;
   setSharing: (v: boolean) => void;
@@ -115,6 +118,7 @@ export const useStore = create<AppState>((set) => ({
   activeMicId: null,
   micSwitching: false,
   audioZone: null,
+  canSit: false,
   noiseFilter: (() => {
     try {
       return localStorage.getItem('together:noiseFilter') !== 'off';
@@ -161,6 +165,7 @@ export const useStore = create<AppState>((set) => ({
       activeMicId: null,
       micSwitching: false,
       audioZone: null,
+      canSit: false,
       noiseFilterActive: false,
       sharing: false,
       remoteScreens: [],
@@ -192,6 +197,7 @@ export const useStore = create<AppState>((set) => ({
   setActiveMicId: (id) => set({ activeMicId: id }),
   setMicSwitching: (v) => set({ micSwitching: v }),
   setAudioZone: (label) => set({ audioZone: label }),
+  setCanSit: (v) => set({ canSit: v }),
   setNoiseFilter: (v) => set({ noiseFilter: v }),
   setNoiseFilterActive: (v) => set({ noiseFilterActive: v }),
   setSharing: (v) => set({ sharing: v }),

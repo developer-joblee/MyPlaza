@@ -29,7 +29,10 @@ export interface Tilesets {
   sunflower: Texture;
   flowers: Texture[];
   table: Texture;
-  chairs: Texture[];
+  /** cadeiras por orientação — ver o recorte em loadTilesets() */
+  chairRight: Texture;
+  chairLeft: Texture;
+  chairFront: Texture;
   rugBig: Texture;
   rugsSmall: Texture[];
   house: Texture;
@@ -115,7 +118,12 @@ export async function loadTilesets(): Promise<Tilesets> {
       px(biome, 100, 4, 10, 11),
     ],
     table: px(furniture, 49, 49, 14, 14),
-    chairs: [px(furniture, 67, 33, 10, 13), px(furniture, 83, 33, 10, 13), px(furniture, 99, 33, 10, 13)],
+    // Orientação medida pelo encosto: em x=67 ele fica à esquerda (a pessoa
+    // olha para a direita), em x=83 à direita, e em x=99 atravessa o topo — essa
+    // é a cadeira de frente para a câmera, que não tem arte de sentar.
+    chairRight: px(furniture, 67, 33, 10, 13),
+    chairLeft: px(furniture, 83, 33, 10, 13),
+    chairFront: px(furniture, 99, 33, 10, 13),
     rugBig: px(furniture, 0, 82, 48, 13),
     rugsSmall: [px(furniture, 52, 82, 24, 13), px(furniture, 84, 82, 24, 13), px(furniture, 116, 82, 24, 13)],
     house: px(house, 0, 0, 48, 48),

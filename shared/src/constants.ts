@@ -60,7 +60,6 @@ export const CHARACTERS = [
   { id: 'alex', label: 'Alex' },
   { id: 'amelia', label: 'Amélia' },
   { id: 'bob', label: 'Bob' },
-  { id: 'proto', label: 'Protótipo' },
 ] as const;
 
 export type CharacterId = (typeof CHARACTERS)[number]['id'];

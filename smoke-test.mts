@@ -39,7 +39,8 @@ try {
   if (playersA[0].character !== 'adam') {
     fail(`join sem personagem deveria cair no padrão, veio: ${playersA[0].character}`);
   }
-  results.push('join + snapshot OK (personagem padrão)');
+  if (playersA[0].sitting !== false) fail('quem entra deveria começar de pé');
+  results.push('join + snapshot OK (personagem padrão, de pé)');
 
   // B entra escolhendo personagem; A deve ver player:joined com a escolha
   const joinedSeen = wait<any>('A vê B entrar', (done) =>
@@ -59,6 +60,47 @@ try {
   const [movedId, mx, my] = await moved;
   if (movedId !== b.id || mx !== 200 || my !== 300) fail('player:moved inválido');
   results.push('movimento OK');
+
+  /**
+   * Sentar. A cadeira `>` da Praça está no tile (13,16) — a linha
+   * `..>o<..>o<..` do PLAZA_ROWS. O servidor valida pela posição, então B tem
+   * de estar em cima dela antes de pedir. (4,8) é tapete de spawn: livre e
+   * garantidamente não-cadeira.
+   */
+  const CADEIRA = { x: 13 * 32 + 16, y: 16 * 32 + 16 };
+  const naoCadeira = { x: 4 * 32 + 16, y: 8 * 32 + 16 };
+
+  // pedir para sentar longe de cadeira deve ser ignorado
+  let satIndevido = false;
+  const vigia = (id: string, s: boolean) => {
+    if (id === b.id && s) satIndevido = true;
+  };
+  a.on('player:sat', vigia);
+  b.emit('move', naoCadeira.x, naoCadeira.y);
+  b.emit('sit', true);
+  await new Promise((r) => setTimeout(r, 300));
+  if (satIndevido) fail('sentar fora de cadeira deveria ser recusado');
+  a.off('player:sat', vigia);
+  results.push('sentar fora de cadeira recusado OK');
+
+  // em cima da cadeira, sentar propaga
+  const satSeen = wait<[string, boolean]>('A vê B sentar', (done) =>
+    a.on('player:sat', (id: string, s: boolean) => done([id, s])),
+  );
+  b.emit('move', CADEIRA.x, CADEIRA.y);
+  b.emit('sit', true);
+  const [satId, satVal] = await satSeen;
+  if (satId !== b.id || satVal !== true) fail(`player:sat inválido: ${satId} ${satVal}`);
+  results.push('sentar na cadeira propaga OK');
+
+  // andar para longe levanta, mesmo sem o cliente avisar
+  const upSeen = wait<[string, boolean]>('A vê B levantar ao andar', (done) =>
+    a.on('player:sat', (id: string, s: boolean) => done([id, s])),
+  );
+  b.emit('move', naoCadeira.x, naoCadeira.y);
+  const [upId, upVal] = await upSeen;
+  if (upId !== b.id || upVal !== false) fail(`levantar ao andar falhou: ${upId} ${upVal}`);
+  results.push('andar levanta automaticamente OK');
 
   // chat
   const chatSeen = wait<any>('A recebe chat', (done) => a.on('chat:message', (m: any) => done(m)));

@@ -25,6 +25,7 @@ Abra duas abas para testar sozinho.
 | Ação | Como |
 |---|---|
 | Andar | `WASD` ou setas |
+| Sentar | `E` ao lado de uma cadeira (a dica aparece no painel). `E` de novo, ou qualquer tecla de movimento, levanta |
 | Falar | Chegue a até ~5 tiles de alguém (círculo claro ao redor do seu avatar) — o volume cai com a distância |
 | Mutar microfone | Botão 🎙️ na barra inferior |
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
@@ -152,9 +153,9 @@ ambiente local — caso contrário dev e produção cairiam na mesma sala.
   by **Cup Nooble** — uso não-comercial, conforme a licença do pack.
 - **Ruínas (cena e objetos)**: [Pixel Art Top Down — Basic](https://cainos.itch.io/pixel-art-top-down-basic),
   by **Cainos** — licença CC0.
-- **Interiores modernos (Estúdio)**: [Modern Interiors — free](https://limezu.itch.io/moderninteriors),
-  by **LimeZu** — uso não-comercial, conforme a licença do pack.
-- **Personagem**: Prototype_Character (pack local do projeto).
+- **Interiores modernos (Estúdio) e personagens**: [Modern Interiors — free](https://limezu.itch.io/moderninteriors),
+  by **LimeZu** — uso não-comercial, conforme a licença do pack. Os quatro
+  personagens (Adam, Alex, Amélia, Bob) vêm daí, incluindo as poses de sentar.
 
 > Atenção: a licença do Sprout Lands Basic é **não-comercial**. Para uso
 > comercial, contate o autor (Discord: `cup_nooble`).

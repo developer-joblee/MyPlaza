@@ -6,38 +6,44 @@ import {
   type CharacterDef,
   type Facing,
   type SheetSlice,
+  type SitFacing,
 } from './characterDefs';
 
-export type { Facing } from './characterDefs';
+export type { Facing, SitFacing } from './characterDefs';
 
 /**
- * O que o Avatar consome. É sempre esta forma, venha de qual pack vier: as
- * quatro direções já resolvidas, com o espelhamento marcado onde a spritesheet
- * não tem o lado. Assim o Avatar não precisa de nenhum `if` por personagem, e
- * os dois formatos incompatíveis de sheet (16x32 com 4 direções do LimeZu e
- * 32x32 com 3 do Protótipo) morrem aqui.
+ * O que o Avatar consome: as direções já resolvidas, com a spritesheet fatiada.
+ * Toda a irregularidade de layout (passos de célula diferentes entre andar e
+ * sentar, figura deslocada dentro da célula) morre no loader — o Avatar só pede
+ * `walk[facing]` ou `sit[facing]` e desenha.
  */
 export interface CharacterFrames {
   id: CharacterId;
   idle: Record<Facing, Texture[]>;
   walk: Record<Facing, Texture[]>;
-  /** espelhar na horizontal (a sheet não tem esse lado desenhado) */
-  mirror: Record<Facing, boolean>;
-  /** sombra própria; null = o Avatar desenha uma elipse */
-  shadow: Texture | null;
+  /** só perfil: o pack não tem sentar de frente nem de costas */
+  sit: Record<SitFacing, Texture[]>;
   scale: number;
   labelY: number;
   anchorY: number;
   idleFrameS: number;
   walkFrameS: number;
+  sitFrameS: number;
 }
 
 function cut(source: Texture, def: CharacterDef, slice: SheetSlice): Texture[] {
+  const stride = slice.stride ?? def.frameW;
+  const offsetX = slice.offsetX ?? 0;
   return slice.cols.map(
     (col) =>
       new Texture({
         source: source.source,
-        frame: new Rectangle(col * def.frameW, slice.row * def.frameH, def.frameW, def.frameH),
+        frame: new Rectangle(
+          col * stride + offsetX,
+          slice.row * def.frameH,
+          def.frameW,
+          def.frameH,
+        ),
       }),
   );
 }
@@ -55,32 +61,23 @@ export async function loadCharacterFrames(id: CharacterId): Promise<CharacterFra
   if (hit) return hit;
 
   const def = CHARACTER_DEFS[id];
-  const [walkSheet, idleSheet, shadow] = await Promise.all([
-    Assets.load<Texture>(def.sheet),
-    def.idleSheet ? Assets.load<Texture>(def.idleSheet) : Promise.resolve(null),
-    def.shadowSheet ? Assets.load<Texture>(def.shadowSheet) : Promise.resolve(null),
-  ]);
-
-  // pixel art nítida
-  for (const t of [walkSheet, idleSheet, shadow]) {
-    if (t) t.source.scaleMode = 'nearest';
-  }
-
-  const build = (which: 'idle' | 'walk', source: Texture) =>
-    byFacing((f) => cut(source, def, def[which][f]));
+  const sheet = await Assets.load<Texture>(def.sheet);
+  sheet.source.scaleMode = 'nearest'; // pixel art nítida
 
   const frames: CharacterFrames = {
     id,
-    // sem idleSheet o idle vive na mesma sheet da caminhada (caso do LimeZu)
-    idle: build('idle', idleSheet ?? walkSheet),
-    walk: build('walk', walkSheet),
-    mirror: byFacing((f) => def.walk[f].mirror === true),
-    shadow,
+    idle: byFacing((f) => cut(sheet, def, def.idle[f])),
+    walk: byFacing((f) => cut(sheet, def, def.walk[f])),
+    sit: {
+      left: cut(sheet, def, def.sit.left),
+      right: cut(sheet, def, def.sit.right),
+    },
     scale: def.scale,
     labelY: def.labelY,
     anchorY: def.anchorY,
     idleFrameS: def.idleFrameS,
     walkFrameS: def.walkFrameS,
+    sitFrameS: def.sitFrameS,
   };
   cache.set(id, frames);
   return frames;

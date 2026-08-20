@@ -36,10 +36,19 @@ const IN = {
   ],
   longDesk: { x: 32, y: 1154, w: 128, h: 46 },
   stool: { x: 194, y: 418, w: 28, h: 28 },
-  chairs: [
+  /**
+   * Cadeiras separadas por orientação, medida no encosto: em y=994 a coluna
+   * vertical do encosto fica à ESQUERDA do assento, então quem senta olha para
+   * a direita; em y=1058 é o espelho. As duas entradas de cada lado são a mesma
+   * cadeira em cores diferentes. (Antes as quatro eram tratadas como variantes
+   * sorteadas, o que fazia as cadeiras apontarem para lados aleatórios.)
+   */
+  chairsRight: [
     { x: 292, y: 994, w: 26, h: 42 },
-    { x: 290, y: 1058, w: 26, h: 42 },
     { x: 324, y: 994, w: 26, h: 42 },
+  ],
+  chairsLeft: [
+    { x: 290, y: 1058, w: 26, h: 42 },
     { x: 322, y: 1058, w: 26, h: 42 },
   ],
   sofaBig: { x: 256, y: 576, w: 96, h: 52 },
@@ -285,8 +294,14 @@ export class ModernTilemap extends TilemapBase {
           case TileType.Workstation:
             this.addProp(IN.workstations[hash(x, y) % IN.workstations.length], x, y, 1);
             break;
-          case TileType.Chair:
-            this.addProp(IN.chairs[hash(x, y) % IN.chairs.length], x, y, 1);
+          // A cadeira sentável não sorteia sprite: ela usa o que aponta para o
+          // mesmo lado que a pessoa vai ficar virada. Duas cores por orientação,
+          // e o hash escolhe só entre elas — girar é trocar o char no mapa.
+          case TileType.ChairRight:
+            this.addProp(IN.chairsRight[hash(x, y) % IN.chairsRight.length], x, y, 1);
+            break;
+          case TileType.ChairLeft:
+            this.addProp(IN.chairsLeft[hash(x, y) % IN.chairsLeft.length], x, y, 1);
             break;
           case TileType.Fridge:
             this.addProp(IN.fridge, x, y, 1);

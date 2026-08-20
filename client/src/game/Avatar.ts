@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
-import { PROXIMITY_RADIUS } from '@together/shared';
-import type { CharacterFrames, Facing } from './sprites';
+import { PROXIMITY_RADIUS, TILE_SIZE } from '@together/shared';
+import type { CharacterFrames, Facing, SitFacing } from './sprites';
 
 const NAME_STYLE = new TextStyle({
   fontFamily: 'system-ui, sans-serif',
@@ -16,14 +16,14 @@ const FEET_Y = 14;
 /**
  * Visual compartilhado entre o player local e os remotos.
  *
- * Não sabe qual personagem está desenhando: escala, ancoragem, espelhamento e
- * ritmo de animação vêm todos do `CharacterFrames`, que já normalizou os packs
- * (ver `sprites.ts`). Adicionar um personagem novo não mexe neste arquivo.
+ * Não sabe qual personagem está desenhando: escala, ancoragem e ritmo de
+ * animação vêm todos do `CharacterFrames`, que já normalizou o layout da
+ * spritesheet (ver `sprites.ts`). Adicionar um personagem novo não mexe aqui.
  */
 export class Avatar {
   readonly view = new Container();
   private sprite: Sprite;
-  private shadow: Sprite | Graphics;
+  private shadow: Graphics;
   private speakingRing: Graphics;
   /** só o player local tem: o círculo de alcance de voz */
   private proximityRing: Graphics | null = null;
@@ -31,6 +31,10 @@ export class Avatar {
 
   private facing: Facing = 'down';
   private moving = false;
+  /** null = de pé; senão, para que lado está sentado */
+  private sitting: SitFacing | null = null;
+  /** empurra o avatar para a frente na ordenação por y (ver setSitting) */
+  private zBias = 0;
   private frameTimer = 0;
   private frameIndex = 0;
 
@@ -55,17 +59,7 @@ export class Avatar {
     this.speakingRing.visible = false;
     this.view.addChild(this.speakingRing);
 
-    // o Protótipo tem sombra desenhada na arte; os do LimeZu não, então
-    // ganham uma elipse — a única diferença de montagem entre os packs
-    if (frames.shadow) {
-      const s = new Sprite(frames.shadow);
-      s.anchor.set(0.5, 30 / 32);
-      s.scale.set(frames.scale);
-      s.alpha = 0.8;
-      this.shadow = s;
-    } else {
-      this.shadow = new Graphics().ellipse(0, -1, 8, 3.5).fill({ color: 0x000000, alpha: 0.22 });
-    }
+    this.shadow = new Graphics().ellipse(0, -1, 8, 3.5).fill({ color: 0x000000, alpha: 0.22 });
     this.shadow.position.set(0, FEET_Y);
     this.view.addChild(this.shadow);
 
@@ -85,7 +79,7 @@ export class Avatar {
 
   setPosition(x: number, y: number): void {
     this.view.position.set(x, y);
-    this.view.zIndex = y;
+    this.view.zIndex = y + this.zBias;
   }
 
   /** Atualiza direção/estado de movimento a partir do vetor de deslocamento. */
@@ -99,18 +93,50 @@ export class Avatar {
     }
   }
 
+  /**
+   * Senta (virado para `facing`) ou levanta (`null`). A sombra some ao sentar:
+   * ela é uma elipse no chão, e sentado os pés não estão no chão.
+   */
+  setSitting(facing: SitFacing | null): void {
+    if (this.sitting === facing) return;
+    this.sitting = facing;
+    this.shadow.visible = facing === null;
+    /**
+     * Sentado, o avatar tem de desenhar NA FRENTE da cadeira. Os props são
+     * ancorados na base do tile (zIndex = base), e o avatar fica no centro
+     * dele, então sem viés a cadeira cobriria a pessoa inteira. Um tile de
+     * viés passa na frente dos props da própria fileira sem passar na frente
+     * dos da fileira seguinte, que de fato estão mais perto da câmera.
+     */
+    this.zBias = facing === null ? 0 : TILE_SIZE;
+    this.view.zIndex = this.view.position.y + this.zBias;
+    // recomeça a animação, senão a pose entra num quadro qualquer do ciclo
+    this.frameIndex = 0;
+    this.frameTimer = 0;
+  }
+
+  get isSitting(): boolean {
+    return this.sitting !== null;
+  }
+
   /** Avança a animação. Chamar a cada frame do ticker. */
   update(dt: number): void {
-    const set = this.moving ? this.frames.walk[this.facing] : this.frames.idle[this.facing];
-    const frameDuration = this.moving ? this.frames.walkFrameS : this.frames.idleFrameS;
+    const set = this.sitting
+      ? this.frames.sit[this.sitting]
+      : this.moving
+        ? this.frames.walk[this.facing]
+        : this.frames.idle[this.facing];
+    const frameDuration = this.sitting
+      ? this.frames.sitFrameS
+      : this.moving
+        ? this.frames.walkFrameS
+        : this.frames.idleFrameS;
     this.frameTimer += dt;
     if (this.frameTimer >= frameDuration) {
       this.frameTimer %= frameDuration;
       this.frameIndex++;
     }
     this.sprite.texture = set[this.frameIndex % set.length];
-    const scale = this.frames.scale;
-    this.sprite.scale.x = this.frames.mirror[this.facing] ? -scale : scale;
   }
 
   /**
@@ -126,24 +152,24 @@ export class Avatar {
   }
 
   /**
-   * Qual quadro está na tela agora. Existe porque um lado invertido é invisível
-   * a olho nu: quando esquerda e direita usam a mesma imagem espelhada, a tela
-   * fica certa mesmo com o recorte errado. Comparar `frameX` entre andar para os
-   * dois lados é o que separa os dois casos.
+   * Qual quadro está na tela agora. Existe porque erros de recorte são
+   * invisíveis a olho nu: sentado para a esquerda e para a direita são poses
+   * distintas na sheet, e comparar `frameX` é o que separa "está certo" de
+   * "está desenhando a pose errada com aparência plausível".
    */
   debugFrame(): {
     character: string;
     facing: Facing;
+    sitting: SitFacing | null;
     frameX: number;
     frameY: number;
-    scaleX: number;
   } {
     return {
       character: this.frames.id,
       facing: this.facing,
+      sitting: this.sitting,
       frameX: this.sprite.texture.frame.x,
       frameY: this.sprite.texture.frame.y,
-      scaleX: this.sprite.scale.x,
     };
   }
 

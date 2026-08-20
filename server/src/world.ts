@@ -3,6 +3,7 @@ import {
   SCENARIOS,
   TILE_SIZE,
   parseMap,
+  sitFacingAt,
   type CharacterId,
   type ChatMessage,
   type PlayerState,
@@ -32,6 +33,7 @@ export class World {
       character,
       x: tx * TILE_SIZE + TILE_SIZE / 2,
       y: ty * TILE_SIZE + TILE_SIZE / 2,
+      sitting: false,
     };
     this.players.set(id, player);
     return player;
@@ -46,6 +48,30 @@ export class World {
     if (!player) return undefined;
     player.x = Math.max(0, Math.min(this.map.widthPx, x));
     player.y = Math.max(0, Math.min(this.map.heightPx, y));
+    // andou => não está mais sentado (cobre o cliente que esquece de avisar)
+    if (player.sitting && this.sitFacingUnder(player) === null) player.sitting = false;
+    return player;
+  }
+
+  /** Para que lado sentaria quem está nesta posição, ou null se não dá. */
+  sitFacingUnder(player: PlayerState): 'left' | 'right' | null {
+    const tx = Math.floor(player.x / TILE_SIZE);
+    const ty = Math.floor(player.y / TILE_SIZE);
+    const tile = this.map.tiles[ty]?.[tx];
+    return tile === undefined ? null : sitFacingAt(tile);
+  }
+
+  /**
+   * Marca sentado/de pé. Recusa (devolve undefined) quem pede para sentar sem
+   * estar num tile de cadeira sentável — a validação vive aqui porque o mundo é
+   * quem tem o mapa.
+   */
+  setSitting(id: string, sitting: boolean): PlayerState | undefined {
+    const player = this.players.get(id);
+    if (!player) return undefined;
+    if (sitting && this.sitFacingUnder(player) === null) return undefined;
+    if (player.sitting === sitting) return undefined; // nada mudou, não retransmite
+    player.sitting = sitting;
     return player;
   }
 

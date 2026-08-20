@@ -84,8 +84,12 @@ const OFFICE_ROWS = [
  * Praça da equipe, 40x26 (assets Sprout Lands, by Cup Nooble).
  * `#` cerca, `.` grama, `~` água, `=` ponte, `-` trilha de terra,
  * `T` árvore, `B` arbusto, `R` pedra, `F` flores (caminhável),
- * `S` girassol, `o` mesa, `c` cadeira, `r` tapete (caminhável),
+ * `S` girassol, `o` mesa, `r` tapete (caminhável),
  * `H` casinha (footprint sólido; o sprite se estende para cima).
+ *
+ * Cadeiras: `>` e `<` são **sentáveis** e o caractere aponta para onde a pessoa
+ * fica virada (`>o<` = duas cadeiras encarando a mesa no meio). `c` é a cadeira
+ * de frente para a câmera, decorativa — ver `sitFacingAt` em `map.ts`.
  */
 const PLAZA_ROWS = [
   '########################################',
@@ -97,14 +101,14 @@ const PLAZA_ROWS = [
   '#.........---------------------===.....#',
   '#..rrr..S.-....................===.rr..#',
   '#..rrr....-....................~~~.rr..#',
-  '#..rrr....-....................~~~.oc..#',
-  '#.........-....................~~~.c...#',
+  '#..rrr....-....................~~~>o<..#',
+  '#.........-....................~~~.....#',
   '#.B.......-....T...............~~~.....#',
   '#.........-....................~~~..T..#',
   '#.R.......-.........F..........~~~.....#',
   '#.........-....................~~~.F...#',
   '#.........-....................~~~.....#',
-  '#.S.......-..coc..coc..........~~~..B..#',
+  '#.S.......-..>o<..>o<..........~~~..B..#',
   '#.........-....................===.....#',
   '#.........---------------------===.F...#',
   '#...~~~........rr..............~~~.....#',
@@ -205,17 +209,22 @@ const RUINS_ROWS = [
  * Pisos: `.` cinza, `h` carpete espinha-de-peixe (lounge), `t` azulejo
  * verde-água (reunião), `k` azulejo amarelo (copa), `r` tapete (caminhável).
  * Móveis: `s` sofá (run 2-3), `W` workstation (mesa+cadeira), `o` mesa
- * longa (run 4), `T` banqueta-mesa, `c` cadeira, `E` estante (run 2),
+ * longa (run 4), `T` banqueta-mesa, `E` estante (run 2),
  * `L` lousa de cavalete (run 2), `K` balcão (run 2), `G` geladeira,
  * `g` globo, `P` planta.
+ *
+ * Cadeiras: `>` e `<` são **sentáveis** e o caractere aponta para onde a pessoa
+ * fica virada. Como a arte de sentar do pack só tem perfil, as mesas ficam com
+ * cadeira nas laterais (`>oooo<`, `>T<`) em vez de acima e abaixo — girar uma
+ * cadeira é trocar o caractere. `c` seria a cadeira decorativa, sem sentar.
  */
 const STUDIO_ROWS = [
   '####ww####ww####ww##########b#######',
   '#hhhhhhhh...............#tttttttLLt#',
   '#hhhhhhhh...............#tgtttttttt#',
-  '#hssshhhh...W...W...W...#tttccccttt#',
-  '#hrrrhhhh...............#tttoooottt#',
-  '#hrrrhhhh...............#tttccccttt#',
+  '#hssshhhh...W...W...W...#tt>oooo<tt#',
+  '#hrrrhhhh...............#tttttttttt#',
+  '#hrrrhhhh...............#tt>T<>T<tt#',
   '#hsshhhhh...............#tttttttttP#',
   '#hhhhhhhh...W...W...W...#tttttttttt#',
   '#hhhhhhhh...............##q##..#####',
@@ -228,7 +237,7 @@ const STUDIO_ROWS = [
   '#........................#####..####',
   '#........................#kkkkkkKKG#',
   '#.g......................#kkkkkkkkk#',
-  '#........................#kkcTckkkk#',
+  '#........................#kk>T<kkkk#',
   '#........................#kkkkkkkkk#',
   '#..rr....................#kkkkkkkkk#',
   '#........................#kkkkkkkkk#',
@@ -276,6 +285,8 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDef> = {
       S: TileType.Sunflower,
       o: TileType.Table,
       c: TileType.Chair,
+      '>': TileType.ChairRight,
+      '<': TileType.ChairLeft,
       r: TileType.Rug,
       H: TileType.House,
     },
@@ -306,6 +317,8 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDef> = {
       o: TileType.Table,
       T: TileType.Table,
       c: TileType.Chair,
+      '>': TileType.ChairRight,
+      '<': TileType.ChairLeft,
       E: TileType.Shelf,
       L: TileType.Desk,
       K: TileType.Counter,

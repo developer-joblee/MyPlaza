@@ -112,8 +112,15 @@ export class Tilemap extends TilemapBase {
       case TileType.Table:
         this.addProp(this.ts.table, x, y);
         break;
+      // Cadeira sentável: sprite pela orientação, não sorteado (ver tilesets.ts)
+      case TileType.ChairRight:
+        this.addProp(this.ts.chairRight, x, y);
+        break;
+      case TileType.ChairLeft:
+        this.addProp(this.ts.chairLeft, x, y);
+        break;
       case TileType.Chair:
-        this.addProp(this.ts.chairs[hash(x, y) % this.ts.chairs.length], x, y);
+        this.addProp(this.ts.chairFront, x, y);
         break;
       default:
         break;

@@ -35,6 +35,14 @@ export enum TileType {
   WallWindow = 28,
   WallArt = 29,
   WallBoard = 30,
+  /**
+   * Cadeiras com orientação, e por isso sentáveis. Só existem de perfil porque
+   * a arte de sentar do pack só tem perfil — ver `characterDefs.ts`. `Chair`
+   * (sem orientação) continua existindo para as cadeiras decorativas, como as
+   * de frente para a câmera.
+   */
+  ChairLeft = 31,
+  ChairRight = 32,
 }
 
 /** Tiles que se comportam como parede (cap + face no tema modern). */
@@ -45,6 +53,18 @@ export function isWallLike(tile: TileType): boolean {
     tile === TileType.WallArt ||
     tile === TileType.WallBoard
   );
+}
+
+/**
+ * Para que lado alguém sentado nesta cadeira fica virado, ou `null` se não dá
+ * para sentar aqui. É a **única** fonte da direção de quem senta: o cliente usa
+ * para escolher a pose e o servidor para validar o pedido, então os dois
+ * concordam sem precisar transmitir direção nenhuma pela rede.
+ */
+export function sitFacingAt(tile: TileType): 'left' | 'right' | null {
+  if (tile === TileType.ChairLeft) return 'left';
+  if (tile === TileType.ChairRight) return 'right';
+  return null;
 }
 
 export interface WorldMap {
@@ -82,6 +102,8 @@ export function isSolid(tile: TileType): boolean {
     case TileType.Sunflower:
     case TileType.Table:
     case TileType.Chair:
+    case TileType.ChairLeft:
+    case TileType.ChairRight:
     case TileType.House:
     case TileType.Wall:
     case TileType.Desk:

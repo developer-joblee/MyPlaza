@@ -8,6 +8,14 @@ export interface PlayerState {
   character: CharacterId;
   x: number;
   y: number;
+  /**
+   * Está sentado? A **direção** não vem por aqui de propósito: ela sai do tile
+   * de cadeira sob o jogador (`sitFacingAt`), que todo cliente já tem, então
+   * não há como a pose divergir do cenário. O que precisa vir pela rede é só
+   * isto — sem a flag, um remoto interpolando por cima de um tile de cadeira
+   * apareceria sentado de relance.
+   */
+  sitting: boolean;
 }
 
 export interface ChatMessage {

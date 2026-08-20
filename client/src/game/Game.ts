@@ -48,6 +48,8 @@ export class Game {
   private scenarioId: ScenarioId;
   /** zona do tick anterior, para só avisar quando muda */
   private lastZone: string | null | undefined = undefined;
+  /** idem para a dica de sentar */
+  private lastSitPrompt: boolean | undefined = undefined;
   private unbinders: Array<() => void> = [];
 
   private constructor(
@@ -196,21 +198,28 @@ export class Game {
     const onMoved = (id: string, x: number, y: number) => {
       this.remotes.get(id)?.setTarget(x, y);
     };
+    const onSat = (id: string, sitting: boolean) => {
+      this.remotes.get(id)?.setSitting(sitting);
+    };
 
     this.socket.on('world:snapshot', onSnapshot);
     this.socket.on('player:joined', onJoined);
     this.socket.on('player:left', onLeft);
     this.socket.on('player:moved', onMoved);
+    this.socket.on('player:sat', onSat);
     this.unbinders.push(() => {
       this.socket.off('world:snapshot', onSnapshot);
       this.socket.off('player:joined', onJoined);
       this.socket.off('player:left', onLeft);
       this.socket.off('player:moved', onMoved);
+      this.socket.off('player:sat', onSat);
     });
   }
 
   private addRemote(p: PlayerState): void {
     const remote = new RemotePlayer(this.framesFor(p.character), p.name, p.color, p.x, p.y);
+    // quem já estava sentado quando entramos precisa aparecer sentado
+    remote.setSitting(p.sitting);
     this.remotes.set(p.id, remote);
     this.playersLayer.addChild(remote.avatar.view);
   }
@@ -218,13 +227,24 @@ export class Game {
   private tick = () => {
     const dt = Math.min(this.app.ticker.deltaMS / 1000, 0.1);
 
-    const moved = this.local.update(dt, this.keyboard, this.tilemap);
-    for (const remote of this.remotes.values()) remote.update(dt);
+    const { moved, sittingChanged, nearbyChair } = this.local.update(
+      dt,
+      this.keyboard,
+      this.tilemap,
+    );
+    for (const remote of this.remotes.values()) remote.update(dt, this.tilemap);
     this.tilemap.animate(dt);
 
-    // envio de posição com throttle
+    this.updateSitPrompt(nearbyChair !== null);
+
+    /**
+     * Sentar sai do throttle: a posição é o que diz aos outros clientes em que
+     * cadeira a pessoa está, e é dela que eles tiram a direção. Se o `move`
+     * atrasasse até o próximo tick de envio, o "sentou" chegaria antes da
+     * posição e o avatar ficaria de pé por um instante no lugar errado.
+     */
     this.sendAccumulator += dt;
-    if (this.sendAccumulator >= SEND_INTERVAL) {
+    if (sittingChanged || this.sendAccumulator >= SEND_INTERVAL) {
       this.sendAccumulator = 0;
       const x = Math.round(this.local.x);
       const y = Math.round(this.local.y);
@@ -234,11 +254,22 @@ export class Game {
           this.socket.emit('move', x, y);
         }
       }
+      if (sittingChanged && this.socket.connected) {
+        this.socket.emit('sit', this.local.sitting !== null);
+      }
     }
 
     this.updateCamera(dt);
     this.updateZoneIndicator();
   };
+
+  /** Só avisa o store quando a dica muda, para não re-renderizar a cada frame. */
+  private updateSitPrompt(canSit: boolean): void {
+    const show = canSit && this.local.sitting === null;
+    if (show === this.lastSitPrompt) return;
+    this.lastSitPrompt = show;
+    useStore.getState().setCanSit(show);
+  }
 
   /**
    * A bolinha de alcance ao redor do avatar representa a proximidade. Dentro de

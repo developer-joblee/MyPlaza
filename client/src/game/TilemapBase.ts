@@ -1,5 +1,13 @@
 import { Container } from 'pixi.js';
-import { TILE_SIZE, TileType, isSolid, type WorldMap } from '@together/shared';
+import { TILE_SIZE, TileType, isSolid, sitFacingAt, type WorldMap } from '@together/shared';
+import type { SitFacing } from './characterDefs';
+
+/** Uma cadeira sentável: onde ela está e para que lado quem senta fica virado. */
+export interface SittableSpot {
+  tileX: number;
+  tileY: number;
+  facing: SitFacing;
+}
 
 /**
  * Base comum dos renderers de cenário: colisão + contrato consumido
@@ -35,6 +43,63 @@ export abstract class TilemapBase {
       }
     }
     return false;
+  }
+
+  /** Para que lado sentaria quem estivesse neste tile (null = não é cadeira). */
+  sitFacingAtTile(tileX: number, tileY: number): SitFacing | null {
+    const t = this.tileAt(tileX, tileY);
+    return t === null ? null : sitFacingAt(t);
+  }
+
+  /**
+   * A cadeira sentável mais próxima da posição, entre as quatro adjacentes ao
+   * tile atual. Só ortogonais de propósito: na diagonal a pessoa "alcançaria"
+   * uma cadeira do outro lado da mesa.
+   */
+  sittableNear(x: number, y: number): SittableSpot | null {
+    const tx = Math.floor(x / TILE_SIZE);
+    const ty = Math.floor(y / TILE_SIZE);
+    let melhor: SittableSpot | null = null;
+    let menorDist = Infinity;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      const cx = tx + dx;
+      const cy = ty + dy;
+      const facing = this.sitFacingAtTile(cx, cy);
+      if (!facing) continue;
+      // desempate pelo centro do tile, para a cadeira "da frente" ganhar
+      const dist = Math.hypot(cx * TILE_SIZE + TILE_SIZE / 2 - x, cy * TILE_SIZE + TILE_SIZE / 2 - y);
+      if (dist < menorDist) {
+        menorDist = dist;
+        melhor = { tileX: cx, tileY: cy, facing };
+      }
+    }
+    return melhor;
+  }
+
+  /**
+   * Um tile livre ao lado da cadeira, para onde levantar. Devolve null se a
+   * cadeira estiver cercada — aí o chamador mantém a pessoa onde está.
+   */
+  freeTileNear(tileX: number, tileY: number): { x: number; y: number } | null {
+    for (const [dx, dy] of [
+      [0, 1],
+      [0, -1],
+      [1, 0],
+      [-1, 0],
+    ]) {
+      if (!this.isSolidAt(tileX + dx, tileY + dy)) {
+        return {
+          x: (tileX + dx) * TILE_SIZE + TILE_SIZE / 2,
+          y: (tileY + dy) * TILE_SIZE + TILE_SIZE / 2,
+        };
+      }
+    }
+    return null;
   }
 
   /** Animações do cenário (ex.: água). Padrão: nada. */

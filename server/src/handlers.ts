@@ -71,9 +71,23 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     if (typeof x !== 'number' || typeof y !== 'number' || !isFinite(x) || !isFinite(y)) return;
     const scenarioId = socket.data.scenarioId;
     if (!scenarioId) return;
-    const player = getWorld(scenarioId).movePlayer(socket.id, x, y);
+    const world = getWorld(scenarioId);
+    const wasSitting = world.getPlayer(socket.id)?.sitting;
+    const player = world.movePlayer(socket.id, x, y);
     if (!player) return;
     socket.to(scenarioId).emit('player:moved', socket.id, player.x, player.y);
+    // movePlayer levanta quem saiu da cadeira; os outros precisam saber
+    if (wasSitting && !player.sitting) {
+      socket.to(scenarioId).emit('player:sat', socket.id, false);
+    }
+  });
+
+  socket.on('sit', (sitting) => {
+    const scenarioId = socket.data.scenarioId;
+    if (!scenarioId) return;
+    const player = getWorld(scenarioId).setSitting(socket.id, sitting === true);
+    if (!player) return; // recusado (não é cadeira) ou já estava assim
+    socket.to(scenarioId).emit('player:sat', socket.id, player.sitting);
   });
 
   socket.on('chat:send', (rawText) => {
