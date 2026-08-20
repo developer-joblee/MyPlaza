@@ -11,6 +11,7 @@ import { Hud } from './Hud';
 import { MediaControls } from './MediaControls';
 import { Notices } from './Notices';
 import { ScreenShareView } from './ScreenShareView';
+import { SharingIndicator } from './SharingIndicator';
 import { ZoomControls } from './ZoomControls';
 
 export function GameView() {
@@ -111,6 +112,7 @@ export function GameView() {
       <Notices />
       <MediaControls />
       <ZoomControls />
+      <SharingIndicator />
     </div>
   );
 }

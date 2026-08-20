@@ -7,6 +7,8 @@
   --mint: #3ddc84;
   --coral: #ef476f;
   --amber: #f4a261;
+  /* azul elétrico: só o aviso de compartilhamento de tela usa */
+  --electric: #2f9bff;
   --radius: 16px;
   --font-display: 'Fredoka', system-ui, sans-serif;
   --font-body: 'Nunito Sans', system-ui, sans-serif;
@@ -35,12 +37,82 @@ button {
   cursor: pointer;
 }
 
+/* -------------------------------------------------- Barras de rolagem */
+
+/*
+ * Uma definição para TODAS as áreas roláveis do app, para a home não virar
+ * exceção visual.
+ *
+ * A separação abaixo não é preciosismo: no Chromium, declarar `scrollbar-width`
+ * ou `scrollbar-color` **desliga** os pseudo-elementos `::-webkit-scrollbar`.
+ * Declarar os dois juntos, como eu tinha feito, fazia o polegar arredondado com
+ * respiro virar código morto no navegador em que ele mais seria visto. Então as
+ * propriedades padrão entram só onde os pseudos não existem (Firefox).
+ */
+@supports not selector(::-webkit-scrollbar) {
+  .join-screen,
+  .roster,
+  .chat-list,
+  .audio-devices {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(61, 220, 132, 0.4) transparent;
+  }
+}
+
+.join-screen::-webkit-scrollbar,
+.roster::-webkit-scrollbar,
+.chat-list::-webkit-scrollbar,
+.audio-devices::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.join-screen::-webkit-scrollbar-track,
+.roster::-webkit-scrollbar-track,
+.chat-list::-webkit-scrollbar-track,
+.audio-devices::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * A borda transparente com `background-clip: content-box` é o que dá o respiro
+ * lateral: sem ela o polegar encosta nas duas beiradas e fica grosso.
+ */
+.join-screen::-webkit-scrollbar-thumb,
+.roster::-webkit-scrollbar-thumb,
+.chat-list::-webkit-scrollbar-thumb,
+.audio-devices::-webkit-scrollbar-thumb {
+  background: rgba(61, 220, 132, 0.32);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 99px;
+}
+
+/* o atalho `background` reseta o clip, então ele é repetido aqui */
+.join-screen::-webkit-scrollbar-thumb:hover,
+.roster::-webkit-scrollbar-thumb:hover,
+.chat-list::-webkit-scrollbar-thumb:hover,
+.audio-devices::-webkit-scrollbar-thumb:hover {
+  background: rgba(61, 220, 132, 0.62);
+  background-clip: content-box;
+}
+
 /* ---------------------------------------------------------- Join screen */
 
+/*
+ * Rola quando a tela é baixa (o botão Entrar ficava fora de alcance).
+ *
+ * O centramento é por `margin: auto` no cartão, e NÃO por `place-items: center`:
+ * com centramento do container, um item mais alto que a área transborda para os
+ * dois lados e o topo fica inalcançável — a barra de rolagem não alcança o que
+ * saiu acima do início. Com `margin: auto`, quando falta espaço as margens
+ * automáticas viram zero, o cartão encosta no topo e tudo fica rolável.
+ */
 .join-screen {
   height: 100%;
-  display: grid;
-  place-items: center;
+  display: flex;
+  overflow-y: auto;
+  padding: 24px 16px;
   position: relative;
   background:
     radial-gradient(ellipse 80% 60% at 50% -10%, rgba(61, 220, 132, 0.08), transparent),
@@ -50,7 +122,10 @@ button {
 }
 
 .join-card {
-  width: min(500px, calc(100vw - 32px));
+  width: min(500px, 100%);
+  /* centra nos dois eixos e degrada para "encostado no topo" quando não cabe */
+  margin: auto;
+  flex: none;
   padding: 36px 32px 32px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -275,6 +350,79 @@ button {
   color: var(--text-dim);
   text-align: center;
   line-height: 1.5;
+}
+
+/* ------------------------------------- Aviso de compartilhamento de tela */
+
+/*
+ * `fixed` e não `absolute`: a moldura marca a JANELA, que é o que está sendo
+ * transmitido, e assim ela não depende de nenhum contexto de transform ou de
+ * onde o componente foi montado. z-index acima do `.screen-focus` (20) porque
+ * o aviso vale mesmo com a tela de alguém aberta em primeiro plano.
+ */
+.sharing-frame {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+  border: 3px solid var(--electric);
+  box-shadow:
+    inset 0 0 22px rgba(47, 155, 255, 0.3),
+    inset 0 0 2px rgba(47, 155, 255, 0.9);
+  animation: sharing-breathe 2.6s ease-in-out infinite;
+}
+
+/* respiro lento: diz "está ao vivo" sem virar pisca-pisca numa call longa */
+@keyframes sharing-breathe {
+  50% {
+    box-shadow:
+      inset 0 0 34px rgba(47, 155, 255, 0.5),
+      inset 0 0 2px rgba(47, 155, 255, 1);
+  }
+}
+
+/* pendurada na borda de cima: cantos arredondados só embaixo */
+.sharing-badge {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 16px 7px;
+  border-radius: 0 0 12px 12px;
+  background: var(--electric);
+  color: #04213d;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 14px rgba(47, 155, 255, 0.45);
+  pointer-events: none;
+}
+
+.sharing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #04213d;
+  animation: sharing-blink 1.4s ease-in-out infinite;
+}
+
+@keyframes sharing-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* quem prefere menos movimento fica com a borda estática, que já basta */
+@media (prefers-reduced-motion: reduce) {
+  .sharing-frame,
+  .sharing-dot {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------------------ Game view */
