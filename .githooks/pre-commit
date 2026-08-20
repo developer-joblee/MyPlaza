@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+// Varredura de segredos antes do commit. Zero dependências (usa o Node que o
+// projeto já exige). Bloqueia arquivo de credencial e valor com cara de segredo
+// nas linhas ADICIONADAS do staged diff.
+//
+// NUNCA imprime o valor encontrado — só arquivo, linha e o tipo de achado.
+// Para marcar um falso positivo, adicione o comentário `secret-scan:ignore`
+// na própria linha. Emergência: `git commit --no-verify` (e assuma o risco).
+//
+// Ativar (uma vez por clone): git config core.hooksPath .githooks
+
+const { execFileSync } = require('node:child_process');
+
+const git = (args) =>
+  execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+
+const RED = '\x1b[31m';
+const YEL = '\x1b[33m';
+const OFF = '\x1b[0m';
+
+// ---------------------------------------------------------------- 1. arquivos
+// Arquivos que nunca devem ser commitados, por nome.
+const BLOCKED_PATH = [
+  { re: /(^|\/)\.env$/, what: 'arquivo .env' },
+  { re: /(^|\/)\.env\.(?!example$)[^/]+$/, what: 'arquivo .env.*' },
+  { re: /\.pem$/, what: 'certificado/chave .pem' },
+  { re: /\.key$/, what: 'chave .key' },
+  { re: /\.(p12|pfx|keystore|jks)$/, what: 'keystore' },
+  { re: /(^|\/)id_(rsa|dsa|ecdsa|ed25519)$/, what: 'chave SSH privada' },
+  { re: /(^|\/)\.npmrc$/, what: '.npmrc (costuma ter token)' },
+];
+
+// ---------------------------------------------------------------- 2. conteúdo
+const PATTERNS = [
+  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, what: 'chave privada embutida' },
+  { re: /\bsk-[A-Za-z0-9_-]{16,}/, what: 'token estilo sk-* (OpenAI/Anthropic)' },
+  { re: /\bAKIA[0-9A-Z]{16}\b/, what: 'access key da AWS' },
+  { re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/, what: 'token do GitHub' },
+  { re: /\bxox[baprs]-[A-Za-z0-9-]{10,}/, what: 'token do Slack' },
+  { re: /\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\./, what: 'JWT' },
+  // LiveKit: a API key do dashboard começa com "API" seguido de aleatório.
+  { re: /(?:["'`]|=\s*)API[A-Za-z0-9]{9,}/, what: 'API key do LiveKit' },
+  // Atribuição de segredo com valor de verdade (12+ chars).
+  {
+    re: /(?:api[_-]?secret|api[_-]?key|secret|secret[_-]?key|access[_-]?token|auth[_-]?token|private[_-]?key|password|passwd|credential)\s*[:=]\s*["'`]?[A-Za-z0-9/+_=.-]{12,}/i,
+    what: 'segredo atribuído com valor',
+  },
+  // Qualquer coisa VITE_* com nome de segredo vaza no bundle do navegador.
+  {
+    re: /\bVITE_[A-Z0-9_]*(?:SECRET|KEY|TOKEN|PASSWORD|CREDENTIAL)\b/,
+    what: 'VITE_* com nome de segredo (vai para o bundle do navegador!)',
+  },
+];
+
+// Placeholders e referências legítimas — não são segredo.
+const SAFE = [
+  /secret-scan:ignore/,
+  /SEU[-_]/,
+  /\b(?:EXAMPLE|example|placeholder|PLACEHOLDER|changeme|CHANGEME|redacted|REDACTED|dummy|fake)\b/,
+  /x{6,}/i,
+  /\.{3}$/,
+  /process\.env\./,
+  /import\.meta\.env\./,
+  /<[A-Za-z_][A-Za-z0-9_ -]*>/,
+  /\$\{/,
+];
+
+// O próprio scanner contém os padrões — não se autodenuncie.
+const SKIP_FILES = new Set(['.githooks/pre-commit']);
+
+const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACM'])
+  .split('\n')
+  .filter(Boolean);
+
+if (staged.length === 0) process.exit(0);
+
+const errors = [];
+
+for (const file of staged) {
+  for (const { re, what } of BLOCKED_PATH) {
+    if (re.test(file)) errors.push(`${file} — ${what}: não pode ir para o git`);
+  }
+}
+
+const diff = git(['diff', '--cached', '-U0', '--no-color']);
+let file = null;
+let line = 0;
+
+for (const raw of diff.split('\n')) {
+  if (raw.startsWith('+++ ')) {
+    const p = raw.slice(4);
+    file = p === '/dev/null' ? null : p.replace(/^b\//, '');
+    continue;
+  }
+  if (raw.startsWith('@@')) {
+    const m = /\+(\d+)/.exec(raw);
+    line = m ? Number(m[1]) : 0;
+    continue;
+  }
+  if (!raw.startsWith('+') || raw.startsWith('+++')) continue;
+
+  const content = raw.slice(1);
+  const here = line++;
+  if (!file || SKIP_FILES.has(file)) continue;
+  if (SAFE.some((re) => re.test(content))) continue;
+
+  for (const { re, what } of PATTERNS) {
+    if (re.test(content)) {
+      errors.push(`${file}:${here} — ${what}`);
+      break; // um achado por linha basta; nunca ecoamos o valor
+    }
+  }
+}
+
+// -------------------------------------------------- 3. aviso de doc defasado
+const touchedCode = staged.some((f) => /^(client|server|shared)\/src\//.test(f));
+const touchedDocs = staged.some(
+  (f) => f === 'README.md' || f.startsWith('docs/features/') || f === 'PENDENTES.md',
+);
+if (touchedCode && !touchedDocs) {
+  console.error(
+    `${YEL}aviso:${OFF} código alterado sem tocar README.md, docs/features/ ou PENDENTES.md.`,
+  );
+  console.error('       Feature nova ou comportamento alterado precisa de doc no mesmo commit (CLAUDE.md §3).');
+  console.error('       Se for só refactor interno, ignore este aviso — ele não bloqueia.\n');
+}
+
+if (errors.length === 0) process.exit(0);
+
+console.error(`${RED}commit bloqueado — possível segredo no staged:${OFF}\n`);
+for (const e of errors) console.error(`  • ${e}`);
+console.error(`
+Não cole o valor em nenhum lugar (chat, issue, log). O que fazer:
+  1. Remova do staged:            git restore --staged <arquivo>
+  2. Tire o valor do código; use .env local + Variables do Railway,
+     e documente só o NOME em .env.example.
+  3. Se o valor já rodou em algum lugar, trate como comprometido e
+     ROTACIONE a chave (LiveKit: cloud.livekit.io -> Settings -> Keys).
+
+Falso positivo? Marque a linha com "secret-scan:ignore".
+Emergência: git commit --no-verify (e assuma o risco).`);
+process.exit(1);

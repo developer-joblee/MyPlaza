@@ -33,6 +33,61 @@ Abra duas abas para testar sozinho.
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Chat | Painel no canto inferior direito (global) |
 
+## Features
+
+Cada feature tem (ou vai ter) um doc próprio em `docs/features/`, criado a
+partir de [`docs/features/_TEMPLATE.md`](docs/features/_TEMPLATE.md). **Este
+índice é a porta de entrada**: antes de mexer em qualquer coisa, ache a feature
+aqui e leia o doc dela. Feature nova entra nesta tabela no mesmo commit do
+código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
+
+| Feature | Doc | Código principal |
+|---|---|---|
+| Voz por proximidade | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `voice/proximity.ts` |
+| Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
+| Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
+| Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
+| Modo ausente (celular) | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/ui/MediaControls.tsx`, `client/src/game/Avatar.ts` |
+| Sentar em cadeiras | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/game/LocalPlayer.ts`, `client/src/game/characterDefs.ts` |
+| Cenários e mapas ASCII | [Editando o mapa](#editando-o-mapa) *(sem doc próprio ainda)* | `shared/src/scenarios.ts`, `client/src/game/*Tilemap.ts` |
+| Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/voice/token.ts` |
+
+> As features acima nasceram antes desta convenção e hoje estão descritas nas
+> seções deste README. Ao mexer em uma delas, crie o `docs/features/<slug>.md`,
+> mova o detalhe técnico para lá e deixe aqui só o resumo e o link.
+
+## Convenções de desenvolvimento
+
+As regras de trabalho no repo (o que ler antes, onde cada coisa mora, reuso,
+doc por feature e o tratamento de segredos) estão em **[`CLAUDE.md`](CLAUDE.md)**
+— carregado automaticamente pelo Claude Code em toda sessão, e vale igual para
+humano.
+
+**Ative o hook de pre-commit uma vez por clone:**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit` varre o que está no staged e **bloqueia o commit** se
+achar credencial (`.env`, `.pem`, `.key`, keystore, token, chave privada, ou
+`VITE_*` com nome de segredo — que iria para o bundle do navegador). Ele nunca
+imprime o valor encontrado, só o arquivo, a linha e o tipo. Falso positivo:
+marque a linha com `secret-scan:ignore`.
+
+Atalhos disponíveis no Claude Code:
+
+| Comando | Para que |
+|---|---|
+| `/nova-feature <descrição>` | Feature nova seguindo o ritual: ler README/docs → checar reuso → plano → implementar → documentar → typecheck |
+| `/doc-feature <nome>` | Criar o `docs/features/` de uma feature que já existe, migrando o detalhe do README |
+
+> **Segredos:** o `.env` nunca é lido nem compartilhado — nem por humano em
+> print de tela, nem pelo Claude (há regras `deny` em `.claude/settings.json`).
+> Para saber quais variáveis existem, use o [`.env.example`](.env.example): ele
+> tem os nomes, não os valores. `LIVEKIT_API_SECRET` vive só no server. Se uma
+> chave vazar, rotacione no dashboard do LiveKit — apagar o commit não desfaz.
+
 ## Usando com a equipe na rede local
 
 `getUserMedia`/`getDisplayMedia` exigem contexto seguro (HTTPS) fora de
