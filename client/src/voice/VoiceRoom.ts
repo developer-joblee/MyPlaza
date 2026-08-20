@@ -5,6 +5,7 @@ import {
   RemoteVideoTrack,
   Room,
   RoomEvent,
+  ScreenSharePresets,
   Track,
   type RemoteParticipant,
   type RemoteTrack,
@@ -680,7 +681,21 @@ export class VoiceRoom {
     const room = this.room;
     if (!room || this.screenSharing) return this.screenSharing;
     try {
-      await room.localParticipant.setScreenShareEnabled(true, { audio: false });
+      await room.localParticipant.setScreenShareEnabled(
+        true,
+        {
+          audio: false,
+          resolution: ScreenSharePresets.h1080fps30.resolution,
+          // sem hint o encoder trata a captura como vídeo de câmera e borra
+          // texto pequeno; 'detail' prioriza nitidez sobre suavidade
+          contentHint: 'detail',
+        },
+        // o default do SDK é h1080fps15 (2.5 Mbps): o dobro de bitrate e de
+        // framerate é o que faz código/slides ficarem legíveis em tela cheia.
+        // Simulcast continua ligado, então os tiles pequenos recebem a camada
+        // baixa e só quem ampliou paga o custo da camada cheia.
+        { screenShareEncoding: ScreenSharePresets.h1080fps30.encoding },
+      );
     } catch (err) {
       console.warn('[voice] compartilhamento de tela cancelado:', err);
       return false;
