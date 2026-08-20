@@ -33,22 +33,26 @@ function ScreenVideo({ track }: { track: RemoteVideoTrack }) {
  * O botão ⛶ pede fullscreen nativo (esconde a barra do browser); o Esc fecha,
  * mas quando estamos em fullscreen nativo o browser consome o Esc para sair
  * dele primeiro — daí o guard no handler.
+ *
+ * O fullscreen é pedido no <html>, não nesta overlay: só o elemento em
+ * fullscreen e seus descendentes são renderizados, então pedir aqui apagaria a
+ * barra de controles e o aviso de "você está compartilhando", que são irmãos no
+ * DOM. Com o <html> tudo continua visível e o z-index volta a valer.
  */
 function ScreenFocus({ track, name, onClose }: {
   track: RemoteVideoTrack;
   name: string;
   onClose: () => void;
 }) {
-  const hostRef = useRef<HTMLDivElement>(null);
   const [nativeFs, setNativeFs] = useState(false);
 
   const toggleNativeFs = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void hostRef.current?.requestFullscreen?.().catch(() => {});
+    else void document.documentElement.requestFullscreen?.().catch(() => {});
   }, []);
 
   useEffect(() => {
-    const onFsChange = () => setNativeFs(document.fullscreenElement === hostRef.current);
+    const onFsChange = () => setNativeFs(document.fullscreenElement !== null);
     document.addEventListener('fullscreenchange', onFsChange);
 
     const onKey = (e: KeyboardEvent) => {
@@ -62,12 +66,12 @@ function ScreenFocus({ track, name, onClose }: {
       document.removeEventListener('fullscreenchange', onFsChange);
       window.removeEventListener('keydown', onKey);
       // fechar a visão não pode deixar a página presa em fullscreen
-      if (document.fullscreenElement === hostRef.current) void document.exitFullscreen();
+      if (document.fullscreenElement) void document.exitFullscreen();
     };
   }, [onClose, toggleNativeFs]);
 
   return (
-    <div className="screen-focus" ref={hostRef}>
+    <div className="screen-focus">
       <ScreenVideo track={track} />
       <div className="screen-focus-bar">
         <span className="screen-focus-name">🖥️ Tela de {name}</span>

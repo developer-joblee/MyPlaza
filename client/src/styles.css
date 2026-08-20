@@ -670,6 +670,13 @@ button {
 
 /* ------------------------------------------------------- Media controls */
 
+/*
+ * z-index acima de tudo (`.screen-focus` é 20, o aviso de compartilhamento 30):
+ * quem está assistindo a tela de alguém continua precisando do mic e do fone à
+ * mão. É também por isso que o fullscreen nativo é pedido no <html> e não na
+ * overlay — dentro dela, a barra ficaria fora do elemento em fullscreen e não
+ * renderizaria, z-index nenhum resolveria.
+ */
 .media-controls {
   bottom: 16px;
   left: 50%;
@@ -678,6 +685,7 @@ button {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 99px;
+  z-index: 40;
 }
 
 .media-btn {
@@ -1042,6 +1050,7 @@ button {
  * Ancorado na pílula, não no botão (que é off-center). A pílula ocupa
  * bottom 16 + 10 pad + 48 botão + 10 pad + 2 borda = topo em 86px; +10 de folga.
  */
+/* acompanha a .media-controls (40) que o abre, e fica um degrau acima dela */
 .audio-popover {
   bottom: 96px;
   left: 50%;
@@ -1050,6 +1059,7 @@ button {
   width: min(320px, calc(100vw - 32px));
   padding: 14px 16px 16px;
   animation: popover-in 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  z-index: 41;
 }
 
 /* o translateX(-50%) tem de ser redeclarado aqui, senão a animação
