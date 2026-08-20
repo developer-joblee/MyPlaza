@@ -785,35 +785,77 @@ button {
   text-align: left;
 }
 
+/*
+ * fixed (não absolute): a visão ampliada é da viewport inteira, não da caixa
+ * do .game-view — e é o que faz o requestFullscreen nativo preencher a tela.
+ */
 .screen-focus {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: rgba(10, 11, 16, 0.85);
-  backdrop-filter: blur(6px);
-  display: grid;
-  place-items: center;
-  cursor: zoom-out;
+  background: #05060a;
   z-index: 20;
 }
 
+/*
+ * width/height explícitos + contain. Só max-width/max-height deixava o vídeo
+ * no tamanho intrínseco da camada recebida (360p ⇒ janelinha no meio da tela);
+ * agora ele sempre ocupa tudo o que couber sem distorcer o aspect ratio.
+ */
 .screen-focus video {
-  max-width: 92vw;
-  max-height: 86vh;
-  border-radius: 12px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #05060a;
 }
 
-.screen-focus .screen-label {
+.screen-focus-bar {
   position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 99px;
-  padding: 6px 16px;
+  backdrop-filter: blur(10px);
+  /* some sozinha para não tampar a tela de quem está apresentando */
+  opacity: 0.25;
+  transition: opacity 140ms ease;
+}
+
+.screen-focus:hover .screen-focus-bar,
+.screen-focus-bar:focus-within {
+  opacity: 1;
+}
+
+.screen-focus-name {
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.screen-focus-btn {
+  height: 30px;
+  min-width: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.screen-focus-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.screen-focus-close:hover {
+  background: #d9483f;
 }
 
 /* ---------------------------------------------------------------- zoom */
