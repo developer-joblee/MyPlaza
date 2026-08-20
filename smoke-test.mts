@@ -63,13 +63,14 @@ try {
   results.push('movimento OK');
 
   /**
-   * Sentar. A cadeira `>` da Praça está no tile (13,16) — a linha
-   * `..>o<..>o<..` do PLAZA_ROWS. O servidor valida pela posição, então B tem
-   * de estar em cima dela antes de pedir. (4,8) é tapete de spawn: livre e
-   * garantidamente não-cadeira.
+   * Sentar, com as coordenadas do cenário padrão (Estúdio): a cadeira `>` na
+   * ponta da mesa de reunião fica no tile (27,3), da linha `#tt>oooo<tt#`. O
+   * servidor valida pela posição, então B tem de estar em cima dela antes de
+   * pedir. (3,4) é tapete de spawn do lounge: livre e garantidamente
+   * não-cadeira.
    */
-  const CADEIRA = { x: 13 * 32 + 16, y: 16 * 32 + 16 };
-  const naoCadeira = { x: 4 * 32 + 16, y: 8 * 32 + 16 };
+  const CADEIRA = { x: 27 * 32 + 16, y: 3 * 32 + 16 };
+  const naoCadeira = { x: 3 * 32 + 16, y: 4 * 32 + 16 };
 
   // pedir para sentar longe de cadeira deve ser ignorado
   let satIndevido = false;
@@ -180,7 +181,8 @@ try {
     if (!afterJoin.url?.startsWith('ws') || !afterJoin.token || afterJoin.identity !== c.id) {
       fail(`token inválido: ${JSON.stringify({ ...afterJoin, token: '[oculto]' })}`);
     }
-    if (!afterJoin.room?.endsWith('-plaza')) fail(`sala inesperada: ${afterJoin.room}`);
+    // a sala da voz é derivada do cenário, que sem parâmetro é o DEFAULT_SCENARIO
+    if (!afterJoin.room?.endsWith('-studio')) fail(`sala inesperada: ${afterJoin.room}`);
     results.push(`token emitido para a sala "${afterJoin.room}" OK`);
 
     // o bucket tolera rajada curta (reconexão legítima pede 2-3 tokens seguidos)

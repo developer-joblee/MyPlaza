@@ -51,7 +51,7 @@ export function audioZoneAt(
   return null;
 }
 
-export const DEFAULT_SCENARIO: ScenarioId = 'plaza';
+export const DEFAULT_SCENARIO: ScenarioId = 'studio';
 
 /**
  * Escritório 30x20. `#` parede, `.` chão, `,` carpete (lounge/reunião),
