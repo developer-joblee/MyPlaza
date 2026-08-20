@@ -29,6 +29,7 @@ Abra duas abas para testar sozinho.
 | Falar | Chegue a até ~5 tiles de alguém (círculo claro ao redor do seu avatar) — o volume cai com a distância |
 | Mutar microfone | Botão 🎙️ na barra inferior |
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
+| Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular. Andar volta ao normal. Suas preferências de microfone e fone são preservadas |
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Chat | Painel no canto inferior direito (global) |
 

@@ -41,6 +41,19 @@ export function HeadphonesIcon({ off }: IconProps) {
   );
 }
 
+/**
+ * Celular — a mesma ideia da pose de ausente do avatar, para o botão e o que
+ * aparece no mundo contarem a mesma história.
+ */
+export function AwayIcon() {
+  return (
+    <svg {...base}>
+      <rect x="7" y="2" width="10" height="20" rx="2.5" />
+      <line x1="10.5" y1="18.5" x2="13.5" y2="18.5" />
+    </svg>
+  );
+}
+
 export function ScreenIcon() {
   return (
     <svg {...base}>

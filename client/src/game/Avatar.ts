@@ -33,6 +33,7 @@ export class Avatar {
   private moving = false;
   /** null = de pé; senão, para que lado está sentado */
   private sitting: SitFacing | null = null;
+  private away = false;
   /** empurra o avatar para a frente na ordenação por y (ver setSitting) */
   private zBias = 0;
   private frameTimer = 0;
@@ -119,18 +120,34 @@ export class Avatar {
     return this.sitting !== null;
   }
 
+  /**
+   * Ausente: mexendo no celular. Ganha das outras poses de propósito — é a
+   * informação mais útil para quem olha (a pessoa não está ali), e vale mesmo
+   * se ela ficou ausente sentada.
+   */
+  setAway(away: boolean): void {
+    if (this.away === away) return;
+    this.away = away;
+    this.frameIndex = 0;
+    this.frameTimer = 0;
+  }
+
   /** Avança a animação. Chamar a cada frame do ticker. */
   update(dt: number): void {
-    const set = this.sitting
-      ? this.frames.sit[this.sitting]
-      : this.moving
-        ? this.frames.walk[this.facing]
-        : this.frames.idle[this.facing];
-    const frameDuration = this.sitting
-      ? this.frames.sitFrameS
-      : this.moving
-        ? this.frames.walkFrameS
-        : this.frames.idleFrameS;
+    const set = this.away
+      ? this.frames.phone
+      : this.sitting
+        ? this.frames.sit[this.sitting]
+        : this.moving
+          ? this.frames.walk[this.facing]
+          : this.frames.idle[this.facing];
+    const frameDuration = this.away
+      ? this.frames.phoneFrameS
+      : this.sitting
+        ? this.frames.sitFrameS
+        : this.moving
+          ? this.frames.walkFrameS
+          : this.frames.idleFrameS;
     this.frameTimer += dt;
     if (this.frameTimer >= frameDuration) {
       this.frameTimer %= frameDuration;
@@ -161,6 +178,7 @@ export class Avatar {
     character: string;
     facing: Facing;
     sitting: SitFacing | null;
+    away: boolean;
     frameX: number;
     frameY: number;
   } {
@@ -168,6 +186,7 @@ export class Avatar {
       character: this.frames.id,
       facing: this.facing,
       sitting: this.sitting,
+      away: this.away,
       frameX: this.sprite.texture.frame.x,
       frameY: this.sprite.texture.frame.y,
     };

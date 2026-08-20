@@ -40,7 +40,8 @@ try {
     fail(`join sem personagem deveria cair no padrão, veio: ${playersA[0].character}`);
   }
   if (playersA[0].sitting !== false) fail('quem entra deveria começar de pé');
-  results.push('join + snapshot OK (personagem padrão, de pé)');
+  if (playersA[0].away !== false) fail('quem entra deveria começar presente');
+  results.push('join + snapshot OK (personagem padrão, de pé, presente)');
 
   // B entra escolhendo personagem; A deve ver player:joined com a escolha
   const joinedSeen = wait<any>('A vê B entrar', (done) =>
@@ -101,6 +102,34 @@ try {
   const [upId, upVal] = await upSeen;
   if (upId !== b.id || upVal !== false) fail(`levantar ao andar falhou: ${upId} ${upVal}`);
   results.push('andar levanta automaticamente OK');
+
+  // ausente: propaga, e um pedido repetido não retransmite
+  const awaySeen = wait<[string, boolean]>('A vê B ficar ausente', (done) =>
+    a.on('player:away', (id: string, v: boolean) => done([id, v])),
+  );
+  b.emit('away', true);
+  const [awayId, awayVal] = await awaySeen;
+  if (awayId !== b.id || awayVal !== true) fail(`player:away inválido: ${awayId} ${awayVal}`);
+  results.push('ficar ausente propaga OK');
+
+  let repetiu = false;
+  const vigiaRepeticao = (id: string) => {
+    if (id === b.id) repetiu = true;
+  };
+  a.on('player:away', vigiaRepeticao);
+  b.emit('away', true); // mesmo estado: não deve gerar evento
+  await new Promise((r) => setTimeout(r, 250));
+  if (repetiu) fail('pedido de ausente repetido não deveria retransmitir');
+  a.off('player:away', vigiaRepeticao);
+  results.push('ausente idempotente OK');
+
+  const backSeen = wait<[string, boolean]>('A vê B voltar', (done) =>
+    a.on('player:away', (id: string, v: boolean) => done([id, v])),
+  );
+  b.emit('away', false);
+  const [backId, backVal] = await backSeen;
+  if (backId !== b.id || backVal !== false) fail(`voltar de ausente falhou: ${backId} ${backVal}`);
+  results.push('voltar de ausente propaga OK');
 
   // chat
   const chatSeen = wait<any>('A recebe chat', (done) => a.on('chat:message', (m: any) => done(m)));

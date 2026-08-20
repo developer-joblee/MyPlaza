@@ -41,9 +41,12 @@ export interface CharacterDef {
   idleFrameS: number;
   walkFrameS: number;
   sitFrameS: number;
+  phoneFrameS: number;
   idle: Record<Facing, SheetSlice>;
   walk: Record<Facing, SheetSlice>;
   sit: Record<SitFacing, SheetSlice>;
+  /** celular: uma direção só (de frente) — ver PHONE_* abaixo */
+  phone: SheetSlice;
   /** recorte da miniatura da tela de entrada, em px da PNG original */
   preview: { sheet: string; x: number; y: number; w: number; h: number; zoom: number };
 }
@@ -101,6 +104,21 @@ const SIT_STRIDE = 32;
 const SIT_OFFSET: Record<SitFacing, number> = { right: 6, left: 10 };
 const SIT_CELL: Record<SitFacing, number> = { right: 0, left: 6 };
 
+/**
+ * Celular (linha 6) — usado como pose de "ausente". Ao contrário do sentar,
+ * esta linha segue a grade normal de 16px e tem **9 quadros** (do 0 ao 8; o
+ * resto da linha é vazio), numa **direção só**: de frente. A medição bate com o
+ * quadro de frente da caminhada — 64 a 68 px de pele com centro em 7,7, contra
+ * 67 e 7,6 do andar para baixo — e o footprint é idêntico (x0..15, y9..31),
+ * então o recorte e a ancoragem valem sem ajuste.
+ *
+ * Como só existe de frente, quem fica ausente aparece virado para a câmera,
+ * independentemente de para onde estava olhando. Isso é proposital: ausente é
+ * um estado, não uma direção.
+ */
+const PHONE_ROW = 6;
+const PHONE_FRAMES = 9;
+
 function limezuDef(id: string): CharacterDef {
   const sheet = `/characters/${id}.png`;
   const dirs = (row: number) =>
@@ -128,9 +146,11 @@ function limezuDef(id: string): CharacterDef {
     walkFrameS: 0.1,
     // sentado respira mais devagar que parado de pé
     sitFrameS: 0.24,
+    phoneFrameS: 0.16,
     idle: dirs(1),
     walk: dirs(2),
     sit: { left: sitDir('left'), right: sitDir('right') },
+    phone: { row: PHONE_ROW, cols: seq(0, PHONE_FRAMES) },
     // miniatura: quadro de frente (coluna 18) da linha do idle animado,
     // cortando o vazio acima da cabeça
     preview: { sheet, x: LIMEZU_COL.down * 16, y: 32 + 8, w: 16, h: 24, zoom: 3 },

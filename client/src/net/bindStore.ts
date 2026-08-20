@@ -15,11 +15,11 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
   socket.on('disconnect', onDisconnect);
   socket.on('world:snapshot', (players, chat, scenarioId) => {
     s().setScenario(scenarioId);
-    s().setRoster(players.map(({ id, name, color }) => ({ id, name, color })));
+    s().setRoster(players.map(({ id, name, color, away }) => ({ id, name, color, away })));
     s().setChat(chat);
   });
-  socket.on('player:joined', ({ id, name, color }) => {
-    s().upsertRosterEntry({ id, name, color });
+  socket.on('player:joined', ({ id, name, color, away }) => {
+    s().upsertRosterEntry({ id, name, color, away });
   });
   socket.on('player:left', (id) => s().removeRosterEntry(id));
   socket.on('chat:message', (msg) => s().appendChat(msg));

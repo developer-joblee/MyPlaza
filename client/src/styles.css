@@ -383,6 +383,22 @@ button {
   font-size: 12px;
 }
 
+.roster .ausente {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  border: 1px solid rgba(244, 162, 97, 0.45);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+/* quem está ausente fica apagado na lista, como no Slack */
+.roster li.ausente-li {
+  opacity: 0.55;
+}
+
 .roster .near {
   margin-left: auto;
   font-size: 10px;
@@ -529,9 +545,25 @@ button {
   position: relative;
 }
 
+/*
+ * O hover não pode apagar a cor de estado. `.media-btn.off` e afins têm duas
+ * classes (0,2,0) e perdem para `:hover:not(:disabled)` (0,3,0) — o resultado
+ * era o botão voltar ao cinza justamente com o mouse em cima, que é onde ele
+ * fica logo depois do clique. Então o hover neutro só vale para botão sem
+ * estado, e quem tem estado recebe o realce por brilho.
+ */
 .media-btn:hover:not(:disabled) {
   transform: translateY(-2px);
+}
+
+.media-btn:hover:not(:disabled):not(.off):not(.active):not(.away):not(.danger) {
   background: rgba(255, 255, 255, 0.13);
+}
+
+.media-btn.off:hover:not(:disabled),
+.media-btn.active:hover:not(:disabled),
+.media-btn.away:hover:not(:disabled) {
+  filter: brightness(1.12);
 }
 
 .media-btn:disabled {
@@ -549,6 +581,15 @@ button {
   background: var(--mint);
   border-color: transparent;
   color: #0c2417;
+}
+/*
+ * Ausente usa âmbar, não coral: não é "desligado com problema" como o mic
+ * mudo, é um estado escolhido — a mesma cor do indicador de sala no painel.
+ */
+.media-btn.away {
+  background: var(--amber);
+  border-color: transparent;
+  color: #3a2408;
 }
 
 .media-btn svg {

@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react';
+import { setAway } from '../presence';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { AudioSettings } from './AudioSettings';
-import { HangupIcon, HeadphonesIcon, MicIcon, ScreenIcon, SlidersIcon } from './icons';
+import { AwayIcon, HangupIcon, HeadphonesIcon, MicIcon, ScreenIcon, SlidersIcon } from './icons';
 
 export function MediaControls() {
   const micAvailable = useStore((s) => s.micAvailable);
   const micEnabled = useStore((s) => s.micEnabled);
   const deafened = useStore((s) => s.deafened);
+  const away = useStore((s) => s.away);
   const sharing = useStore((s) => s.sharing);
   const voiceStatus = useStore((s) => s.voiceStatus);
   const speaking = useStore((s) => s.speaking);
@@ -19,7 +21,8 @@ export function MediaControls() {
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const voiceOff = voiceStatus === 'unavailable';
-  const micOff = !micAvailable || !micEnabled || deafened;
+  // ausente conta como mic desligado no ícone: é o que está acontecendo de fato
+  const micOff = !micAvailable || !micEnabled || deafened || away;
   const talking = Boolean(selfId && speaking[selfId]) && !micOff;
 
   const toggleMic = () => runtime.voice?.setMicEnabled(!micEnabled);
@@ -33,11 +36,15 @@ export function MediaControls() {
     triggerRef.current?.focus();
   };
 
-  const micTitle = deafened
-    ? 'Ativar microfone (sai do modo surdo)'
-    : micEnabled
-      ? 'Desativar microfone'
-      : 'Ativar microfone';
+  const micTitle = away
+    ? 'Você está ausente — volte para usar o microfone'
+    : deafened
+      ? 'Ativar microfone (sai do modo surdo)'
+      : micEnabled
+        ? 'Desativar microfone'
+        : 'Ativar microfone';
+
+  const awayTitle = away ? 'Voltar (reativa microfone e áudio)' : 'Ficar ausente';
 
   return (
     <>
@@ -47,7 +54,7 @@ export function MediaControls() {
           type="button"
           className={`media-btn${micOff && micAvailable ? ' off' : ''}${talking ? ' talking' : ''}`}
           onClick={toggleMic}
-          disabled={!micAvailable || voiceOff}
+          disabled={!micAvailable || voiceOff || away}
           aria-label={micTitle}
           aria-pressed={!micOff}
           title={micTitle}
@@ -57,14 +64,31 @@ export function MediaControls() {
 
         <button
           type="button"
-          className={`media-btn${deafened ? ' off' : ''}`}
+          className={`media-btn${deafened || away ? ' off' : ''}`}
           onClick={toggleDeafen}
-          disabled={voiceOff}
+          disabled={voiceOff || away}
           aria-label={deafened ? 'Voltar a ouvir todos' : 'Silenciar todos'}
           aria-pressed={deafened}
           title={deafened ? 'Voltar a ouvir todos' : 'Silenciar todos'}
         >
           <HeadphonesIcon off={deafened} />
+        </button>
+
+        {/*
+          Ausente é uma camada por cima de mic e fone: não altera a preferência
+          de nenhum dos dois, só silencia enquanto está ligado. Por isso os dois
+          botões ficam desabilitados aqui — mexer neles estando ausente daria a
+          impressão de que mudou algo que não mudou.
+        */}
+        <button
+          type="button"
+          className={`media-btn${away ? ' away' : ''}`}
+          onClick={() => setAway(!away)}
+          aria-label={awayTitle}
+          aria-pressed={away}
+          title={awayTitle}
+        >
+          <AwayIcon />
         </button>
 
         <button

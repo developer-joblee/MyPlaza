@@ -23,12 +23,15 @@ export interface CharacterFrames {
   walk: Record<Facing, Texture[]>;
   /** só perfil: o pack não tem sentar de frente nem de costas */
   sit: Record<SitFacing, Texture[]>;
+  /** celular (pose de ausente): só de frente */
+  phone: Texture[];
   scale: number;
   labelY: number;
   anchorY: number;
   idleFrameS: number;
   walkFrameS: number;
   sitFrameS: number;
+  phoneFrameS: number;
 }
 
 function cut(source: Texture, def: CharacterDef, slice: SheetSlice): Texture[] {
@@ -72,12 +75,14 @@ export async function loadCharacterFrames(id: CharacterId): Promise<CharacterFra
       left: cut(sheet, def, def.sit.left),
       right: cut(sheet, def, def.sit.right),
     },
+    phone: cut(sheet, def, def.phone),
     scale: def.scale,
     labelY: def.labelY,
     anchorY: def.anchorY,
     idleFrameS: def.idleFrameS,
     walkFrameS: def.walkFrameS,
     sitFrameS: def.sitFrameS,
+    phoneFrameS: def.phoneFrameS,
   };
   cache.set(id, frames);
   return frames;

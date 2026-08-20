@@ -82,6 +82,14 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     }
   });
 
+  socket.on('away', (away) => {
+    const scenarioId = socket.data.scenarioId;
+    if (!scenarioId) return;
+    const player = getWorld(scenarioId).setAway(socket.id, away === true);
+    if (!player) return; // já estava assim
+    socket.to(scenarioId).emit('player:away', socket.id, player.away);
+  });
+
   socket.on('sit', (sitting) => {
     const scenarioId = socket.data.scenarioId;
     if (!scenarioId) return;

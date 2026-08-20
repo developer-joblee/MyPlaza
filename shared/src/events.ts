@@ -8,6 +8,7 @@ export interface ServerToClientEvents {
   'player:left': (id: string) => void;
   'player:moved': (id: string, x: number, y: number) => void;
   'player:sat': (id: string, sitting: boolean) => void;
+  'player:away': (id: string, away: boolean) => void;
   'chat:message': (msg: ChatMessage) => void;
 }
 
@@ -21,6 +22,8 @@ export interface ClientToServerEvents {
    * senta no meio do corredor.
    */
   sit: (sitting: boolean) => void;
+  /** Ficar ausente ou voltar. Sem validação: é só intenção do usuário. */
+  away: (away: boolean) => void;
   'chat:send': (text: string) => void;
   /**
    * Pede credenciais de voz. Só por ack — sem payload, para o cliente não

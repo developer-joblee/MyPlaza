@@ -16,6 +16,8 @@ export interface PlayerState {
    * apareceria sentado de relance.
    */
   sitting: boolean;
+  /** ausente: sem microfone, sem áudio, e o avatar aparece no celular */
+  away: boolean;
 }
 
 export interface ChatMessage {

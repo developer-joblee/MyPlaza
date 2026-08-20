@@ -34,6 +34,7 @@ export class World {
       x: tx * TILE_SIZE + TILE_SIZE / 2,
       y: ty * TILE_SIZE + TILE_SIZE / 2,
       sitting: false,
+      away: false,
     };
     this.players.set(id, player);
     return player;
@@ -72,6 +73,14 @@ export class World {
     if (sitting && this.sitFacingUnder(player) === null) return undefined;
     if (player.sitting === sitting) return undefined; // nada mudou, não retransmite
     player.sitting = sitting;
+    return player;
+  }
+
+  /** Ausente/presente. Não há o que validar: é intenção do usuário. */
+  setAway(id: string, away: boolean): PlayerState | undefined {
+    const player = this.players.get(id);
+    if (!player || player.away === away) return undefined;
+    player.away = away;
     return player;
   }
 

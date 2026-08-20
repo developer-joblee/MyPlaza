@@ -37,15 +37,20 @@ export function Hud() {
       )}
       <ul className="roster">
         {sorted.map((p) => (
-          <li key={p.id}>
+          <li key={p.id} className={p.away ? 'ausente-li' : undefined}>
             <span
               className={`dot${speaking[p.id] ? ' speaking' : ''}`}
               style={{ background: colorToCss(p.color) }}
             />
             <span>{p.name}</span>
             {p.id === selfId && <span className="you">(você)</span>}
-            {p.id !== selfId && nearbyIds.includes(p.id) && (
-              <span className="near">voz</span>
+            {/* ausente ganha do "voz": quem não está ali não conversa */}
+            {p.away ? (
+              <span className="ausente" title="Ausente: sem microfone e sem áudio">
+                ausente
+              </span>
+            ) : (
+              p.id !== selfId && nearbyIds.includes(p.id) && <span className="near">voz</span>
             )}
           </li>
         ))}

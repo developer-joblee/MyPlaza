@@ -66,6 +66,7 @@ export class VoiceRoom {
   private roomSpeakers = new Set<string>();
   private appliedSpeaking = new Set<string>();
   private deafened = false;
+  private away = false;
   private micIntent = true;
   private screenSharing = false;
   /** analisador do mic local, para o medidor de nível da UI */
@@ -325,7 +326,7 @@ export class VoiceRoom {
       const dist = this.lastDistance.get(participant.identity);
       const naSala = this.getAudioInfo().selfZone !== null;
       track.setVolume(
-        this.deafened || dist === undefined ? 0 : naSala ? 1 : volumeForDistance(dist),
+        this.silenced || dist === undefined ? 0 : naSala ? 1 : volumeForDistance(dist),
       );
     } else if (track instanceof RemoteVideoTrack && pub.source === Track.Source.ScreenShare) {
       // guarda a faixa, não um MediaStream montado à mão: com adaptiveStream o
@@ -444,7 +445,7 @@ export class VoiceRoom {
 
   /** Nível do microfone local, 0..1. Lido por rAF na UI (nunca via store). */
   getMicLevel(): number {
-    if (!this.micAnalyser || !this.micIntent || this.deafened) return 0;
+    if (!this.micAnalyser || !this.micIntent || this.silenced) return 0;
     try {
       return Math.min(1, this.micAnalyser.calculateVolume());
     } catch {
@@ -542,7 +543,7 @@ export class VoiceRoom {
       if (mesmaZona(info.zone) && (selfZone !== null || dist <= PROXIMITY_RADIUS)) nearby.push(id);
 
       // --- áudio: assina generoso, atenua preciso
-      if (!this.deafened && audioWanted.has(id)) {
+      if (!this.silenced && audioWanted.has(id)) {
         timers.audioOutSince = null;
         this.setSubscribed(participant, Track.Source.Microphone, true);
         // numa sala todos se ouvem igual (quem está na ponta da mesa ouve como
@@ -551,7 +552,7 @@ export class VoiceRoom {
       } else {
         participant.setVolume(0);
         timers.audioOutSince ??= now;
-        const expired = this.deafened || now - timers.audioOutSince > AUDIO_SUBSCRIBE_GRACE_MS;
+        const expired = this.silenced || now - timers.audioOutSince > AUDIO_SUBSCRIBE_GRACE_MS;
         if (expired) this.setSubscribed(participant, Track.Source.Microphone, false);
       }
 
@@ -587,12 +588,21 @@ export class VoiceRoom {
 
   // ---------------------------------------------------------------- comandos
 
-  /** Mic efetivo = intenção do usuário E não estar surdo. */
+  /**
+   * Silenciado de fato: pelo botão de fone OU por estar ausente. Ausente é uma
+   * camada por cima, não uma sobrescrita: ele não mexe em `deafened` nem em
+   * `micIntent`, então ao voltar o usuário reencontra exatamente o que tinha.
+   */
+  private get silenced(): boolean {
+    return this.deafened || this.away;
+  }
+
+  /** Mic efetivo = intenção do usuário E não estar silenciado. */
   private async applyMicState(): Promise<void> {
     const room = this.room;
     if (!room || !this.opts.micAvailable) return;
     const gen = this.gen;
-    const enabled = this.micIntent && !this.deafened;
+    const enabled = this.micIntent && !this.silenced;
     try {
       await room.localParticipant.setMicrophoneEnabled(enabled);
     } catch (err) {
@@ -613,7 +623,23 @@ export class VoiceRoom {
   setDeafened(deafened: boolean): void {
     this.deafened = deafened;
     useStore.getState().setDeafened(deafened);
-    if (deafened) {
+    this.applySilence();
+  }
+
+  /**
+   * Ausente: corta microfone e áudio sem tocar nas preferências. Quem escreve o
+   * store e avisa a rede é `presence.ts` — aqui só fica o lado do áudio, porque
+   * a sala de voz pode nem existir (voz não configurada) e o estado de ausente
+   * tem de valer de qualquer jeito.
+   */
+  setAway(away: boolean): void {
+    this.away = away;
+    this.applySilence();
+  }
+
+  /** Aplica o silêncio efetivo: solta as assinaturas e reavalia o microfone. */
+  private applySilence(): void {
+    if (this.silenced) {
       for (const p of this.room?.remoteParticipants.values() ?? []) {
         p.setVolume(0);
         this.setSubscribed(p, Track.Source.Microphone, false);
@@ -702,6 +728,8 @@ export class VoiceRoom {
       canPlaybackAudio: room?.canPlaybackAudio ?? null,
       micIntent: this.micIntent,
       deafened: this.deafened,
+      away: this.away,
+      silenced: this.silenced,
       zona: selfZone,
       quedas: this.drops.length,
       ultimaQueda: this.drops[this.drops.length - 1] ?? null,

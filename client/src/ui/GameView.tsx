@@ -74,6 +74,10 @@ export function GameView() {
       // join já tenha rodado) e o handler antigo nunca era removido no cleanup
       onConnect = () => {
         socket.emit('join', selfName, selfColor, selfScenario, selfCharacter);
+        // a reconexão cria um player novo no servidor, sempre presente. Se o
+        // usuário está ausente, reafirma — senão ele volta a aparecer
+        // disponível para os outros enquanto continua mudo de fato.
+        if (useStore.getState().away) socket.emit('away', true);
         // socket novo = chance nova: zera o backoff antes de tentar
         voice?.onSocketReconnected();
         void voice?.onSocketConnected();

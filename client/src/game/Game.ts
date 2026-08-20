@@ -11,6 +11,7 @@ import {
   type ScenarioId,
 } from '@together/shared';
 import type { AppSocket } from '../net/socket';
+import { setAway } from '../presence';
 import { useStore } from '../state/store';
 import { Keyboard } from './input';
 import { TilemapBase } from './TilemapBase';
@@ -201,31 +202,42 @@ export class Game {
     const onSat = (id: string, sitting: boolean) => {
       this.remotes.get(id)?.setSitting(sitting);
     };
+    const onAway = (id: string, away: boolean) => {
+      this.remotes.get(id)?.avatar.setAway(away);
+      useStore.getState().setPlayerAway(id, away);
+    };
 
     this.socket.on('world:snapshot', onSnapshot);
     this.socket.on('player:joined', onJoined);
     this.socket.on('player:left', onLeft);
     this.socket.on('player:moved', onMoved);
     this.socket.on('player:sat', onSat);
+    this.socket.on('player:away', onAway);
     this.unbinders.push(() => {
       this.socket.off('world:snapshot', onSnapshot);
       this.socket.off('player:joined', onJoined);
       this.socket.off('player:left', onLeft);
       this.socket.off('player:moved', onMoved);
       this.socket.off('player:sat', onSat);
+      this.socket.off('player:away', onAway);
     });
   }
 
   private addRemote(p: PlayerState): void {
     const remote = new RemotePlayer(this.framesFor(p.character), p.name, p.color, p.x, p.y);
-    // quem já estava sentado quando entramos precisa aparecer sentado
+    // quem já estava sentado ou ausente quando entramos precisa aparecer assim
     remote.setSitting(p.sitting);
+    remote.avatar.setAway(p.away);
     this.remotes.set(p.id, remote);
     this.playersLayer.addChild(remote.avatar.view);
   }
 
   private tick = () => {
     const dt = Math.min(this.app.ticker.deltaMS / 1000, 0.1);
+
+    // Andar cancela o ausente: quem voltou ao teclado está de volta à conversa,
+    // e a pose do celular só existe de frente (andar com ela ficaria quebrado).
+    if (this.keyboard.moving && useStore.getState().away) setAway(false);
 
     const { moved, sittingChanged, nearbyChair } = this.local.update(
       dt,
@@ -262,6 +274,11 @@ export class Game {
     this.updateCamera(dt);
     this.updateZoneIndicator();
   };
+
+  /** Pose de ausente do player local (chamado por `presence.setAway`). */
+  setSelfAway(away: boolean): void {
+    this.local.avatar.setAway(away);
+  }
 
   /** Só avisa o store quando a dica muda, para não re-renderizar a cada frame. */
   private updateSitPrompt(canSit: boolean): void {

@@ -15,6 +15,7 @@ export interface RosterEntry {
   id: string;
   name: string;
   color: number;
+  away: boolean;
 }
 
 export interface RemoteScreen {
@@ -55,6 +56,8 @@ interface AppState {
   audioZone: string | null;
   /** há uma cadeira ao alcance e o player está de pé (mostra a dica do E) */
   canSit: boolean;
+  /** ausente: sem microfone, sem áudio, avatar no celular */
+  away: boolean;
   /** preferência do usuário para o cancelamento de ruído */
   noiseFilter: boolean;
   /** se o filtro está de fato rodando (pode falhar por falta de suporte) */
@@ -88,6 +91,9 @@ interface AppState {
   setMicSwitching: (v: boolean) => void;
   setAudioZone: (label: string | null) => void;
   setCanSit: (v: boolean) => void;
+  setAway: (v: boolean) => void;
+  /** ausência de um player na lista (o próprio ou um remoto) */
+  setPlayerAway: (id: string, away: boolean) => void;
   setNoiseFilter: (v: boolean) => void;
   setNoiseFilterActive: (v: boolean) => void;
   setSharing: (v: boolean) => void;
@@ -119,6 +125,7 @@ export const useStore = create<AppState>((set) => ({
   micSwitching: false,
   audioZone: null,
   canSit: false,
+  away: false,
   noiseFilter: (() => {
     try {
       return localStorage.getItem('together:noiseFilter') !== 'off';
@@ -166,6 +173,7 @@ export const useStore = create<AppState>((set) => ({
       micSwitching: false,
       audioZone: null,
       canSit: false,
+      away: false,
       noiseFilterActive: false,
       sharing: false,
       remoteScreens: [],
@@ -198,6 +206,14 @@ export const useStore = create<AppState>((set) => ({
   setMicSwitching: (v) => set({ micSwitching: v }),
   setAudioZone: (label) => set({ audioZone: label }),
   setCanSit: (v) => set({ canSit: v }),
+  setAway: (v) =>
+    set((s) => ({
+      away: v,
+      // o próprio nome na lista também mostra o estado
+      roster: s.roster.map((r) => (r.id === s.selfId ? { ...r, away: v } : r)),
+    })),
+  setPlayerAway: (id, away) =>
+    set((s) => ({ roster: s.roster.map((r) => (r.id === id ? { ...r, away } : r)) })),
   setNoiseFilter: (v) => set({ noiseFilter: v }),
   setNoiseFilterActive: (v) => set({ noiseFilterActive: v }),
   setSharing: (v) => set({ sharing: v }),
