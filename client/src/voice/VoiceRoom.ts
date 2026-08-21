@@ -73,7 +73,12 @@ export class VoiceRoom {
   private appliedSpeaking = new Set<string>();
   private deafened = false;
   private away = false;
-  private micIntent = true;
+  /**
+   * Intenção do usuário quanto ao microfone. Nasce `false` e volta a `false`
+   * a cada sala nova (ver `forceMicOff`): o usuário só transmite depois de
+   * clicar no 🎙️.
+   */
+  private micIntent = false;
   private screenSharing = false;
   /** analisador do mic local, para o medidor de nível da UI */
   private micAnalyser: { calculateVolume: () => number; cleanup: () => Promise<void> } | null = null;
@@ -104,7 +109,6 @@ export class VoiceRoom {
     private getAudioInfo: () => AudioInfo,
     private opts: { micAvailable: boolean; micDeviceId: string | null },
   ) {
-    this.micIntent = opts.micAvailable;
     (window as unknown as Record<string, unknown>).__togetherVoice = () => this.debugState();
   }
 
@@ -192,6 +196,10 @@ export class VoiceRoom {
     store.setVoiceStatus('connected');
     store.setAudioBlocked(!room.canPlaybackAudio);
 
+    // sala nova = mudo, mesmo que a anterior estivesse com o mic ligado. Este
+    // caminho roda tanto na entrada quanto depois de uma queda de socket, e é
+    // justamente a queda que o usuário pode não perceber.
+    this.forceMicOff();
     await this.applyMicState();
     if (gen !== this.gen || this.destroyed) return;
 
@@ -313,7 +321,18 @@ export class VoiceRoom {
       useStore.getState().setAudioBlocked(!room.canPlaybackAudio);
     });
     room.on(RoomEvent.Reconnecting, () => useStore.getState().setVoiceStatus('reconnecting'));
-    room.on(RoomEvent.Reconnected, () => useStore.getState().setVoiceStatus('connected'));
+    room.on(RoomEvent.Reconnected, () => {
+      useStore.getState().setVoiceStatus('connected');
+      if (this.destroyed || room !== this.room) return;
+      /**
+       * A reconexão completa do SDK **republica as faixas locais** — inclusive o
+       * microfone — sem pedir nada a ninguém. Como a queda pode passar
+       * despercebida, voltar é sempre voltar mudo: o usuário reencontra o botão
+       * desligado em vez de descobrir depois que estava transmitindo.
+       */
+      this.forceMicOff();
+      void this.applyMicState();
+    });
     room.on(RoomEvent.Disconnected, (reason) => {
       if (this.destroyed || room !== this.room) return;
       this.registrarQueda(`sala: ${reason ?? 'sem motivo'}`);
@@ -678,6 +697,15 @@ export class VoiceRoom {
     }
     if (gen !== this.gen || this.destroyed) return;
     useStore.getState().setMicEnabled(this.micIntent);
+  }
+
+  /**
+   * Zera a intenção de transmitir. NÃO toca o microfone por si só — quem faz
+   * isso é o `applyMicState()` que vem depois (e que também sincroniza o store,
+   * de onde a UI tira o ícone do 🎙️).
+   */
+  private forceMicOff(): void {
+    this.micIntent = false;
   }
 
   setMicEnabled(enabled: boolean): void {

@@ -54,7 +54,10 @@ export function GameView() {
       if (cancelled) return;
       const store = useStore.getState();
       store.setMicAvailable(micAvailable);
-      store.setMicEnabled(micAvailable);
+      // entra MUDO, sempre: ter permissão de microfone não é querer transmitir.
+      // O `false` explícito também limpa o `true` que um `leave()` antigo (ou um
+      // HMR) pudesse ter deixado no store.
+      store.setMicEnabled(false);
       store.setActiveMicId(micDeviceId);
 
       if (micAvailable) {

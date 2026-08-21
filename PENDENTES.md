@@ -5,6 +5,34 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Microfone desligado ao entrar (e ao voltar de uma queda) — 2026-08-21
+
+Doc: [`microfone-mudo-ao-entrar.md`](docs/features/microfone-mudo-ao-entrar.md).
+Três arquivos de client (`voice/VoiceRoom.ts`, `state/store.ts`,
+`ui/GameView.tsx`), nada em `shared/`, nada no servidor.
+
+## Já verificado
+
+- `npm run typecheck` (server + client) limpo.
+- Por leitura de código: `applyMicState()` é o único caminho que chama
+  `setMicrophoneEnabled()`, e é ele que espelha `micIntent` no store — então
+  ícone e faixa publicada não podem divergir.
+- Por leitura de código: `away`/`deafened` continuam intactos (camadas por cima,
+  não sobrescrevem `micIntent`).
+
+## Falta verificar (em ordem de importância)
+
+1. **Nada foi aberto num navegador**, e voz precisa das credenciais do LiveKit.
+2. **A reconexão que ninguém percebe** — é o ponto novo e o único que não tem
+   como conferir por leitura: com o microfone ligado, derrubar a rede por alguns
+   segundos e religar; ao voltar para "Voz conectada" o 🎙️ tem de estar riscado
+   e o outro lado não deve ouvir nada. Depende de o SDK emitir
+   `RoomEvent.Reconnected` no caminho de *resume* (blip curto) e não só no de
+   reconexão completa — se ele não emitir, o blip curto deixa você no ar.
+3. **O caminho comum:** entrar mudo, ligar, falar, F5, voltar mudo.
+4. **A troca de microfone com o mic desligado** (`switchActiveDevice` sem faixa
+   publicada): deve continuar guardando a escolha e não ligar nada sozinha.
+
 # Booble no menu de contexto, valendo de qualquer distância — 2026-08-21
 
 Mudança em duas features que já existem: [`booble.md`](docs/features/booble.md) e

@@ -111,7 +111,13 @@ interface AppState {
   roster: RosterEntry[];
   chat: ChatMessage[];
   micAvailable: boolean;
-  /** intenção do usuário; o mic efetivo é `micEnabled && !deafened` */
+  /**
+   * Intenção do usuário; o mic efetivo é `micEnabled && !deafened`.
+   *
+   * Começa **sempre em `false`**: entrar, recarregar a página e reconectar
+   * entregam o microfone desligado, e isto não é persistido de propósito —
+   * transmitir sem saber é pior que ter de clicar no 🎙️ ao chegar.
+   */
   micEnabled: boolean;
   deafened: boolean;
   voiceStatus: VoiceStatus;
@@ -335,7 +341,8 @@ export const useStore = create<AppState>((set) => ({
   roster: [],
   chat: [],
   micAvailable: false,
-  micEnabled: true,
+  // sempre mudo ao chegar — ver o campo na interface
+  micEnabled: false,
   deafened: false,
   voiceStatus: 'idle',
   audioBlocked: false,
@@ -471,7 +478,8 @@ export const useStore = create<AppState>((set) => ({
       roster: [],
       chat: [],
       micAvailable: false,
-      micEnabled: true,
+      // sair e voltar recomeça mudo, igual a entrar pela primeira vez
+      micEnabled: false,
       deafened: false,
       voiceStatus: 'idle',
       audioBlocked: false,

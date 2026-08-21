@@ -126,7 +126,7 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Andar | `WASD` ou setas |
 | Sentar | `E` ao lado de uma cadeira (a dica aparece no painel). `E` de novo, ou qualquer tecla de movimento, levanta |
 | Falar | Chegue a até ~5 tiles de alguém (círculo claro ao redor do seu avatar) — o volume cai com a distância |
-| Mutar microfone | Botão 🎙️ na barra inferior |
+| Mutar microfone | Botão 🎙️ na barra inferior. **Você sempre chega mudo**: entrar, dar F5 ou cair e voltar deixam o microfone desligado, e só um clique aqui liga — ver [Microfone desligado ao entrar](docs/features/microfone-mudo-ao-entrar.md) |
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
 | Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular, com um feed rolando ao lado da cabeça e a pastilha **ausente** acima do nome. Andar volta ao normal, e suas preferências de microfone e fone são preservadas — ver [Modo ausente (celular)](docs/features/modo-ausente.md) |
 | Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
@@ -149,6 +149,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Feature | Doc | Código principal |
 |---|---|---|
 | Voz por proximidade | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `voice/proximity.ts` |
+| Microfone desligado ao entrar (e ao voltar de uma queda) | [Microfone desligado ao entrar](docs/features/microfone-mudo-ao-entrar.md) | `client/src/voice/VoiceRoom.ts`, `client/src/state/store.ts`, `client/src/ui/GameView.tsx` |
 | Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
 | Booble (conversa paralela: dentro 100%, fora 7%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `client/src/game/BoobleWhisper.ts`, `client/src/game/AutoWalk.ts`, `client/src/ui/AvatarContextMenu.tsx`, `server/src/world.ts` |
 | Soundboard gamificado (sons próprios, liberados por tempo na plataforma) | [Soundboard gamificado](docs/features/soundboard.md) | `client/src/soundboard/`, `server/src/soundboard.ts`, `shared/src/levels.ts` |
@@ -171,10 +172,10 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As doze com doc (persistência, autenticação, lobby, camada de
+> resumo e o link. As treze com doc (persistência, autenticação, lobby, camada de
 > requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble,
-> soundboard, menu de configurações, menu de contexto e chamar pelo menu de
-> contexto) já seguem a convenção.
+> soundboard, menu de configurações, menu de contexto, chamar pelo menu de
+> contexto e microfone mudo ao entrar) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 
