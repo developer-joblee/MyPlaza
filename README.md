@@ -8,7 +8,8 @@ sua **tela** e use o **chat** de texto.
 
 ## Rodando
 
-Requisitos: Node 20.12+.
+Requisitos: **Node 22+** (o `@supabase/supabase-js` exige `WebSocket` global,
+que só existe a partir do Node 22).
 
 ```bash
 npm install
@@ -309,7 +310,12 @@ mesma origem. O Nixpacks detecta tudo pelos scripts da raiz:
 
 - **Build**: `npm install && npm run build` (automático)
 - **Start**: `npm start` (automático — roda `tsx` no server, que respeita `process.env.PORT`)
-- Node 20.12+ (declarado em `engines`; o `--env-file-if-exists` exige essa versão)
+- **Node 22+** — declarado em dois lugares de propósito: `engines` do
+  `package.json` e **`.nvmrc`**. O Nixpacks resolve a versão pelo `.nvmrc`;
+  um *range* em `engines` (era `>=20.12`) ele resolvia para o Node 20, e o
+  `@supabase/supabase-js` quebra o boot lá (`Node.js detected but native
+  WebSocket not found`, em loop de restart). Se ainda subir com Node 20,
+  force pela variável `NIXPACKS_NODE_VERSION=22` no serviço.
 
 O TLS do Railway já satisfaz o requisito de HTTPS do microfone e do
 compartilhamento de tela.
