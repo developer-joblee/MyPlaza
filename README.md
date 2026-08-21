@@ -122,6 +122,7 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Mutar microfone | Botão 🎙️ na barra inferior |
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
 | Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular. Andar volta ao normal. Suas preferências de microfone e fone são preservadas |
+| Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Chat | Painel no canto inferior direito (global) |
 
@@ -140,6 +141,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
 | Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
 | Modo ausente (celular) | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/ui/MediaControls.tsx`, `client/src/game/Avatar.ts` |
+| Chamado de quem está ausente ("toc-toc") | [Chamado de quem está ausente](docs/features/chamado-ausente.md) | `client/src/presence.ts`, `client/src/ui/knock.ts`, `server/src/handlers.ts` |
 | Sentar em cadeiras | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/game/LocalPlayer.ts`, `client/src/game/characterDefs.ts` |
 | Cenários e mapas ASCII | [Editando o mapa](#editando-o-mapa) *(sem doc próprio ainda)* | `shared/src/scenarios.ts`, `client/src/game/*Tilemap.ts` |
 | Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/net/voiceApi.ts` |
@@ -151,8 +153,8 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As quatro com doc (persistência, autenticação, lobby e camada
-> de requisição) já seguem a convenção.
+> resumo e o link. As cinco com doc (persistência, autenticação, lobby, camada de
+> requisição e chamado de ausente) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 

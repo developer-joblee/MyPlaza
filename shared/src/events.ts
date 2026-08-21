@@ -19,6 +19,16 @@ export interface ServerToClientEvents {
   'player:away': (id: string, away: boolean) => void;
   'chat:message': (msg: ChatMessage) => void;
   /**
+   * Alguém te chamou enquanto você está ausente. Vai **só para o alvo** — não é
+   * broadcast: chamado é entre duas pessoas, e o mundo inteiro não precisa saber
+   * quem cutucou quem.
+   *
+   * Existe porque ausente desassina o áudio no SFU (`VoiceRoom.applySilence`):
+   * quem está ausente não ouve ninguém chamando, nem colado no avatar. Este é o
+   * único canal que atravessa esse silêncio.
+   */
+  'presence:nudged': (fromId: string, fromName: string) => void;
+  /**
    * A entrada foi recusada e o `world:snapshot` não vem. O cliente volta para a
    * tela de entrada com o motivo — sem isto ele ficaria esperando para sempre.
    */
@@ -70,6 +80,16 @@ export interface ClientToServerEvents {
    */
   share: (sharing: boolean) => void;
   'chat:send': (text: string) => void;
+  /**
+   * Chama alguém que está ausente ("toc-toc"). Sem ack, como os outros eventos
+   * de mundo: o efeito acontece na tela da outra pessoa, não aqui.
+   *
+   * O servidor recusa em silêncio quando o alvo não está no mesmo mundo, quando
+   * ele **não** está ausente, ou quando o cooldown (`NUDGE_COOLDOWN_MS`) ainda
+   * corre — recusar calado é de propósito: a resposta a "consegui cutucar?" não
+   * deve virar sonda de presença.
+   */
+  'presence:nudge': (targetId: string) => void;
   /**
    * Pede credenciais de voz. Só por ack — sem payload, para o cliente não
    * poder influenciar sala nem identidade (ambas vêm do socket no servidor).

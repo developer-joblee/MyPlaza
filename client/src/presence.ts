@@ -1,5 +1,6 @@
 import { runtime } from './runtime';
 import { useStore } from './state/store';
+import { playKnock } from './ui/knock';
 
 /**
  * Ficar ausente ou voltar.
@@ -19,4 +20,36 @@ export function setAway(away: boolean): void {
   runtime.voice?.setAway(away);
   runtime.game?.setSelfAway(away);
   runtime.api?.setAway(away);
+}
+
+/**
+ * Chama alguém que está ausente ("toc-toc").
+ *
+ * Devolve `false` quando não havia socket — o `fire()` da camada de requisição
+ * é quem sabe disso, e quem chama usa esse retorno para **não** marcar o botão
+ * como "chamado". O servidor ainda pode recusar em silêncio (cooldown, alvo que
+ * acabou de voltar), e isso é de propósito: ver `presence:nudge` no `shared`.
+ */
+export function nudge(targetId: string): boolean {
+  return runtime.api?.nudge(targetId) ?? false;
+}
+
+/**
+ * Recebi um chamado. Aviso na tela (pilha do `Notices`) + som.
+ *
+ * Ignora o chamado se eu não estiver ausente: o servidor só emite para quem
+ * está, mas entre o clique da outra pessoa e a chegada aqui eu posso ter
+ * voltado — e nesse caso o aviso "alguém está te chamando" apareceria em cima
+ * de uma pessoa que já está ouvindo a sala.
+ *
+ * O aviso **não** expira por tempo, e é a decisão que mais importa aqui: quem
+ * está ausente está longe da tela, então um toast de 5s garante que a pessoa
+ * perca exatamente a informação que a feature existe para entregar. Ele sai
+ * quando ela volta (`setAway(false)`) ou quando ela dispensa.
+ */
+export function receiveNudge(fromId: string, fromName: string): void {
+  const store = useStore.getState();
+  if (!store.away) return;
+  store.pushNudge(fromId, fromName);
+  playKnock();
 }

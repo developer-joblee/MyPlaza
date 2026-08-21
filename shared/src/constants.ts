@@ -35,6 +35,20 @@ export const MAX_AUDIO_SUBSCRIPTIONS = 16;
 /** Intervalo do tick que reconcilia subscrição e volume por distância */
 export const VOICE_TICK_MS = 250;
 
+/**
+ * Intervalo mínimo entre dois chamados da MESMA pessoa para o MESMO alvo (ms).
+ *
+ * Chamar quem está ausente é um toque na porta, e porta se bate uma vez. 15s é
+ * curto o bastante para o segundo toque ser legítimo ("ainda estou aqui") e
+ * longo o bastante para tirar a graça de clicar em sequência. Vive aqui porque
+ * os dois lados usam: o servidor **impõe** (esconder o botão não é limite) e o
+ * cliente desabilita o botão pelo mesmo tempo, para não parecer que sumiu.
+ */
+export const NUDGE_COOLDOWN_MS = 15000;
+
+/** Quantos nomes o aviso lista antes de virar "e +N". */
+export const NUDGE_MAX_NAMES = 2;
+
 export const CHAT_HISTORY_LIMIT = 100;
 export const CHAT_MAX_LENGTH = 500;
 export const NAME_MAX_LENGTH = 20;

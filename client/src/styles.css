@@ -558,6 +558,38 @@ button {
   padding: 1px 7px;
 }
 
+/*
+ * "chamar" mora na linha de quem está ausente e usa a métrica dos micro-badges
+ * (.ausente/.near) para não virar um botão grande no meio da lista. Opacidade
+ * cheia porque a linha inteira já está a 55% (`.ausente-li`) — sem isto a única
+ * ação disponível ali seria a coisa menos visível da linha.
+ */
+.roster .nudge-btn {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 99px;
+  padding: 1px 8px;
+  opacity: 0.9;
+  transition: background 0.12s, opacity 0.12s;
+}
+
+.roster .nudge-btn:hover:not(:disabled) {
+  background: rgba(61, 220, 132, 0.22);
+  border-color: rgba(61, 220, 132, 0.5);
+  opacity: 1;
+}
+
+.roster .nudge-btn:disabled {
+  cursor: default;
+  color: var(--mint);
+  opacity: 0.7;
+}
+
 /* --------------------------------------------------------------- Chat */
 
 .chat {
@@ -984,6 +1016,42 @@ button {
   transform: translateY(-1px);
 }
 
+/*
+ * Chamado: mint como o resto do "faça isso", mas com respiro maior e um pulso
+ * lento na borda — é o único aviso que precisa ser notado por quem está
+ * olhando OUTRA janela, e a cor sozinha não faz isso.
+ */
+.notice.nudge {
+  background: rgba(61, 220, 132, 0.16);
+  border-color: rgba(61, 220, 132, 0.55);
+  color: #b9f5d0;
+  padding-right: 8px;
+  animation: notice-in 0.16s ease-out both, nudge-pulse 1.8s ease-in-out 0.2s infinite;
+}
+
+@keyframes nudge-pulse {
+  50% {
+    box-shadow: 0 0 0 6px rgba(61, 220, 132, 0.14);
+  }
+}
+
+/* ação afirmativa dentro de um aviso — hoje só "Voltar" do chamado usa */
+.notice-action {
+  border: 1px solid rgba(61, 220, 132, 0.6);
+  border-radius: 99px;
+  background: rgba(61, 220, 132, 0.22);
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 12px;
+  transition: background 0.12s;
+}
+
+.notice-action:hover {
+  background: rgba(61, 220, 132, 0.36);
+}
+
 .notice-dismiss {
   border: none;
   background: none;
@@ -1347,6 +1415,10 @@ button {
   .device-row:hover:not(:disabled),
   .notice.cta:hover {
     transform: none;
+  }
+  /* o pulso do chamado é reforço, não informação: sem ele o aviso continua lá */
+  .notice.nudge {
+    animation: none;
   }
 }
 

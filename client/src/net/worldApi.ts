@@ -27,6 +27,8 @@ export interface WorldApi {
   sit(sitting: boolean): boolean;
   setAway(away: boolean): boolean;
   chatSend(text: string): boolean;
+  /** Chama quem está ausente. O servidor pode recusar em silêncio (cooldown). */
+  nudge(targetId: string): boolean;
   /** Comecei/parei de compartilhar a tela — o servidor só registra. */
   share(sharing: boolean): boolean;
 }
@@ -44,6 +46,7 @@ export function createWorldApi(getSocket: () => AppSocket | null): WorldApi {
     sit: (sitting) => fire(getSocket(), (s) => s.emit('sit', sitting)),
     setAway: (away) => fire(getSocket(), (s) => s.emit('away', away)),
     chatSend: (text) => fire(getSocket(), (s) => s.emit('chat:send', text)),
+    nudge: (targetId) => fire(getSocket(), (s) => s.emit('presence:nudge', targetId)),
     share: (sharing) => fire(getSocket(), (s) => s.emit('share', sharing)),
   };
 }

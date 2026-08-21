@@ -5,6 +5,81 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Chamado de quem está ausente ("toc-toc") — 2026-08-20
+
+Feature nova: `docs/features/chamado-ausente.md`.
+
+## Já verificado
+
+### O servidor, de verdade (headless, modo anônimo em :3099)
+
+Script de quatro sockets no molde do `smoke-test.mts`, contra o servidor rodando
+com Supabase e LiveKit desligados. Passou em tudo:
+
+- chamado chega **só no alvo**, com o `socket.id` e o nome de quem chamou;
+- **chamar quem está presente é recusado** (o alvo tem de estar ausente);
+- **cooldown por par**: o segundo clique dentro de `NUDGE_COOLDOWN_MS` não passa;
+- o cooldown **não é global**: outro remetente do mesmo mundo passa na hora;
+- **isolamento entre mundos**: quem está em outro cenário não alcança o alvo;
+- alvo inexistente, alvo vazio e chamar a si mesmo são ignorados sem derrubar
+  socket nenhum;
+- quem **voltou** de ausente para de receber chamado.
+
+Também: `npm run typecheck` (server + client) limpo e `npm run build` do client
+sem erro. O script de teste ficou fora do repo (rodou da raiz e foi apagado; o
+`smoke-test.mts` continua como está).
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada da interface foi visto num navegador
+
+Tudo abaixo é lógica de client que **não** foi exercitada: o botão **chamar** na
+linha de quem está ausente, o aviso `.notice.nudge` na pilha, o texto no plural
+("Ana e Bruno estão te chamando"), o "+N" a partir de `NUDGE_MAX_NAMES`, o botão
+**Voltar**, o dispensar (`×`) e o estado "chamado" do botão por 15s. O roteiro
+está em "Como testar" no doc da feature — `npm run dev`, duas abas.
+
+### 2. O "toc-toc" nunca foi ouvido
+
+`client/src/ui/knock.ts` sintetiza o som em WebAudio (~2,5s: quatro ciclos de
+duas batidas) e nunca rodou num navegador. Riscos: (a) o `AudioContext` nascer
+suspenso e o `resume()` ser recusado porque o chamado não vem de um gesto do
+usuário — nesse caso o aviso visual continua, mas o som não toca, e é justo o
+canal que serve para quem está olhando outra janela; (b) volume/timbre errados
+na prática (`PEAK` = 0,14); (c) o padrão de 2,5s pode soar insistente demais no
+uso real — `REPEATS` e `CYCLE_S` são os dois números para ajustar; (d) a trava
+`busyUntil` (chamado novo durante o som não redispara) nunca foi exercitada com
+duas pessoas chamando quase junto.
+
+### 3. Reconexão no meio de um chamado
+
+Se o socket do alvo cair e voltar, ele é um `socket.id` novo — o `nudgedAt` do
+remetente ainda tem o id antigo, então um chamado novo passa na hora (o que é o
+comportamento desejado), mas nada disso foi exercitado com queda real.
+
+### 4. Chamado com o alvo em outra aba congelada
+
+Aba em segundo plano pode ter o timer estrangulado pelo navegador e o socket
+caído por `ping timeout` (é o que o log de `disconnect` já mostrava). Se o alvo
+tinha caído, o chamado simplesmente não chega e quem chamou não sabe — por
+desenho, mas nunca foi observado.
+
+### 5. Não há trilha no banco
+
+`presence:nudge` não grava nada (nem quem chamou, nem quando). As outras
+atividades de sessão (visita de sala, tela compartilhada, token de voz) gravam.
+Ficou de fora por escolha — chamado é efêmero — mas se um dia isso virar
+métrica de "ninguém responde quando chamam", vai faltar dado.
+
+### 6. Ausência é sempre manual
+
+Não existe detecção automática de idle: ficar ausente é só o botão de celular. A
+feature entrega a notificação para **quem já está ausente** — se a ideia era
+também "entrar em idle sozinho depois de N minutos sem teclado", isso não foi
+feito e não estava no pedido.
+
+---
+
 # Deploy no Railway: Node 22 — 2026-08-20
 
 O deploy depois do commit `eec1849` entrou em **loop de restart**. Causa, nos

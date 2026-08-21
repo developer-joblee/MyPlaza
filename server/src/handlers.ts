@@ -5,6 +5,7 @@ import {
   DEFAULT_CHARACTER,
   DEFAULT_SCENARIO,
   NAME_MAX_LENGTH,
+  NUDGE_COOLDOWN_MS,
   POSITION_SAVE_MS,
   isCharacterId,
   isScenarioId,
@@ -68,6 +69,12 @@ export interface SocketData {
    */
   zoneVisit?: Promise<string | null>;
   sharing?: boolean;
+  /**
+   * Quando este socket chamou cada alvo, para impor `NUDGE_COOLDOWN_MS`. Vive
+   * no socket (e não num mapa global) porque cai junto com a conexão, e é podado
+   * a cada chamado — então não guarda mais que os alvos da última janela.
+   */
+  nudgedAt?: Map<string, number>;
   /** mesma corrente, para o compartilhamento de tela */
   shareRecord?: Promise<string | null>;
   /** bucket de tokens concedidos (não conta recusas — ver o handler) */
@@ -387,6 +394,41 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     // entrega primeiro, grava depois: o chat não deve esperar pelo banco
     const { placeId, profileId } = socket.data;
     if (placeId) void saveChatMessage(placeId, profileId ?? null, msg);
+  });
+
+  /**
+   * "Toc-toc": chama alguém que está ausente.
+   *
+   * Três recusas, todas em silêncio — o cliente não recebe nada de volta, então
+   * um cliente adulterado não consegue usar isto para descobrir quem está onde:
+   *
+   * 1. alvo fora do mesmo mundo (ou inexistente);
+   * 2. alvo que **não** está ausente — o chamado só existe para atravessar o
+   *    silêncio do ausente; quem está presente se ouve por voz ou lê no chat;
+   * 3. cooldown por par ainda correndo. O limite é imposto aqui, e não só no
+   *    botão: esconder o botão não é limite.
+   */
+  socket.on('presence:nudge', (rawTargetId) => {
+    const { scenarioId, worldKey } = socket.data;
+    if (!scenarioId || !worldKey) return;
+    const targetId = String(rawTargetId ?? '');
+    if (!targetId || targetId === socket.id) return;
+
+    const world = getWorld(worldKey, scenarioId);
+    const from = world.getPlayer(socket.id);
+    const target = world.getPlayer(targetId);
+    if (!from || !target || !target.away) return;
+
+    const now = Date.now();
+    const nudged = (socket.data.nudgedAt ??= new Map());
+    // poda antes de consultar: o mapa nunca passa dos alvos da janela atual
+    for (const [id, at] of nudged) if (now - at >= NUDGE_COOLDOWN_MS) nudged.delete(id);
+    if (nudged.has(targetId)) return;
+    nudged.set(targetId, now);
+
+    // o Socket.IO já mantém cada socket numa sala com o próprio id: é entrega
+    // ponto a ponto, sem passar pelo mundo
+    io.to(targetId).emit('presence:nudged', socket.id, from.name);
   });
 
   socket.on('voice:token', async (ack) => {

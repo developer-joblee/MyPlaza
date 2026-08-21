@@ -23,6 +23,18 @@ export interface RosterEntry {
   away: boolean;
 }
 
+/**
+ * Um chamado recebido enquanto você está ausente. `at` fica porque o aviso não
+ * expira sozinho: quem está ausente pode voltar meia hora depois, e "Ana te
+ * chamou" sem hora nenhuma mentiria sobre quando isso aconteceu.
+ */
+export interface Nudge {
+  /** socket id de quem chamou */
+  id: string;
+  name: string;
+  at: number;
+}
+
 export interface RemoteScreen {
   peerId: string;
   /** a faixa, não um MediaStream: o adaptiveStream depende de track.attach() */
@@ -89,6 +101,11 @@ interface AppState {
   canSit: boolean;
   /** ausente: sem microfone, sem áudio, avatar no celular */
   away: boolean;
+  /**
+   * Quem te chamou enquanto você está ausente, um por pessoa (o mais recente
+   * ganha). Só enche estando ausente, e zera ao voltar — ver `presence.ts`.
+   */
+  nudges: Nudge[];
   /** preferência do usuário para o cancelamento de ruído */
   noiseFilter: boolean;
   /** se o filtro está de fato rodando (pode falhar por falta de suporte) */
@@ -139,6 +156,9 @@ interface AppState {
   setAway: (v: boolean) => void;
   /** ausência de um player na lista (o próprio ou um remoto) */
   setPlayerAway: (id: string, away: boolean) => void;
+  /** registra um chamado (substitui o anterior da mesma pessoa) */
+  pushNudge: (id: string, name: string) => void;
+  clearNudges: () => void;
   setNoiseFilter: (v: boolean) => void;
   setNoiseFilterActive: (v: boolean) => void;
   setSharing: (v: boolean) => void;
@@ -179,6 +199,7 @@ export const useStore = create<AppState>((set) => ({
   audioZone: null,
   canSit: false,
   away: false,
+  nudges: [],
   noiseFilter: (() => {
     try {
       return localStorage.getItem('together:noiseFilter') !== 'off';
@@ -269,6 +290,7 @@ export const useStore = create<AppState>((set) => ({
       audioZone: null,
       canSit: false,
       away: false,
+      nudges: [],
       noiseFilterActive: false,
       sharing: false,
       remoteScreens: [],
@@ -304,11 +326,22 @@ export const useStore = create<AppState>((set) => ({
   setAway: (v) =>
     set((s) => ({
       away: v,
+      // trocar de estado zera os chamados nos dois sentidos: voltar é a resposta
+      // ao chamado, e ausentar-se de novo não deve arrastar o aviso da vez
+      // passada — chamado velho pendurado na tela é pior que nenhum
+      nudges: [],
       // o próprio nome na lista também mostra o estado
       roster: s.roster.map((r) => (r.id === s.selfId ? { ...r, away: v } : r)),
     })),
   setPlayerAway: (id, away) =>
     set((s) => ({ roster: s.roster.map((r) => (r.id === id ? { ...r, away } : r)) })),
+  pushNudge: (id, name) =>
+    set((s) => ({
+      // um por pessoa: dois toques da mesma pessoa são um chamado com hora nova,
+      // não dois nomes repetidos na lista
+      nudges: [...s.nudges.filter((n) => n.id !== id), { id, name, at: Date.now() }],
+    })),
+  clearNudges: () => set({ nudges: [] }),
   setNoiseFilter: (v) => set({ noiseFilter: v }),
   setNoiseFilterActive: (v) => set({ noiseFilterActive: v }),
   setSharing: (v) => set({ sharing: v }),

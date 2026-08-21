@@ -1,3 +1,4 @@
+import { receiveNudge } from '../presence';
 import { useStore } from '../state/store';
 import type { AppSocket } from './socket';
 
@@ -24,6 +25,12 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
   socket.on('player:left', (id) => s().removeRosterEntry(id));
   socket.on('chat:message', (msg) => s().appendChat(msg));
   /**
+   * Alguém te chamou estando ausente. Vai por `presence.ts` (e não direto no
+   * store) porque o chamado também toca o som — e o dono dos efeitos colaterais
+   * de presença é aquele módulo, não este.
+   */
+  socket.on('presence:nudged', (fromId, fromName) => receiveNudge(fromId, fromName));
+  /**
    * Recusado: volta para a tela de entrada com o motivo. Sem isto o cliente
    * ficaria para sempre num mundo vazio esperando um snapshot que não vem.
    */
@@ -36,6 +43,7 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
     socket.removeAllListeners('player:joined');
     socket.removeAllListeners('player:left');
     socket.removeAllListeners('chat:message');
+    socket.removeAllListeners('presence:nudged');
     socket.removeAllListeners('join:denied');
   };
 }

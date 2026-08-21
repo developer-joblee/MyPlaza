@@ -54,6 +54,20 @@ export function AwayIcon() {
   );
 }
 
+/**
+ * Campainha — o chamado de quem está ausente. Sino e não mão levantada: no
+ * tamanho em que isto é desenhado, dedo vira mancha, e sino já significa
+ * "alguém quer sua atenção" sem legenda.
+ */
+export function BellIcon() {
+  return (
+    <svg {...base}>
+      <path d="M18 16V11a6 6 0 0 0-12 0v5l-1.5 2.5h15L18 16Z" />
+      <path d="M10 21h4" />
+    </svg>
+  );
+}
+
 export function ScreenIcon() {
   return (
     <svg {...base}>
