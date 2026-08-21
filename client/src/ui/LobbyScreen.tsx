@@ -178,8 +178,17 @@ export function LobbyScreen() {
 
   const enter = (world: WorldSummary) => {
     if (world.capacity !== null && world.online >= world.capacity) return;
+    // com vínculo isto vai DIRETO para o jogo; sem, para a tela de entrada
     chooseWorld(world);
   };
+
+  /**
+   * Abre a tela de entrada com o vínculo preenchido, para trocar nome, cor ou
+   * personagem neste mundo. Só aparece havendo vínculo: sem ele a tela de
+   * entrada já vai aparecer sozinha, e um botão "Editar" ali prometeria editar
+   * algo que ainda não existe.
+   */
+  const editEntry = (world: WorldSummary) => chooseWorld(world, { edit: true });
 
   return (
     <div className="join-screen">
@@ -260,6 +269,9 @@ export function LobbyScreen() {
                     {w.myRole === 'owner' && ' · você criou'}
                     {w.myRole === 'host' && ' · você administra'}
                     {w.visibility === 'restricted' && ' · restrito'}
+                    {/* com vínculo, "Entrar" não pergunta mais nada — então o
+                        nome que vai ser usado precisa estar à vista aqui */}
+                    {w.binding && ` · como ${w.binding.name}`}
                   </span>
 
                   {invitingId === w.id && (
@@ -306,6 +318,16 @@ export function LobbyScreen() {
                       }
                     >
                       {worldDetail?.worldId === w.id ? 'Fechar' : 'Gerenciar'}
+                    </button>
+                  )}
+                  {w.binding && (
+                    <button
+                      className="join-secondary lobby-action"
+                      type="button"
+                      onClick={() => editEntry(w)}
+                      title="Trocar seu nome, cor ou personagem neste mundo"
+                    >
+                      Editar
                     </button>
                   )}
                   <button

@@ -1,12 +1,18 @@
 import {
+  AVATAR_COLORS,
   CHAT_HISTORY_LIMIT,
+  DEFAULT_CHARACTER,
   type CharacterId,
   type ChatMessage,
   type AssignableWorldRole,
   type PendingInvite,
+  SOUND_VOLUME_DEFAULT,
+  clampVolume,
   type ScenarioId,
   type SentInvite,
+  type UserSound,
   type WorldDetail,
+  type WorldBinding,
   type WorldMember,
   type WorldPatch,
   type WorldRole,
@@ -324,10 +330,28 @@ export async function loadPosition(
   );
 }
 
+/**
+ * Grava a posição **e o vínculo** (nome, cor, personagem) desta pessoa neste
+ * mundo. É a mesma linha e a mesma escrita: `presence_state` já era uma por
+ * (local, perfil) e já guardava `character_id`, então nome e cor não custam
+ * consulta nem tabela nova — ver `db/migrations/0009_world_binding.sql`.
+ *
+ * É por isso que `handlers.ts` chama isto **na entrada** e não só no primeiro
+ * passo: quem entra e sai na mesma hora precisa sair com o vínculo gravado,
+ * senão o mundo pergunta o nome de novo na próxima vez.
+ */
 export async function savePosition(
   placeId: string,
   profileId: string,
-  state: { x: number; y: number; sitting: boolean; away: boolean; character: CharacterId },
+  state: {
+    x: number;
+    y: number;
+    sitting: boolean;
+    away: boolean;
+    character: CharacterId;
+    name: string;
+    color: number;
+  },
 ): Promise<void> {
   await guard(
     'savePosition',
@@ -341,6 +365,8 @@ export async function savePosition(
           sitting: state.sitting,
           away: state.away,
           character_id: state.character,
+          display_name: state.name,
+          avatar_color: state.color,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'place_id,profile_id' },
@@ -620,36 +646,55 @@ export async function recordTokenGrant(grant: {
 // Lobby: listar, criar e convidar. Ver `server/src/lobby.ts` para os handlers.
 // -----------------------------------------------------------------------------
 
+/** O perfil de quem está no lobby: o id, mais a última aparência usada. */
+export interface ProfileRef {
+  id: string;
+  /** nome, cor e personagem da última entrada — prefill de mundo sem vínculo */
+  appearance: WorldBinding;
+}
+
 /**
  * O perfil desta conta, criando com valores padrão se ainda não existe.
  *
  * Diferente de `findOrCreateProfile`: aqui não há nome nem personagem escolhidos
  * (o lobby vem ANTES da tela de entrada), então o nome sai do e-mail. A tela de
  * entrada sobrescreve depois.
+ *
+ * Devolve a **aparência** junto com o id porque o lobby precisa dela para
+ * preencher a tela de entrada de um mundo onde a pessoa ainda não tem vínculo.
+ * Não custa consulta: o `select` já acontecia, só ficou com mais colunas. O
+ * nome tirado do e-mail continua sendo um chute — quem tem vínculo no mundo
+ * nunca vê esse valor, porque o vínculo ganha dele (ver `WorldSummary.binding`).
  */
 export async function ensureProfile(
   authUserId: string,
   email: string | null,
-): Promise<string | null> {
+): Promise<ProfileRef | null> {
   const fallbackName = (email?.split('@')[0] ?? 'Alguém').slice(0, 20) || 'Alguém';
-  return guard<string | null>(
+  const appearanceOf = (row: Record<string, unknown>): WorldBinding => ({
+    name: (row.display_name as string | null) ?? fallbackName,
+    color: Number(row.avatar_color ?? AVATAR_COLORS[0]),
+    character: (row.character_id as CharacterId | null) ?? DEFAULT_CHARACTER,
+  });
+  return guard<ProfileRef | null>(
     'ensureProfile',
     async () => {
       const { data: found, error: findErr } = await client!
         .from('profiles')
-        .select('id')
+        .select('id, display_name, avatar_color, character_id')
         .eq('auth_user_id', authUserId)
         .maybeSingle();
       if (findErr) throw findErr;
-      if (found?.id) return found.id as string;
+      if (found?.id) return { id: found.id as string, appearance: appearanceOf(found) };
 
       const { data: created, error: insErr } = await client!
         .from('profiles')
         .insert({ auth_user_id: authUserId, display_name: fallbackName })
-        .select('id')
+        .select('id, display_name, avatar_color, character_id')
         .single();
       if (insErr) throw insErr;
-      return (created?.id as string | undefined) ?? null;
+      if (!created?.id) return null;
+      return { id: created.id as string, appearance: appearanceOf(created) };
     },
     null,
   );
@@ -703,6 +748,39 @@ export async function listWorldsFor(
     new Map(),
   );
 
+  /**
+   * Meu vínculo em cada mundo — como eu me chamo lá. Uma consulta só para
+   * todos os mundos (o índice é `presence_state_profile_idx`, de 0001).
+   *
+   * Vem do banco e não do cliente porque é o que o `null` significa: "não
+   * existe vínculo aqui" é a única coisa que faz a tela de entrada aparecer, e
+   * um cliente podendo afirmar isso poderia pular a pergunta com nome vazio.
+   * Linha antiga (de antes da 0009) tem `display_name` nulo e conta como sem
+   * vínculo — perguntar uma vez é melhor que entrar com o nome errado.
+   */
+  const myBindings = await guard<Map<string, WorldBinding>>(
+    'listWorldsFor/bindings',
+    async () => {
+      const { data, error } = await client!
+        .from('presence_state')
+        .select('place_id, display_name, avatar_color, character_id')
+        .eq('profile_id', profileId)
+        .not('display_name', 'is', null);
+      if (error) throw error;
+      return new Map(
+        (data ?? []).map((r) => [
+          r.place_id as string,
+          {
+            name: r.display_name as string,
+            color: Number(r.avatar_color ?? AVATAR_COLORS[0]),
+            character: r.character_id as CharacterId,
+          },
+        ]),
+      );
+    },
+    new Map(),
+  );
+
   const orgNames = await guard<Map<string, string>>(
     'listWorldsFor/orgs',
     async () => {
@@ -748,6 +826,7 @@ export async function listWorldsFor(
             capacity: (r.capacity as number | null) ?? null,
             myRole,
             organizationName: orgNames.get(r.organization_id as string) ?? '—',
+            binding: myBindings.get(r.id as string) ?? null,
           };
         });
     },
@@ -1431,6 +1510,301 @@ export async function transferWorldOwnership(
       if (oldErr) throw oldErr;
 
       console.log(`[lobby] propriedade do mundo ${placeId}: ${fromProfileId} -> ${toProfileId}`);
+      return true;
+    },
+    false,
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Soundboard: tempo acumulado, biblioteca de sons e os arquivos no Storage.
+//
+// Tudo aqui é fail-soft como o resto do arquivo. Consequência a ter em mente: um
+// upload que falha devolve `null`, e quem chama traduz para uma recusa na tela —
+// nunca para uma exceção que derrubaria o handler.
+// -----------------------------------------------------------------------------
+
+/** Nome do bucket, criado em `0010_soundboard.sql`. Privado. */
+const SOUND_BUCKET = 'soundboard';
+
+/**
+ * Validade da URL assinada de leitura.
+ *
+ * Longa o bastante para não reassinar a cada toque (o cliente cacheia o áudio
+ * decodificado por `soundId`, mas quem entra depois baixa de novo) e curta o
+ * bastante para um link copiado do DevTools não virar acesso permanente ao
+ * arquivo de outra pessoa. Quatro horas cobre um dia de trabalho com uma
+ * reassinatura no meio.
+ */
+const SOUND_URL_TTL_S = 4 * 60 * 60;
+
+/**
+ * Tempo acumulado **e** volume, numa consulta só.
+ *
+ * Existe separada de `loadPresenceSeconds` porque os dois consumidores são
+ * diferentes: montar o estado do painel precisa das duas colunas, e autorizar um
+ * disparo precisa **só** do tempo — e o disparo é o caminho quente (roda a cada
+ * som tocado), então ele não deve carregar coluna que não usa.
+ */
+export async function loadSoundboardPrefs(
+  profileId: string,
+): Promise<{ presenceSeconds: number; volume: number }> {
+  return guard<{ presenceSeconds: number; volume: number }>(
+    'loadSoundboardPrefs',
+    async () => {
+      const { data, error } = await client!
+        .from('profiles')
+        .select('presence_seconds, soundboard_volume')
+        .eq('id', profileId)
+        .maybeSingle();
+      if (error) throw error;
+      const seconds = Number(data?.presence_seconds ?? 0);
+      return {
+        presenceSeconds: Number.isFinite(seconds) && seconds > 0 ? seconds : 0,
+        volume: clampVolume(data?.soundboard_volume),
+      };
+    },
+    { presenceSeconds: 0, volume: SOUND_VOLUME_DEFAULT },
+  );
+}
+
+/** Grava o volume do soundboard. `false` = não gravou (a tela avisa). */
+export async function saveSoundboardVolume(profileId: string, volume: number): Promise<boolean> {
+  return guard<boolean>(
+    'saveSoundboardVolume',
+    async () => {
+      const { error } = await client!
+        .from('profiles')
+        .update({ soundboard_volume: clampVolume(volume) })
+        .eq('id', profileId);
+      if (error) throw error;
+      return true;
+    },
+    false,
+  );
+}
+
+/** Tempo acumulado desta pessoa, em segundos. 0 quando não há banco. */
+export async function loadPresenceSeconds(profileId: string): Promise<number> {
+  return guard<number>(
+    'loadPresenceSeconds',
+    async () => {
+      const { data, error } = await client!
+        .from('profiles')
+        .select('presence_seconds')
+        .eq('id', profileId)
+        .maybeSingle();
+      if (error) throw error;
+      const raw = Number(data?.presence_seconds ?? 0);
+      return Number.isFinite(raw) && raw > 0 ? raw : 0;
+    },
+    0,
+  );
+}
+
+/**
+ * Credita uma fatia de presença e devolve o total novo.
+ *
+ * Vai por RPC porque o supabase-js não expressa `set x = x + n`: ler-e-escrever
+ * da aplicação perderia crédito com duas abas abertas (as duas leem o mesmo
+ * valor e a segunda escrita sobrescreve a primeira). A função
+ * `app_add_presence_seconds` faz num statement só.
+ */
+export async function addPresenceSeconds(profileId: string, seconds: number): Promise<number> {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  return guard<number>(
+    'addPresenceSeconds',
+    async () => {
+      const { data, error } = await client!.rpc('app_add_presence_seconds', {
+        p_profile: profileId,
+        p_seconds: Math.round(seconds),
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    0,
+  );
+}
+
+/**
+ * Os sons desta pessoa, com URL de leitura já assinada.
+ *
+ * As URLs são assinadas em lote (`createSignedUrls`), e não uma por som: são no
+ * máximo alguns arquivos, mas uma ida por som transformaria abrir o painel em N
+ * chamadas de rede ao Storage. Som cujo arquivo não pôde ser assinado é
+ * **omitido** em vez de vir com url vazia — melhor um slot que aparece livre do
+ * que um botão que não toca nada.
+ */
+export async function listUserSounds(profileId: string): Promise<UserSound[]> {
+  return guard<UserSound[]>(
+    'listUserSounds',
+    async () => {
+      const { data, error } = await client!
+        .from('user_sounds')
+        .select('id, slot, label, storage_path, duration_ms')
+        .eq('profile_id', profileId)
+        .order('slot', { ascending: true });
+      if (error) throw error;
+      const rows = data ?? [];
+      if (rows.length === 0) return [];
+
+      const { data: signed, error: signError } = await client!.storage
+        .from(SOUND_BUCKET)
+        .createSignedUrls(
+          rows.map((r) => String(r.storage_path)),
+          SOUND_URL_TTL_S,
+        );
+      if (signError) throw signError;
+
+      const urlByPath = new Map<string, string>();
+      for (const item of signed ?? []) {
+        if (item.signedUrl && item.path) urlByPath.set(item.path, item.signedUrl);
+      }
+
+      const out: UserSound[] = [];
+      for (const row of rows) {
+        const url = urlByPath.get(String(row.storage_path));
+        if (!url) continue;
+        out.push({
+          id: String(row.id),
+          slot: Number(row.slot),
+          label: String(row.label),
+          url,
+          durationMs: Number(row.duration_ms ?? 0),
+        });
+      }
+      return out;
+    },
+    [],
+  );
+}
+
+/** Um som específico, só se for desta pessoa. `null` = não existe ou não é dela. */
+export async function getUserSound(
+  profileId: string,
+  soundId: string,
+): Promise<UserSound | null> {
+  return guard<UserSound | null>(
+    'getUserSound',
+    async () => {
+      const { data, error } = await client!
+        .from('user_sounds')
+        .select('id, slot, label, storage_path, duration_ms')
+        .eq('profile_id', profileId)
+        .eq('id', soundId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+
+      const { data: signed, error: signError } = await client!.storage
+        .from(SOUND_BUCKET)
+        .createSignedUrl(String(data.storage_path), SOUND_URL_TTL_S);
+      if (signError) throw signError;
+      if (!signed?.signedUrl) return null;
+
+      return {
+        id: String(data.id),
+        slot: Number(data.slot),
+        label: String(data.label),
+        url: signed.signedUrl,
+        durationMs: Number(data.duration_ms ?? 0),
+      };
+    },
+    null,
+  );
+}
+
+/**
+ * Sobe o arquivo e grava a linha. Devolve `false` em qualquer falha.
+ *
+ * A ORDEM importa e é deliberada: **arquivo primeiro, linha depois**. Se a linha
+ * falhar, sobra um arquivo órfão no bucket — invisível, custa bytes, e o próximo
+ * upload no mesmo slot o substitui (o caminho é derivado do slot). O inverso
+ * deixaria uma linha apontando para arquivo que não existe, e aí o som aparece
+ * na grade e não toca — falha visível, e sem conserto automático.
+ *
+ * `upsert: true` no Storage porque o caminho é `<profile>/<slot>.<ext>`: trocar o
+ * som de um slot é sobrescrever, e não acumular arquivo por versão.
+ */
+export async function insertUserSound(
+  profileId: string,
+  slot: number,
+  label: string,
+  mime: string,
+  durationMs: number,
+  bytes: Uint8Array,
+  ext: string,
+): Promise<boolean> {
+  const path = `${profileId}/${slot}.${ext}`;
+  return guard<boolean>(
+    'insertUserSound',
+    async () => {
+      const { error: upError } = await client!.storage
+        .from(SOUND_BUCKET)
+        .upload(path, bytes, { contentType: mime, upsert: true });
+      if (upError) {
+        /**
+         * Nomeia o erro que já custou depuração, no mesmo espírito da sonda de
+         * boot (`supabase.ts`): o Storage recusar um MIME que a whitelist do
+         * `shared` aceita significa que o **bucket** foi criado com uma lista
+         * velha, e reaplicar a `0010` não conserta (o insert dela é `on conflict
+         * do nothing`). Sem esta linha o sintoma é "upload recusado: error" com
+         * o arquivo perfeitamente válido.
+         */
+        if (/mime type/i.test(upError.message)) {
+          console.error(
+            `[db] insertUserSound: o bucket '${SOUND_BUCKET}' não aceita '${mime}'. ` +
+              'A whitelist do bucket está desatualizada — rode `db/migrations/0011_soundboard_wav.sql`.',
+          );
+        }
+        throw upError;
+      }
+
+      const { error } = await client!.from('user_sounds').upsert(
+        {
+          profile_id: profileId,
+          slot,
+          label,
+          storage_path: path,
+          mime,
+          bytes: bytes.byteLength,
+          duration_ms: Math.round(durationMs),
+        },
+        { onConflict: 'profile_id,slot' },
+      );
+      if (error) throw error;
+      return true;
+    },
+    false,
+  );
+}
+
+/**
+ * Apaga o som e o arquivo. Devolve `false` se não era dela (ou não existia).
+ *
+ * Aqui a ordem é a inversa do upload, pela mesma lógica: **linha primeiro**. Se
+ * o arquivo não sair do bucket, sobra órfão invisível; se a linha ficasse,
+ * sobraria um botão que não toca.
+ */
+export async function deleteUserSound(profileId: string, soundId: string): Promise<boolean> {
+  return guard<boolean>(
+    'deleteUserSound',
+    async () => {
+      const { data, error } = await client!
+        .from('user_sounds')
+        .delete()
+        .eq('profile_id', profileId)
+        .eq('id', soundId)
+        .select('storage_path')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return false;
+
+      const { error: rmError } = await client!.storage
+        .from(SOUND_BUCKET)
+        .remove([String(data.storage_path)]);
+      // arquivo órfão não impede o slot de ficar livre: loga e segue
+      if (rmError) console.warn('[db] deleteUserSound: arquivo não removido:', rmError.message);
       return true;
     },
     false,

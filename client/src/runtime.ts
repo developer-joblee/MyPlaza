@@ -1,7 +1,9 @@
 import type { AppSocket } from './net/socket';
+import type { SoundboardApi } from './net/soundboardApi';
 import type { WorldApi } from './net/worldApi';
 import type { VoiceRoom } from './voice/VoiceRoom';
 import type { Game } from './game/Game';
+import type { SoundPlayer } from './soundboard/SoundPlayer';
 
 /**
  * Referências vivas (não-reativas) para objetos criados no GameView,
@@ -16,9 +18,15 @@ export const runtime: {
   api: WorldApi | null;
   voice: VoiceRoom | null;
   game: Game | null;
+  /** fronteira de requisição do soundboard (biblioteca + disparo) */
+  soundApi: SoundboardApi | null;
+  /** quem de fato toca os sons; separado da api porque um é rede, outro é áudio */
+  soundboard: SoundPlayer | null;
 } = {
   socket: null,
   api: null,
   voice: null,
   game: null,
+  soundApi: null,
+  soundboard: null,
 };

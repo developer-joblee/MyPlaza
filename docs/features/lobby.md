@@ -243,7 +243,14 @@ idempotentes (o `place_members` é `upsert`, e a membership existente só tem o
   entrando no mundo), isso vira polling ou um socket persistente.
 - **`lobby:list` cria o perfil** se ainda não existir, com nome tirado do e-mail.
   A tela de entrada sobrescreve depois — então o nome no banco muda no primeiro
-  `join`.
+  `join`. Esse nome de `profiles` deixou de ser identidade e passou a ser o
+  **prefill** (`LobbyState.me`) de um mundo sem vínculo; o nome que vale em cada
+  mundo mora em `presence_state` — ver
+  [Vínculo com o mundo](vinculo-com-o-mundo.md).
+- **Clicar "Entrar" pode não passar pela tela de entrada.** Havendo vínculo com
+  aquele mundo, o lobby vai direto para o jogo, e quem quiser trocar de nome usa
+  o botão **Editar**. Quem mexer no `chooseWorld` do store precisa saber dos dois
+  caminhos.
 - **Nada expira convite automaticamente.** `expires_at` é de 7 dias e é
   respeitado na leitura, mas ninguém limpa as linhas velhas.
 - **Arquivar é reversível só por SQL**: `update places set archived_at = null`.

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { NUDGE_COOLDOWN_MS } from '@together/shared';
+import { BOOBLE_MAX_MEMBERS, NUDGE_COOLDOWN_MS } from '@together/shared';
+import { joinBooble } from '../booble';
 import { nudge } from '../presence';
-import { useStore } from '../state/store';
+import { useStore, type RosterEntry } from '../state/store';
 import { colorToCss } from './util';
 
 export function Hud() {
@@ -10,6 +11,8 @@ export function Hud() {
   const connected = useStore((s) => s.connected);
   const speaking = useStore((s) => s.speaking);
   const nearbyIds = useStore((s) => s.nearbyIds);
+  const selfBooble = useStore((s) => s.selfBooble);
+  const boobleReachIds = useStore((s) => s.boobleReachIds);
   const audioZone = useStore((s) => s.audioZone);
   const canSit = useStore((s) => s.canSit);
 
@@ -32,6 +35,25 @@ export function Hud() {
       }, NUDGE_COOLDOWN_MS),
     );
   };
+
+  /**
+   * Quanta gente há numa booble. Sai do roster porque o roster já é a lista
+   * completa do mundo — contar aqui evita mandar o tamanho pela rede e evita a
+   * janela em que o número enviado envelhece.
+   */
+  const boobleSize = (boobleId: string | null): number =>
+    boobleId === null ? 0 : roster.filter((r) => r.boobleId === boobleId).length;
+
+  const inMyBooble = (p: RosterEntry): boolean =>
+    selfBooble !== null && p.boobleId === selfBooble;
+
+  /**
+   * Dá para entrar na booble desta pessoa? Booble que ela ainda não tem sempre
+   * dá (nasce com dois). O teto é conferido de novo no servidor — esconder o
+   * botão é conforto, não limite (mesma regra do "chamar").
+   */
+  const canJoinBooble = (p: RosterEntry): boolean =>
+    p.boobleId === null || boobleSize(p.boobleId) < BOOBLE_MAX_MEMBERS;
 
   const sorted = [...roster].sort((a, b) =>
     a.id === selfId ? -1 : b.id === selfId ? 1 : a.name.localeCompare(b.name),
@@ -94,9 +116,47 @@ export function Hud() {
                   </button>
                 )}
               </>
-            ) : (
-              p.id !== selfId && nearbyIds.includes(p.id) && <span className="near">voz</span>
-            )}
+            ) : inMyBooble(p) ? (
+              /*
+                Precedência dos micro-badges: ausente > booble > voz. Só um deles
+                pode carregar o `margin-left:auto`, então eles são exclusivos por
+                construção, e a ordem é a da informação mais forte: quem não está
+                ali não conversa; quem está na sua booble você ouve cheio; "voz" é
+                o caso comum e por isso o último.
+              */
+              <span
+                className="booble"
+                title="Na sua booble: vocês se ouvem a 100% e o resto da sala fica a 10%"
+              >
+                booble
+              </span>
+            ) : p.id !== selfId && boobleReachIds.includes(p.id) ? (
+              /*
+                `boobleReachIds`, não `nearbyIds`: o alcance de abrir uma booble
+                é 2 tiles, e o audível é 5. Com o predicado do áudio o botão
+                apareceria para quem está longe demais, e o clique morreria numa
+                recusa silenciosa do servidor.
+              */
+              canJoinBooble(p) ? (
+                <button
+                  type="button"
+                  className="booble-btn"
+                  onClick={() => joinBooble(p.id)}
+                  title={
+                    p.boobleId !== null
+                      ? `Entrar na booble de ${p.name}` +
+                        (selfBooble !== null ? ' (você sai da sua)' : '')
+                      : `Abrir uma booble com ${p.name}: vocês se ouvem a 100% e o resto da sala a 10%`
+                  }
+                >
+                  {p.boobleId !== null ? 'entrar' : 'booble'}
+                </button>
+              ) : (
+                <span className="near">voz</span>
+              )
+            ) : p.id !== selfId && nearbyIds.includes(p.id) ? (
+              <span className="near">voz</span>
+            ) : null}
           </li>
         ))}
       </ul>

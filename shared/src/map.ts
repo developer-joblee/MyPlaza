@@ -122,3 +122,16 @@ export function isSolid(tile: TileType): boolean {
       return false;
   }
 }
+
+/**
+ * Distância em pixels do mundo entre duas posições.
+ *
+ * Trivial, e é justamente por isso que estava copiada: `Math.hypot` inline no
+ * `Game` (duas vezes) e um terceiro lugar quando o servidor passou a precisar
+ * saber quem está perto para entregar um som do soundboard. Uma verdade só sobre
+ * "perto" — o mesmo movimento que `audioZoneAt` já sofreu, pela mesma razão:
+ * servidor e cliente não podem discordar sobre a geometria.
+ */
+export function distancePx(ax: number, ay: number, bx: number, by: number): number {
+  return Math.hypot(bx - ax, by - ay);
+}

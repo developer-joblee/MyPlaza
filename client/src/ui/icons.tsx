@@ -68,6 +68,21 @@ export function BellIcon() {
   );
 }
 
+/**
+ * Booble — duas bolhas sobrepostas. Não são duas pessoas de propósito: silhueta
+ * humana a 22px (e a 15px dentro de um aviso) vira mancha, e o nome da feature
+ * já é "bolha". A sobreposição é o que diz "vocês dois juntos", que é a única
+ * coisa que o ícone precisa comunicar.
+ */
+export function BoobleIcon() {
+  return (
+    <svg {...base}>
+      <circle cx="9.5" cy="9.5" r="6" />
+      <circle cx="16" cy="15.5" r="4.5" />
+    </svg>
+  );
+}
+
 export function ScreenIcon() {
   return (
     <svg {...base}>
@@ -138,6 +153,34 @@ export function WarningIcon() {
       <path d="M12 3.5l8.5 15h-17z" />
       <line x1="12" y1="9.5" x2="12" y2="13.5" />
       <line x1="12" y1="16.4" x2="12" y2="16.5" />
+    </svg>
+  );
+}
+
+/**
+ * Soundboard: uma grade de pastilhas, que é o que a feature *parece* na tela —
+ * e não uma nota musical, que leria como "tocar música" e mandaria procurar um
+ * player. O `off` reusa o `Slash` do mic e do fone, para "sons silenciados"
+ * falar o mesmo idioma visual de "microfone mudo".
+ */
+export function SoundboardIcon({ off }: IconProps) {
+  return (
+    <svg {...base}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      {off && <Slash />}
+    </svg>
+  );
+}
+
+/** Alto-falante pequeno, para o botão de silenciar UMA pessoa na lista do HUD. */
+export function MuteSenderIcon({ off }: IconProps) {
+  return (
+    <svg {...base}>
+      <path d="M11 5 6.5 9H3v6h3.5L11 19z" />
+      {off ? <Slash /> : <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />}
     </svg>
   );
 }

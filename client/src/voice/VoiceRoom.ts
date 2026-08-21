@@ -24,7 +24,7 @@ import type { AppSocket } from '../net/socket';
 import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
-import { volumeForDistance } from './proximity';
+import { audioVolumeFor, type AudioInfo, type PeerAudio } from './proximity';
 import { requestVoiceToken } from '../net/voiceApi';
 
 const VIDEO_RADIUS = PROXIMITY_RADIUS + PROXIMITY_HYSTERESIS;
@@ -60,8 +60,12 @@ export class VoiceRoom {
   private identity: string | null = null;
   private interval: ReturnType<typeof setInterval> | null = null;
   private timers = new Map<string, PeerTimers>();
-  /** distância do último tick, para dar volume certo a uma subscrição nova */
-  private lastDistance = new Map<string, number>();
+  /**
+   * O que o último tick sabia de cada peer, para dar o volume certo a uma
+   * subscrição nova. Guarda o registro inteiro (e não só a distância) porque a
+   * regra de volume passou a depender de zona e booble também.
+   */
+  private lastPeer = new Map<string, PeerAudio>();
   /** elementos <audio> por participante — o SDK não os cria (ver onTrackSubscribed) */
   private audioEls = new Map<string, HTMLAudioElement>();
   /** último ActiveSpeakers cru do servidor (sala inteira, não só quem ouvimos) */
@@ -97,10 +101,7 @@ export class VoiceRoom {
 
   constructor(
     private socket: AppSocket,
-    private getAudioInfo: () => {
-      selfZone: string | null;
-      peers: Map<string, { distance: number; zone: string | null }>;
-    },
+    private getAudioInfo: () => AudioInfo,
     private opts: { micAvailable: boolean; micDeviceId: string | null },
   ) {
     this.micIntent = opts.micAvailable;
@@ -243,7 +244,7 @@ export class VoiceRoom {
     this.identity = null;
     for (const identity of [...this.audioEls.keys()]) this.detachAudio(identity);
     this.timers.clear();
-    this.lastDistance.clear();
+    this.lastPeer.clear();
     this.roomSpeakers.clear();
     this.clearAllSpeaking();
 
@@ -347,12 +348,12 @@ export class VoiceRoom {
       document.body.appendChild(el);
       this.audioEls.set(participant.identity, el);
 
-      // subscrição nova entra com volume 1: sem isto, os primeiros pacotes de
-      // alguém distante chegam a todo volume por um tick (estalo audível)
-      const dist = this.lastDistance.get(participant.identity);
-      const naSala = this.getAudioInfo().selfZone !== null;
+      // subscrição nova entra com o volume que o tick daria: sem isto, os
+      // primeiros pacotes de alguém distante chegam a todo volume por um tick
+      // (estalo audível). Mesma função do tick, de propósito — ver `proximity.ts`.
+      const peer = this.lastPeer.get(participant.identity);
       track.setVolume(
-        this.silenced || dist === undefined ? 0 : naSala ? 1 : volumeForDistance(dist),
+        this.silenced || peer === undefined ? 0 : audioVolumeFor(this.getAudioInfo().self, peer),
       );
     } else if (track instanceof RemoteVideoTrack && pub.source === Track.Source.ScreenShare) {
       // guarda a faixa, não um MediaStream montado à mão: com adaptiveStream o
@@ -387,7 +388,7 @@ export class VoiceRoom {
   private onParticipantLeft = (participant: RemoteParticipant) => {
     this.detachAudio(participant.identity);
     this.timers.delete(participant.identity);
-    this.lastDistance.delete(participant.identity);
+    this.lastPeer.delete(participant.identity);
     this.roomSpeakers.delete(participant.identity);
     useStore.getState().removeRemoteScreen(participant.identity);
     this.setSpeaking(participant.identity, false);
@@ -496,14 +497,18 @@ export class VoiceRoom {
    * O evento do servidor é da sala inteira, mas o anel de "falando" só deve
    * acender para quem está audível — senão aparecem anéis do outro lado do mapa
    * em gente que você não ouve. O local sempre passa.
+   *
+   * "Audível" é literalmente volume maior que zero, tirado da MESMA função que
+   * decide o volume. Antes isto repetia a comparação de zona e raio à mão, e era
+   * o terceiro lugar a divergir quando a regra mudasse — quem se ouve atenuado
+   * através de uma booble ainda é alguém que você ouve, e o anel tem de acender.
    */
   private reconcileSpeaking(): void {
-    const { selfZone, peers } = this.getAudioInfo();
+    const { self, peers } = this.getAudioInfo();
     const want = new Set<string>();
     for (const id of this.roomSpeakers) {
       const p = peers.get(id);
-      const audivel =
-        p !== undefined && p.zone === selfZone && (selfZone !== null || p.distance <= PROXIMITY_RADIUS);
+      const audivel = p !== undefined && audioVolumeFor(self, p) > 0;
       if (id === this.identity || audivel) want.add(id);
     }
     for (const id of this.appliedSpeaking) if (!want.has(id)) this.setSpeaking(id, false);
@@ -527,25 +532,42 @@ export class VoiceRoom {
     const room = this.room;
     if (this.destroyed || !room || !this.socket.connected) return;
 
-    const { selfZone, peers } = this.getAudioInfo();
+    const { self, peers } = this.getAudioInfo();
     const now = performance.now();
 
     /**
-     * A REGRA, num lugar só: você ouve alguém quando estão na mesma zona.
-     *
-     * `null` significa área aberta, então `null === null` faz duas pessoas em
-     * área aberta se ouvirem por proximidade, como antes. Se você está numa
-     * sala e a pessoa não (ou está em outra), os ids diferem e não há áudio —
-     * nem colada na parede. É isso que faz a sala ser fechada.
+     * A REGRA de quanto se ouve de quem mora em `audioVolumeFor`
+     * (`proximity.ts`): zona, distância e booble de uma vez. Aqui ficam apenas
+     * as duas decisões que ela não cobre — em quem gastar o teto de subscrições,
+     * e o portão do vídeo de tela, que é mais apertado que o do áudio.
      */
-    const mesmaZona = (zone: string | null) => zone === selfZone;
+    const mesmaBooble = (booble: string | null) => self.booble !== null && booble === self.booble;
+    const mesmaZona = (zone: string | null) => zone === self.zone;
 
-    // candidatos a áudio: mesma zona e, na área aberta, dentro do raio.
-    // Numa sala a distância não importa: a sala inteira se ouve.
-    const ranked = [...peers.entries()]
-      .filter(([, p]) => mesmaZona(p.zone) && (selfZone !== null || p.distance <= AUDIO_SUBSCRIBE_RADIUS))
-      .sort((a, b) => a[1].distance - b[1].distance)
-      .slice(0, MAX_AUDIO_SUBSCRIPTIONS);
+    /**
+     * Candidatos a subscrição, em duas faixas.
+     *
+     * **Membros da booble primeiro**, ignorando zona e raio: sem stream não
+     * existe "ouvir a 100%", e a sala conecta com `autoSubscribe: false` — quem
+     * atravessou a porta da sala de reunião cairia fora do filtro de zona e
+     * ficaria muda dentro da própria booble. Depois o resto, pela regra de
+     * sempre. Como o teto corta o FIM da lista, quem está na booble nunca é o
+     * sacrificado quando há mais de `MAX_AUDIO_SUBSCRIPTIONS` gente por perto.
+     */
+    const porDistancia = (a: [string, PeerAudio], b: [string, PeerAudio]) =>
+      a[1].distance - b[1].distance;
+    const entries = [...peers.entries()];
+    const ranked = [
+      ...entries.filter(([, p]) => mesmaBooble(p.booble)).sort(porDistancia),
+      ...entries
+        .filter(
+          ([, p]) =>
+            !mesmaBooble(p.booble) &&
+            mesmaZona(p.zone) &&
+            (self.zone !== null || p.distance <= AUDIO_SUBSCRIBE_RADIUS),
+        )
+        .sort(porDistancia),
+    ].slice(0, MAX_AUDIO_SUBSCRIPTIONS);
     const audioWanted = new Set(ranked.map(([id]) => id));
 
     const nearby: string[] = [];
@@ -561,20 +583,30 @@ export class VoiceRoom {
       if (dist === undefined || info === undefined) {
         this.setSubscribed(participant, Track.Source.Microphone, false);
         this.setSubscribed(participant, Track.Source.ScreenShare, false);
-        this.lastDistance.delete(id);
+        this.lastPeer.delete(id);
         continue;
       }
-      this.lastDistance.set(id, dist);
-      // o badge "voz" no HUD tem de refletir a mesma regra, senão mente
-      if (mesmaZona(info.zone) && (selfZone !== null || dist <= PROXIMITY_RADIUS)) nearby.push(id);
+      this.lastPeer.set(id, info);
+      const volume = audioVolumeFor(self, info);
+      /**
+       * O badge "voz" no HUD tem de refletir a mesma regra, senão mente — e
+       * "audível" é volume maior que zero, não um raio repetido à mão. Quem se
+       * ouve a 10% através de uma booble continua sendo alguém que você ouve.
+       * Este é também o predicado que o HUD usa para saber com quem dá para
+       * ABRIR uma booble, e é por isso que ele precisa ser exatamente este.
+       *
+       * O `audioWanted` na conta fecha uma divergência que já existia antes da
+       * booble: passando de `MAX_AUDIO_SUBSCRIPTIONS` pessoas audíveis, as que
+       * sobram do teto ficam sem stream — e o badge dizia "voz" para alguém que
+       * o SFU não está mandando. Volume audível **e** subscrição de verdade.
+       */
+      if (volume > 0 && audioWanted.has(id)) nearby.push(id);
 
       // --- áudio: assina generoso, atenua preciso
       if (!this.silenced && audioWanted.has(id)) {
         timers.audioOutSince = null;
         this.setSubscribed(participant, Track.Source.Microphone, true);
-        // numa sala todos se ouvem igual (quem está na ponta da mesa ouve como
-        // quem está ao lado); na área aberta vale a rampa por distância
-        participant.setVolume(selfZone !== null ? 1 : volumeForDistance(dist));
+        participant.setVolume(volume);
       } else {
         participant.setVolume(0);
         timers.audioOutSince ??= now;
@@ -582,8 +614,17 @@ export class VoiceRoom {
         if (expired) this.setSubscribed(participant, Track.Source.Microphone, false);
       }
 
-      // --- vídeo de tela: portão mais apertado, sem fade a proteger
-      if (mesmaZona(info.zone) && (selfZone !== null || dist <= VIDEO_RADIUS)) {
+      /**
+       * Vídeo de tela: portão mais apertado, sem fade a proteger. Membro da
+       * booble passa pelo mesmo motivo que passa no áudio — "estamos juntos"
+       * tem de valer para a tela também, senão quem atravessa a porta perde o
+       * que o outro está mostrando. Quem está FORA continua na regra de antes:
+       * não existe "ver a tela a 10%".
+       */
+      if (
+        mesmaBooble(info.booble) ||
+        (mesmaZona(info.zone) && (self.zone !== null || dist <= VIDEO_RADIUS))
+      ) {
         timers.videoOutSince = null;
         this.setSubscribed(participant, Track.Source.ScreenShare, true);
       } else {
@@ -650,6 +691,10 @@ export class VoiceRoom {
     this.deafened = deafened;
     useStore.getState().setDeafened(deafened);
     this.applySilence();
+    // som de soundboard também é áudio da sala: ficar surdo corta o que já
+    // está tocando, não só o que vem depois (o filtro do que vem depois está
+    // em `soundboard/index.ts`)
+    if (deafened) runtime.soundboard?.stopAll();
   }
 
   /**
@@ -759,7 +804,7 @@ export class VoiceRoom {
 
   private debugState() {
     const room = this.room;
-    const { selfZone, peers } = this.getAudioInfo();
+    const { self, peers } = this.getAudioInfo();
     return {
       status: useStore.getState().voiceStatus,
       state: room?.state ?? 'sem sala',
@@ -770,7 +815,8 @@ export class VoiceRoom {
       deafened: this.deafened,
       away: this.away,
       silenced: this.silenced,
-      zona: selfZone,
+      zona: self.zone,
+      minhaBooble: self.booble,
       quedas: this.drops.length,
       ultimaQueda: this.drops[this.drops.length - 1] ?? null,
       historico: this.drops,
@@ -781,6 +827,7 @@ export class VoiceRoom {
         identity: p.identity,
         distance: peers.get(p.identity)?.distance ?? null,
         zona: peers.get(p.identity)?.zone ?? null,
+        booble: peers.get(p.identity)?.booble ?? null,
         volume: p.getVolume() ?? null,
         audioSubscribed: p.getTrackPublication(Track.Source.Microphone)?.isSubscribed ?? false,
         videoSubscribed: p.getTrackPublication(Track.Source.ScreenShare)?.isSubscribed ?? false,

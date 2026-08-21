@@ -25,6 +25,28 @@ ordem**:
    fica sem grant e tudo falha com `42501 permission denied`. `BYPASSRLS` **não**
    dispensa privilégio de tabela. Aplique se você já rodou o schema.
 
+9. `migrations/0009_world_binding.sql` — **o vínculo com o mundo guarda o nome**.
+   `presence_state` ganha `display_name` e `avatar_color`, e é isso que faz a
+   tela de entrada parar de pedir o nome a cada login. **Obrigatória depois de
+   atualizar o código**: o servidor passou a gravar essas colunas no mesmo upsert
+   da posição, então sem elas o Postgres recusa a escrita inteira (`42703`) e a
+   **posição salva também para de funcionar** — em silêncio, porque `db.ts` é
+   fail-soft (o motivo aparece como `[db] savePosition` no log). Ver
+   [Vínculo com o mundo](../docs/features/vinculo-com-o-mundo.md).
+
+10. `migrations/0010_soundboard.sql` — **soundboard e tempo acumulado**.
+    `profiles` ganha `presence_seconds`, entra a tabela `user_sounds`, a função
+    `app_add_presence_seconds` e o **bucket privado `soundboard`** no Storage —
+    o primeiro uso de Storage neste projeto. Obrigatória junto com o código do
+    soundboard: sem ela o painel abre vazio e todo upload falha em silêncio
+    (`db.ts` é fail-soft; o motivo aparece como `[db] insertUserSound` no log).
+    Ver [Soundboard](../docs/features/soundboard.md).
+
+    > O `insert into storage.buckets` exige privilégio no schema `storage`. No
+    > SQL Editor do dashboard isso funciona; se você aplica migração por outro
+    > papel e o insert falhar, crie o bucket **privado** chamado `soundboard` à
+    > mão em *Storage → New bucket* — o resto da migração não depende dele.
+
 > As migrações `0007` e `0008` corrigem defeitos que só aparecem contra um
 > Supabase real, e **as duas são obrigatórias** para alguém conseguir entrar.
 > Rode todas com o **mesmo papel** — as *default privileges* da `0008` valem para
@@ -45,9 +67,22 @@ ordem**:
 > Catálogo vazio faz criar perfil falhar com `23503` (foreign key de
 > `profiles.character_id` → `characters`), e ninguém entra. O boot do servidor
 > avisa quando `characters` está vazia.
-7. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+11. `migrations/0011_soundboard_wav.sql` — **o bucket passa a aceitar `audio/wav`**.
+    Necessária para quem aplicou a `0010` antes do corte automático de áudio
+    existir: o `insert into storage.buckets` da `0010` é `on conflict do nothing`,
+    então reaplicá-la **não** atualiza a whitelist de um bucket que já existe. Sem
+    esta migração, subir um áudio que precisou ser cortado falha com
+    `mime type audio/wav is not supported` no log do servidor. Quem aplica do zero
+    roda as duas e fica igual.
 
-O passo 7 **não é opcional**: sem as linhas de `characters`, `scenarios` e
+12. `migrations/0012_soundboard_volume.sql` — **volume do soundboard no perfil**.
+    `profiles` ganha `soundboard_volume` (0..100, default 70). Sem ela o painel
+    mostra o slider mas o valor não sobrevive ao recarregar — o `db.ts` é
+    fail-soft, então a falha aparece só como `[db] saveSoundboardVolume` no log.
+
+13. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+
+O passo 13 **não é opcional**: sem as linhas de `characters`, `scenarios` e
 `audio_zones` os FKs de `profiles`, `places`, `sessions`, `presence_state` e
 `zone_visits` não fecham, e o servidor falha em toda escrita.
 
@@ -78,7 +113,7 @@ VITE_SUPABASE_ANON_KEY=...    # Project Settings > API > anon (secret-scan:ignor
 ## Conferindo que pegou
 
 ```sql
--- 15 tabelas, todas com RLS ligada
+-- 16 tabelas, todas com RLS ligada (a 16ª é `user_sounds`, da 0010)
 select tablename, rowsecurity from pg_tables
 where schemaname = 'public' order by tablename;
 

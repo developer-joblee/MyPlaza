@@ -3,7 +3,16 @@ import { setAway } from '../presence';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { AudioSettings } from './AudioSettings';
-import { AwayIcon, HangupIcon, HeadphonesIcon, MicIcon, ScreenIcon, SlidersIcon } from './icons';
+import { SoundboardPanel } from './SoundboardPanel';
+import {
+  AwayIcon,
+  HangupIcon,
+  HeadphonesIcon,
+  MicIcon,
+  ScreenIcon,
+  SlidersIcon,
+  SoundboardIcon,
+} from './icons';
 
 export function MediaControls() {
   const micAvailable = useStore((s) => s.micAvailable);
@@ -16,9 +25,14 @@ export function MediaControls() {
   const selfId = useStore((s) => s.selfId);
   const leave = useStore((s) => s.leave);
 
+  const soundboardMuted = useStore((s) => s.soundboardMuted);
+  const authEmail = useStore((s) => s.authEmail);
+
   // visibilidade de painel é estado local (o Chat já faz assim), não da store
   const [open, setOpen] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const boardTriggerRef = useRef<HTMLButtonElement>(null);
 
   const voiceOff = voiceStatus === 'unavailable';
   // ausente conta como mic desligado no ícone: é o que está acontecendo de fato
@@ -35,6 +49,21 @@ export function MediaControls() {
     setOpen(false);
     triggerRef.current?.focus();
   };
+  const closeBoard = () => {
+    setBoardOpen(false);
+    boardTriggerRef.current?.focus();
+  };
+  /**
+   * Sem conta não há soundboard: o tempo acumulado e o arquivo no Storage
+   * pendem do perfil, e o modo anônimo não tem perfil. Desabilitar com título
+   * explicativo é melhor que esconder — escondido, a feature parece não existir.
+   */
+  const boardAvailable = Boolean(authEmail);
+  const boardTitle = boardAvailable
+    ? soundboardMuted
+      ? 'Soundboard (sons de outras pessoas silenciados)'
+      : 'Soundboard'
+    : 'O soundboard precisa de conta (este servidor está em modo anônimo)';
 
   const micTitle = away
     ? 'Você está ausente — volte para usar o microfone'
@@ -49,6 +78,7 @@ export function MediaControls() {
   return (
     <>
       {open && <AudioSettings onClose={close} />}
+      {boardOpen && <SoundboardPanel onClose={closeBoard} />}
       <div className="panel media-controls">
         <button
           type="button"
@@ -117,6 +147,21 @@ export function MediaControls() {
           <SlidersIcon />
           {voiceStatus === 'reconnecting' && <span className="media-btn-badge busy" aria-hidden="true" />}
           {voiceStatus === 'error' && <span className="media-btn-badge error" aria-hidden="true" />}
+        </button>
+
+        <button
+          ref={boardTriggerRef}
+          type="button"
+          className={`media-btn${boardOpen ? ' open' : ''}${soundboardMuted ? ' off' : ''}`}
+          onClick={() => setBoardOpen((v) => !v)}
+          disabled={!boardAvailable}
+          aria-label={boardTitle}
+          aria-expanded={boardOpen}
+          aria-haspopup="dialog"
+          aria-controls="soundboard-popover"
+          title={boardTitle}
+        >
+          <SoundboardIcon off={soundboardMuted} />
         </button>
 
         {/* a divisória isola a ação destrutiva dos controles que se alternam */}

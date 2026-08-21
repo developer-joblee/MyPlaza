@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 import { PROXIMITY_RADIUS, TILE_SIZE } from '@together/shared';
+import { AwayIndicator } from './AwayIndicator';
 import type { CharacterFrames, Facing, SitFacing } from './sprites';
 
 const NAME_STYLE = new TextStyle({
@@ -28,6 +29,8 @@ export class Avatar {
   /** só o player local tem: o círculo de alcance de voz */
   private proximityRing: Graphics | null = null;
   private label: Text;
+  /** criado só na primeira ausência — ver setAway */
+  private awayIndicator: AwayIndicator | null = null;
 
   private facing: Facing = 'down';
   private moving = false;
@@ -124,13 +127,42 @@ export class Avatar {
    * Ausente: mexendo no celular. Ganha das outras poses de propósito — é a
    * informação mais útil para quem olha (a pessoa não está ali), e vale mesmo
    * se ela ficou ausente sentada.
+   *
+   * Além da pose, liga o `AwayIndicator`: a telinha com o feed rolando e a
+   * pastilha "ausente" acima do nome. Local, remotos e o snapshot de entrada
+   * passam todos por aqui, então os três casos ficam cobertos de uma vez.
    */
   setAway(away: boolean): void {
     if (this.away === away) return;
     this.away = away;
     this.frameIndex = 0;
     this.frameTimer = 0;
+    /**
+     * Criado na primeira ausência, não no construtor: a maioria dos avatares
+     * nunca fica ausente, e o indicador custa um `Text` e sete `Graphics` cada.
+     * A posição sai do próprio nome, para a pastilha encostar nele em qualquer
+     * personagem (o `labelY` varia por sheet).
+     */
+    if (away && !this.awayIndicator) {
+      this.awayIndicator = new AwayIndicator(this.label.y - this.label.height);
+      this.view.addChild(this.awayIndicator.view);
+    }
+    this.awayIndicator?.setVisible(away);
   }
+
+  /*
+   * A booble NÃO desenha nada no avatar de propósito.
+   *
+   * A primeira versão tinha uma pastilha "booble" aqui, no molde da de ausente.
+   * Ela foi trocada por um círculo no chão em volta do GRUPO
+   * (`game/BoobleRings.ts`), porque a informação que importa numa booble é
+   * "quem está com quem", e isso é uma relação — uma pastilha por cabeça obriga
+   * quem olha a ler três etiquetas e concluir o grupo por conta própria. O
+   * círculo cresce quando alguém entra, então também mostra o tamanho.
+   *
+   * Por isso o avatar não sabe da booble: quem sabe é o `Game`, que tem as
+   * posições de todo mundo — que é o que um desenho de grupo precisa.
+   */
 
   /** Avança a animação. Chamar a cada frame do ticker. */
   update(dt: number): void {
@@ -154,6 +186,7 @@ export class Avatar {
       this.frameIndex++;
     }
     this.sprite.texture = set[this.frameIndex % set.length];
+    this.awayIndicator?.update(dt);
   }
 
   /**

@@ -66,7 +66,7 @@ avisa sobre os passos 3 a 5.
 1. **`.env` na raiz** com as cinco variáveis do Supabase (bloco acima).
 2. **Confira que nenhuma delas está exportada no shell** — o shell sobrepõe o
    `.env` em silêncio (aviso acima). Sintoma: "está no `.env` e não funciona".
-3. **Migrações, na ordem, em [`db/README.md`](db/README.md): `0001` → `0008`.**
+3. **Migrações, na ordem, em [`db/README.md`](db/README.md): `0001` → `0009`.**
    As `0007` e `0008` corrigem defeitos que só aparecem contra um Supabase real e
    **as duas são obrigatórias** — sem elas ninguém entra. Rode todas com o
    **mesmo papel**.
@@ -102,6 +102,8 @@ Depende de haver Supabase configurado:
 ```
 sem Supabase:   entrada (nome, personagem, cor, cenário) -> jogo
 com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
+                login -> lobby -----------------------------------> jogo
+                         (mundo em que você já entrou: o nome está guardado)
 ```
 
 - **login** — e-mail e senha. Criar conta **entra na hora**: não há confirmação,
@@ -110,7 +112,10 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
   passa para ser adicionado a um mundo de outra pessoa) e criar mundo. Quem criou
   o mundo administra: adicionar gente pelo ID, papéis, lotação, arquivar.
 - **entrada** — nome, personagem e cor. O cenário vem do mundo escolhido no
-  lobby, então o seletor de cenário só aparece no modo anônimo.
+  lobby, então o seletor de cenário só aparece no modo anônimo. **Só aparece na
+  primeira vez em cada mundo**: depois disso o nome fica guardado no vínculo com
+  aquele mundo e "Entrar" vai direto para o jogo, mesmo depois de um logout — ver
+  [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md).
 
 ## Controles
 
@@ -121,9 +126,11 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Falar | Chegue a até ~5 tiles de alguém (círculo claro ao redor do seu avatar) — o volume cai com a distância |
 | Mutar microfone | Botão 🎙️ na barra inferior |
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
-| Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular. Andar volta ao normal. Suas preferências de microfone e fone são preservadas |
+| Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular, com um feed rolando ao lado da cabeça e a pastilha **ausente** acima do nome. Andar volta ao normal, e suas preferências de microfone e fone são preservadas — ver [Modo ausente (celular)](docs/features/modo-ausente.md) |
 | Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
+| Conversa paralela (**booble**) | Chegue **ao lado** de alguém (2 tiles) e clique em **booble** na lista. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 10% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
+| Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Chat | Painel no canto inferior direito (global) |
 
 ## Features
@@ -138,9 +145,11 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 |---|---|---|
 | Voz por proximidade | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `voice/proximity.ts` |
 | Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
+| Booble (conversa paralela: dentro 100%, fora 10%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `server/src/world.ts` |
+| Soundboard gamificado (sons próprios, liberados por tempo na plataforma) | [Soundboard gamificado](docs/features/soundboard.md) | `client/src/soundboard/`, `server/src/soundboard.ts`, `shared/src/levels.ts` |
 | Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
 | Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
-| Modo ausente (celular) | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/ui/MediaControls.tsx`, `client/src/game/Avatar.ts` |
+| Modo ausente (celular) | [Modo ausente (celular)](docs/features/modo-ausente.md) | `client/src/presence.ts`, `client/src/game/AwayIndicator.ts`, `client/src/ui/MediaControls.tsx` |
 | Chamado de quem está ausente ("toc-toc") | [Chamado de quem está ausente](docs/features/chamado-ausente.md) | `client/src/presence.ts`, `client/src/ui/knock.ts`, `server/src/handlers.ts` |
 | Sentar em cadeiras | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/game/LocalPlayer.ts`, `client/src/game/characterDefs.ts` |
 | Cenários e mapas ASCII | [Editando o mapa](#editando-o-mapa) *(sem doc próprio ainda)* | `shared/src/scenarios.ts`, `client/src/game/*Tilemap.ts` |
@@ -148,13 +157,15 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Persistência (Supabase): perfis, empresas, locais, posição salva e atividade da sessão | [Persistência (Supabase)](docs/features/persistencia-supabase.md) | `db/`, `server/src/db.ts` |
 | Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
 | Lobby: criar mundos e convidar pessoas | [Lobby](docs/features/lobby.md) | `client/src/ui/LobbyScreen.tsx`, `server/src/lobby.ts` |
+| Vínculo com o mundo (o nome fica guardado; entrar direto depois do logout) | [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md) | `db/migrations/0009_world_binding.sql`, `client/src/state/store.ts`, `server/src/db.ts` |
 | Camada de requisição (client → servidor) | [Camada de requisição](docs/features/camada-de-requisicao.md) | `client/src/net/` |
 
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As cinco com doc (persistência, autenticação, lobby, camada de
-> requisição e chamado de ausente) já seguem a convenção.
+> resumo e o link. As nove com doc (persistência, autenticação, lobby, camada de
+> requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble e
+> soundboard) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 
@@ -228,6 +239,15 @@ db/       schema do Supabase em SQL, aplicado à mão por enquanto
   o `socket.id`, o que faz o mapa de distâncias do jogo casar 1:1 com os
   participantes. Assina num raio 2,5× maior que o audível: nessa faixa o volume
   já é 0, então a conexão fica pré-carregada e não há corte ao se aproximar.
+  A regra de quanto se ouve de quem — proximidade, zona e booble — é uma função
+  pura em `voice/proximity.ts`, e é dela que saem também o badge `voz` e o anel
+  de "falando".
+- **Soundboard**: sons curtos do próprio usuário, tocados para quem está perto.
+  **Não** passam pelo LiveKit: o servidor escolhe quem recebe (posição, zona e
+  booble) e cada navegador baixa o arquivo do Supabase Storage e toca em WebAudio,
+  aplicando o volume pela **mesma** função de audibilidade da voz. Quantos sons
+  cada pessoa tem é liberado pelo tempo acumulado na plataforma. Ver
+  [Soundboard gamificado](docs/features/soundboard.md).
 - **Tela compartilhada**: publicada como `ScreenShare` no LiveKit; o consumo usa
   `track.attach()` (obrigatório com `adaptiveStream`, senão o servidor para de
   encaminhar e a tela fica preta). Some quando o peer sai do alcance.
@@ -298,6 +318,20 @@ antes, 100% por proximidade — hoje só o Estúdio tem zonas (reunião e copa).
 
 Dentro de uma sala o círculo de alcance do avatar desaparece (ele mentiria, já
 que o alcance passa a ser a sala) e o HUD mostra o nome dela.
+
+### A regra completa vive num lugar só
+
+Zona, distância **e** booble são decididas por `audioVolumeFor()`, em
+`client/src/voice/proximity.ts`. O tick da voz usa o número que ela devolve para
+três coisas ao mesmo tempo — o volume, o badge `voz` do HUD e o anel de "falando"
+—, então os três não podem discordar. Se você for mexer em audibilidade, é ali.
+
+A **[booble](docs/features/booble.md)** é a terceira camada: um grupo ad-hoc que
+*prioriza* em vez de isolar (dentro 100%, fora 10%, nos dois sentidos) e que
+**atravessa** a parede de uma zona depois de formado — mas só se forma entre
+pessoas na mesma zona, justamente para não furar o parágrafo acima. Os raios dela
+são de cochicho (2 tiles para entrar, 3 para permanecer), bem menores que os
+5 tiles audíveis.
 
 > Quem impõe é o SFU: fora da zona o cliente desassina e o servidor **para de
 > enviar** aquele áudio — não é volume zero com o som chegando. Mas quem pede a

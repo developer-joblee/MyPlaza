@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   JoinDeniedReason,
   LobbyResult,
+  SoundboardResult,
   PlayerState,
   VoiceTokenResponse,
   WorldPatch,
@@ -28,6 +29,37 @@ export interface ServerToClientEvents {
    * único canal que atravessa esse silêncio.
    */
   'presence:nudged': (fromId: string, fromName: string) => void;
+  /**
+   * A **booble** desta pessoa mudou (`null` = saiu de todas). Vai para o mundo
+   * inteiro, incluindo quem mudou: o id da booble é cunhado no servidor, então
+   * não há atualização otimista possível no cliente — e como todo mundo desenha
+   * a pastilha no avatar e o selo na lista, todo mundo precisa saber.
+   *
+   * Um evento por player que mudou. Entrar numa booble pode mudar dois (você e
+   * quem você chamou, quando ela nasce) ou três (mais quem ficou sozinho na
+   * booble que você abandonou, e por isso ela se dissolveu).
+   */
+  'player:booble': (id: string, boobleId: string | null) => void;
+  /**
+   * Alguém perto de você tocou um som do soundboard dela.
+   *
+   * Vai **só para quem pode ouvir** — o servidor filtra pelos destinatários
+   * (perto, na mesma zona, ou na mesma booble) em vez de difundir para o mundo
+   * e deixar o cliente decidir. Difundir mandaria o evento para gente que não
+   * deveria nem saber que aconteceu, e um cliente adulterado ouviria o mapa
+   * inteiro.
+   *
+   * `url` é assinada e temporária; a identidade estável é o `soundId`, que é a
+   * chave do cache de áudio do cliente. Quem recebe aplica o volume pela MESMA
+   * função da voz (`audioVolumeFor`), então o som respeita parede e booble sem
+   * uma segunda regra de audibilidade.
+   */
+  'soundboard:played': (
+    fromId: string,
+    fromName: string,
+    soundId: string,
+    url: string,
+  ) => void;
   /**
    * A entrada foi recusada e o `world:snapshot` não vem. O cliente volta para a
    * tela de entrada com o motivo — sem isto ele ficaria esperando para sempre.
@@ -90,6 +122,31 @@ export interface ClientToServerEvents {
    * deve virar sonda de presença.
    */
   'presence:nudge': (targetId: string) => void;
+  /**
+   * Entra na booble desta pessoa, criando uma com vocês dois se ela ainda não
+   * tiver nenhuma. Um evento só para os três casos (criar, entrar numa
+   * existente, trocar da minha para a dela), porque do ponto de vista de quem
+   * clica é sempre a mesma intenção: "quero conversar com essa pessoa".
+   *
+   * Sem ack, como os outros eventos de mundo: o efeito volta como
+   * `player:booble`. As recusas são **em silêncio**, e são estas — alvo fora do
+   * mundo, alvo inexistente, alvo sendo eu mesmo, alvo (ou eu) ausente, alvo
+   * longe demais (`BOOBLE_JOIN_RADIUS`), alvo em OUTRA zona de áudio, ou booble
+   * já cheia (`BOOBLE_MAX_MEMBERS`).
+   *
+   * Entrar exige mesma zona, mas **permanecer não** — é assimétrico de
+   * propósito. Se dava para entrar atravessando a parede, quem está fora de uma
+   * sala fechada poderia puxar quem está dentro, e some a promessa "para ouvir,
+   * precisa entrar" que é a razão de existir das zonas. Formada a booble, ela
+   * atravessa a porta junto com as pessoas.
+   */
+  'booble:join': (targetId: string) => void;
+  /**
+   * Sai da minha booble. Sem argumento: só se sai da própria, e o servidor já
+   * sabe qual é. Se sobrar uma pessoa só, ela também sai — booble de um não
+   * prioriza nada, apenas baixaria a sala inteira para quem ficou.
+   */
+  'booble:leave': () => void;
   /**
    * Pede credenciais de voz. Só por ack — sem payload, para o cliente não
    * poder influenciar sala nem identidade (ambas vêm do socket no servidor).
@@ -200,4 +257,65 @@ export interface ClientToServerEvents {
 
   /** Cancela um convite que ainda não foi aceito. */
   'lobby:revokeInvite': (inviteId: string, ack: (res: LobbyResult) => void) => void;
+
+  // ---------------------------------------------------------- soundboard
+  //
+  // Sons curtos que a pessoa sobe e toca para quem está perto. As três
+  // operações de biblioteca são por ack (são raras, uma por clique, e a tela
+  // precisa saber por que falhou); o disparo é sem ack, como todo evento de
+  // mundo. Ver `docs/features/soundboard.md`.
+  //
+  // Nenhuma aceita identidade no payload: quem está pedindo sai do token
+  // verificado no handshake, igual ao `join` e ao lobby.
+
+  /** Meus sons, meu tempo acumulado e o que falta para o próximo slot. */
+  'soundboard:list': (ack: (res: SoundboardResult) => void) => void;
+
+  /**
+   * Sobe um som para um slot.
+   *
+   * Os bytes vêm por aqui, e não por uma rota HTTP, porque o servidor não tem
+   * roteador: o `index.ts` é `node:http` cru servindo `client/dist`, com
+   * fallback de SPA que responderia `200 index.html` a um endpoint mal roteado.
+   * E não vão direto do navegador para o Storage porque o invariante do banco é
+   * "só o servidor escreve" (`0002_rls.sql`): upload direto exigiria abrir
+   * política de INSERT em `storage.objects`.
+   *
+   * O servidor confere MIME, bytes (`SOUND_MAX_BYTES`) e se o slot está
+   * liberado pelo tempo acumulado. **A duração é conferida no cliente** — medir
+   * 5s no servidor exigiria decodificar áudio em Node, ou seja, dependência
+   * nova; o teto de bytes é o limite duro deste lado.
+   */
+  'soundboard:upload': (
+    slot: number,
+    label: string,
+    mime: string,
+    durationMs: number,
+    bytes: ArrayBuffer,
+    ack: (res: SoundboardResult) => void,
+  ) => void;
+
+  /**
+   * Muda o volume com que eu ouço o soundboard (0..`SOUND_VOLUME_MAX`).
+   *
+   * Por ack como as outras operações de biblioteca, e não como evento de mundo:
+   * é escrita no perfil, e a tela precisa saber se pegou. O cliente aplica o
+   * volume **na hora** e manda depois (com debounce, senão arrastar o slider
+   * seria uma escrita por pixel) — o ack só confirma a persistência.
+   */
+  'soundboard:setVolume': (volume: number, ack: (res: SoundboardResult) => void) => void;
+
+  /** Apaga um som meu (o arquivo sai do Storage junto). Libera o slot. */
+  'soundboard:remove': (soundId: string, ack: (res: SoundboardResult) => void) => void;
+
+  /**
+   * Toca um som meu para quem está perto. Sem ack, como os outros eventos de
+   * mundo: o efeito acontece na tela das outras pessoas, não aqui.
+   *
+   * Recusado **em silêncio** quando o som não é meu, quando o slot deixou de
+   * estar liberado, ou quando o cooldown (`SOUND_COOLDOWN_MS`) ainda corre —
+   * recusa calada é a convenção do `presence:nudge`, pelo mesmo motivo: a
+   * resposta a "consegui?" não deve virar sonda de quem está onde.
+   */
+  'soundboard:play': (soundId: string) => void;
 }

@@ -10,6 +10,7 @@ import {
   type ScenarioId,
   type ServerToClientEvents,
   type AssignableWorldRole,
+  type WorldBinding,
   type WorldDetail,
   type WorldPatch,
   type WorldRole,
@@ -69,6 +70,13 @@ type IoServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string
 interface LobbyIdentity {
   authUser: AuthUser;
   profileId: string;
+  /**
+   * A última aparência que esta pessoa usou (de `profiles`). Serve de prefill
+   * para a tela de entrada de um mundo **sem** vínculo — ver `LobbyState.me`.
+   * Cachear junto com o id é seguro: para mudar de aparência é preciso entrar
+   * num mundo, e entrar num mundo fecha o socket do lobby.
+   */
+  appearance: WorldBinding;
 }
 
 /**
@@ -100,8 +108,8 @@ export function registerLobbyHandlers(io: IoServer, socket: IoSocket): void {
     if (!token) return { ok: false, reason: 'auth-required' };
     const authUser = await verifyAccessToken(token);
     if (!authUser) return { ok: false, reason: 'invalid-token' };
-    const profileId = await ensureProfile(authUser.id, authUser.email);
-    if (!profileId) {
+    const profile = await ensureProfile(authUser.id, authUser.email);
+    if (!profile) {
       /**
        * O token é VÁLIDO — o Supabase já disse de quem é. O que falhou foi o
        * banco, criando ou lendo o perfil. Isto tem log próprio porque a
@@ -115,7 +123,7 @@ export function registerLobbyHandlers(io: IoServer, socket: IoSocket): void {
       );
       return { ok: false, reason: 'error' };
     }
-    identity = { authUser, profileId };
+    identity = { authUser, profileId: profile.id, appearance: profile.appearance };
     return { ok: true, me: identity };
   }
 
@@ -132,6 +140,8 @@ export function registerLobbyHandlers(io: IoServer, socket: IoSocket): void {
       invites,
       // o ID que a pessoa passa a quem administra um mundo para ser adicionada
       myId: me.profileId,
+      // prefill da tela de entrada quando o mundo escolhido não tem vínculo
+      me: me.appearance,
     };
   }
 
@@ -223,7 +233,9 @@ export function registerLobbyHandlers(io: IoServer, socket: IoSocket): void {
         capacity = n;
       }
 
-      const displayName = (me.authUser.email?.split('@')[0] ?? 'Alguém').slice(0, NAME_MAX_LENGTH);
+      // o nome que a pessoa já usa, e não o e-mail picado: é o mesmo valor
+      // quando ela nunca escolheu nada, e o nome de verdade quando escolheu
+      const displayName = me.appearance.name.slice(0, NAME_MAX_LENGTH);
       const orgId = await ensureOrgForNewWorld(me.profileId, displayName);
       if (!orgId) return 'error';
       const worldId = await createWorld(me.profileId, orgId, name, scenarioId, capacity);

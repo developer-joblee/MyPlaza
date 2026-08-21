@@ -10,6 +10,7 @@ import {
 } from '@together/shared';
 import { registerHandlers, type SocketData } from './handlers';
 import { registerLobbyHandlers } from './lobby';
+import { registerSoundboardHandlers } from './soundboard';
 
 const PORT = Number(process.env.PORT) || SERVER_PORT;
 
@@ -80,6 +81,8 @@ io.on('connection', (socket) => {
   // o lobby usa o mesmo socket que o mundo usaria, mas é outra fase da vida
   // dele: aqui ninguém entrou em lugar nenhum ainda
   registerLobbyHandlers(io, socket);
+  // soundboard: biblioteca por ack + o disparo para quem está perto
+  registerSoundboardHandlers(io, socket);
 });
 
 httpServer.listen(PORT, () => {

@@ -2,8 +2,10 @@ import { useEffect, useRef } from 'react';
 import { Game } from '../game/Game';
 import { bindStoreToSocket } from '../net/bindStore';
 import { createSocket } from '../net/socket';
+import { createSoundboardApi } from '../net/soundboardApi';
 import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
+import { createSoundPlayer } from '../soundboard';
 import { useStore } from '../state/store';
 import { listMics, loadMicPreference, probeMic } from '../voice/mic';
 import type { VoiceRoom } from '../voice/VoiceRoom';
@@ -30,6 +32,10 @@ export function GameView() {
     // `presence.ts` chegam nela por aqui
     const api = createWorldApi(() => runtime.socket);
     runtime.api = api;
+    // o soundboard tem fronteira própria (é outro conjunto de eventos) e um
+    // player de áudio próprio, que não passa pelo LiveKit
+    runtime.soundApi = createSoundboardApi(() => runtime.socket);
+    const soundPlayer = createSoundPlayer();
     const unbindStore = bindStoreToSocket(socket);
 
     let cancelled = false;
@@ -100,6 +106,7 @@ export function GameView() {
       if (onConnect) socket.off('connect', onConnect);
       if (onDisconnect) socket.off('disconnect', onDisconnect);
       voice?.destroy(); // invalida awaits em vôo e solta o microfone
+      soundPlayer.destroy(); // corta som em vôo e fecha o AudioContext
       game?.destroy();
       unbindStore();
       socket.disconnect();
@@ -107,6 +114,8 @@ export function GameView() {
       runtime.api = null;
       runtime.game = null;
       runtime.voice = null;
+      runtime.soundApi = null;
+      runtime.soundboard = null;
     };
   }, []);
 

@@ -1,10 +1,12 @@
 import { Application, Container } from 'pixi.js';
 import {
+  BOOBLE_JOIN_RADIUS,
   DEFAULT_CHARACTER,
   SCENARIOS,
   TICK_RATE,
   TILE_SIZE,
   audioZoneAt,
+  distancePx,
   parseMap,
   type CharacterId,
   type PlayerState,
@@ -25,6 +27,8 @@ import { LocalPlayer } from './LocalPlayer';
 import { RemotePlayer } from './RemotePlayer';
 import { loadAllCharacterFrames, type CharacterFrames } from './sprites';
 import { loadTilesets, type Tilesets } from './tilesets';
+import { BoobleRings, type RingMember } from './BoobleRings';
+import type { AudioInfo, PeerAudio } from '../voice/proximity';
 
 const CAMERA_LERP_RATE = 8;
 const SEND_INTERVAL = 1 / TICK_RATE;
@@ -36,10 +40,20 @@ export class Game {
   private app: Application;
   private world = new Container();
   private playersLayer = new Container();
+  /** decalques de chão das boobles — fica ABAIXO dos avatares (ver o construtor) */
+  private boobleRings = new BoobleRings();
   private tilemap: TilemapBase;
   private keyboard = new Keyboard();
   private local: LocalPlayer;
   private remotes = new Map<string, RemotePlayer>();
+  /**
+   * Booble de cada remoto, e a minha. Mapa próprio em vez de ler o roster do
+   * store porque isto é consultado no caminho quente (`getAudioInfo`, 4x/s) e
+   * porque o roster é um array — varrê-lo por id a cada peer seria O(n²) por um
+   * dado que já chega por evento.
+   */
+  private boobles = new Map<string, string | null>();
+  private selfBooble: string | null = null;
   private sendAccumulator = 0;
   private lastSent = { x: NaN, y: NaN };
   private camX = 0;
@@ -52,6 +66,8 @@ export class Game {
   private lastZone: string | null | undefined = undefined;
   /** idem para a dica de sentar */
   private lastSitPrompt: boolean | undefined = undefined;
+  /** idem para quem está ao alcance de abrir uma booble */
+  private lastBoobleReach = '';
   private unbinders: Array<() => void> = [];
 
   /** Ver a nota em `VoiceRoom`: getter, porque o campo inicializa antes do socket. */
@@ -83,7 +99,9 @@ export class Game {
     this.local = new LocalPlayer(this.framesFor(selfCharacter), selfName, selfColor);
 
     this.playersLayer.sortableChildren = true;
-    this.world.addChild(this.tilemap.view, this.playersLayer);
+    // o círculo da booble entra entre o mapa e os avatares: é marca no chão,
+    // então tem de passar por baixo de quem está em cima dela
+    this.world.addChild(this.tilemap.view, this.boobleRings.view, this.playersLayer);
     this.playersLayer.addChild(this.local.avatar.view);
     for (const prop of this.tilemap.props) this.playersLayer.addChild(prop);
     this.app.stage.addChild(this.world);
@@ -102,10 +120,24 @@ export class Game {
    * coisas que passam batido no olho: se o personagem escolhido por cada um
    * chegou aos outros clientes, e se esquerda e direita usam recortes distintos.
    */
-  private avatarsDebug(): Array<{ id: string; self: boolean } & ReturnType<Avatar['debugFrame']>> {
+  private avatarsDebug(): Array<
+    { id: string; self: boolean; booble: string | null } & ReturnType<Avatar['debugFrame']>
+  > {
     return [
-      { id: this.socket.id ?? '', self: true, ...this.local.avatar.debugFrame() },
-      ...[...this.remotes].map(([id, r]) => ({ id, self: false, ...r.avatar.debugFrame() })),
+      {
+        id: this.socket.id ?? '',
+        self: true,
+        // a booble sai daqui e não do Avatar: o desenho dela é de grupo, então o
+        // avatar não a conhece (ver o comentário em `Avatar`)
+        booble: this.selfBooble,
+        ...this.local.avatar.debugFrame(),
+      },
+      ...[...this.remotes].map(([id, r]) => ({
+        id,
+        self: false,
+        booble: this.boobles.get(id) ?? null,
+        ...r.avatar.debugFrame(),
+      })),
     ];
   }
 
@@ -180,11 +212,15 @@ export class Game {
       // reset completo (cobre também reconexões)
       for (const remote of this.remotes.values()) remote.avatar.destroy();
       this.remotes.clear();
+      this.boobles.clear();
 
       for (const p of players) {
         if (p.id === this.socket.id) {
           this.local.setPosition(p.x, p.y);
           this.cameraSnapped = false;
+          // reconexão é um socket novo, logo uma pessoa nova sem booble — mas
+          // quem lê é o servidor, não esta suposição
+          this.setPlayerBooble(p.id, p.boobleId);
           // o servidor pode ter restaurado a pessoa sentada (posição salva no
           // banco); sem isto ela apareceria de pé em cima da própria cadeira
           if (p.sitting) {
@@ -208,6 +244,7 @@ export class Game {
         remote.avatar.destroy();
         this.remotes.delete(id);
       }
+      this.boobles.delete(id);
     };
     const onMoved = (id: string, x: number, y: number) => {
       this.remotes.get(id)?.setTarget(x, y);
@@ -238,9 +275,11 @@ export class Game {
 
   private addRemote(p: PlayerState): void {
     const remote = new RemotePlayer(this.framesFor(p.character), p.name, p.color, p.x, p.y);
-    // quem já estava sentado ou ausente quando entramos precisa aparecer assim
+    // quem já estava sentado, ausente ou numa booble quando entramos precisa
+    // aparecer assim — é o caminho de quem abre a aba com o mundo em andamento
     remote.setSitting(p.sitting);
     remote.avatar.setAway(p.away);
+    this.boobles.set(p.id, p.boobleId);
     this.remotes.set(p.id, remote);
     this.playersLayer.addChild(remote.avatar.view);
   }
@@ -286,11 +325,79 @@ export class Game {
 
     this.updateCamera(dt);
     this.updateZoneIndicator();
+    this.updateBoobleRings();
+    this.updateBoobleReach();
   };
+
+  /**
+   * Redesenha os círculos das boobles a partir das posições deste frame — as dos
+   * remotos são interpoladas, então o círculo tem de seguir o movimento.
+   *
+   * Agrupa por `boobleId`, incluindo o player local. Só entram boobles com
+   * alguém visível aqui, e o caso comum (nenhuma booble) sai em uma iteração
+   * vazia sobre os remotos.
+   */
+  private updateBoobleRings(): void {
+    const groups = new Map<string, RingMember[]>();
+    const add = (boobleId: string | null, x: number, y: number) => {
+      if (boobleId === null) return;
+      const list = groups.get(boobleId);
+      if (list) list.push({ x, y });
+      else groups.set(boobleId, [{ x, y }]);
+    };
+    add(this.selfBooble, this.local.x, this.local.y);
+    for (const [id, remote] of this.remotes) {
+      add(this.boobles.get(id) ?? null, remote.x, remote.y);
+    }
+    this.boobleRings.update(groups, this.selfBooble);
+  }
+
+  /**
+   * Com quem dá para ABRIR uma booble agora: perto (`BOOBLE_JOIN_RADIUS`) e na
+   * mesma zona — as duas condições que o servidor impõe em `World.joinBooble`.
+   *
+   * Mora aqui, e não no tick da voz junto de `nearbyIds`, por dois motivos. O
+   * raio é outro (2 tiles contra os 5 audíveis), então um botão gastando o
+   * predicado do áudio apareceria para gente longe demais e o clique morreria em
+   * silêncio. E o tick da voz **não roda** sem LiveKit configurado — o botão
+   * simplesmente não apareceria num ambiente sem voz.
+   *
+   * Só avisa o store quando o conjunto muda, como `updateZoneIndicator`.
+   */
+  private updateBoobleReach(): void {
+    const selfZone = this.zoneIdAt(this.local.x, this.local.y);
+    const reach: string[] = [];
+    for (const [id, remote] of this.remotes) {
+      if (distancePx(this.local.x, this.local.y, remote.x, remote.y) > BOOBLE_JOIN_RADIUS) {
+        continue;
+      }
+      if (this.zoneIdAt(remote.x, remote.y) !== selfZone) continue;
+      reach.push(id);
+    }
+    const key = reach.sort().join(',');
+    if (key === this.lastBoobleReach) return;
+    this.lastBoobleReach = key;
+    useStore.getState().setBoobleReachIds(reach);
+  }
 
   /** Pose de ausente do player local (chamado por `presence.setAway`). */
   setSelfAway(away: boolean): void {
     this.local.avatar.setAway(away);
+  }
+
+  /**
+   * A booble de alguém mudou. Um caminho só para o local e para os remotos, no
+   * molde de `setSpeaking`: a booble do player local é o que decide TODOS os
+   * volumes em `getAudioInfo`, então mandar o valor para o alvo errado aqui
+   * erraria o áudio inteiro, não só um avatar.
+   *
+   * Quem chama é `client/src/booble.ts`, nunca a UI direto.
+   */
+  setPlayerBooble(id: string, boobleId: string | null): void {
+    if (id === this.socket.id) this.selfBooble = boobleId;
+    else this.boobles.set(id, boobleId);
+    // nada de desenho aqui: o círculo é redesenhado a cada frame a partir das
+    // posições (que se movem), então basta o estado estar certo
   }
 
   /** Só avisa o store quando a dica muda, para não re-renderizar a cada frame. */
@@ -362,7 +469,7 @@ export class Game {
   getDistances(): Map<string, number> {
     const out = new Map<string, number>();
     for (const [id, remote] of this.remotes) {
-      out.set(id, Math.hypot(remote.x - this.local.x, remote.y - this.local.y));
+      out.set(id, distancePx(this.local.x, this.local.y, remote.x, remote.y));
     }
     return out;
   }
@@ -375,22 +482,23 @@ export class Game {
   }
 
   /**
-   * Tudo que a voz precisa para decidir quem ouve quem: distância e zona.
-   * Um só percurso e uma só fonte de verdade — a regra de audibilidade em si
-   * fica no VoiceRoom, que é o dono do áudio.
+   * Tudo que a voz precisa para decidir quem ouve quem: distância, zona e
+   * booble. Um só percurso e uma só fonte de verdade — a regra em si fica em
+   * `voice/proximity.ts`, que é o dono do áudio. Aqui só se mede.
    */
-  getAudioInfo(): {
-    selfZone: string | null;
-    peers: Map<string, { distance: number; zone: string | null }>;
-  } {
-    const peers = new Map<string, { distance: number; zone: string | null }>();
+  getAudioInfo(): AudioInfo {
+    const peers = new Map<string, PeerAudio>();
     for (const [id, remote] of this.remotes) {
       peers.set(id, {
-        distance: Math.hypot(remote.x - this.local.x, remote.y - this.local.y),
+        distance: distancePx(this.local.x, this.local.y, remote.x, remote.y),
         zone: this.zoneIdAt(remote.x, remote.y),
+        booble: this.boobles.get(id) ?? null,
       });
     }
-    return { selfZone: this.zoneIdAt(this.local.x, this.local.y), peers };
+    return {
+      self: { zone: this.zoneIdAt(this.local.x, this.local.y), booble: this.selfBooble },
+      peers,
+    };
   }
 
   setSpeaking(id: string, speaking: boolean): void {
@@ -403,6 +511,7 @@ export class Game {
 
   destroy(): void {
     for (const unbind of this.unbinders) unbind();
+    this.boobleRings.destroy();
     this.app.canvas.removeEventListener('wheel', this.onWheel);
     this.keyboard.detach();
     this.app.ticker.remove(this.tick);

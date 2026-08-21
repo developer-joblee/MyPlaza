@@ -6,12 +6,14 @@ import {
   DEFAULT_SCENARIO,
   NAME_MAX_LENGTH,
   NUDGE_COOLDOWN_MS,
+  PRESENCE_CREDIT_MS,
   POSITION_SAVE_MS,
   isCharacterId,
   isScenarioId,
   type ChatMessage,
   type ClientToServerEvents,
   type JoinDeniedReason,
+  type PlayerState,
   type ScenarioId,
   type ServerToClientEvents,
   type VoiceTokenResponse,
@@ -36,6 +38,7 @@ import {
   recordTokenGrant,
   resolveAudioZoneId,
   savePosition,
+  addPresenceSeconds,
   saveChatMessage,
   touchSession,
 } from './db';
@@ -77,6 +80,15 @@ export interface SocketData {
   nudgedAt?: Map<string, number>;
   /** mesma corrente, para o compartilhamento de tela */
   shareRecord?: Promise<string | null>;
+  /**
+   * Timer que credita presença (`PRESENCE_CREDIT_MS`) e o instante do último
+   * crédito. Vivem no socket, e não num mapa global, porque morrem com a
+   * conexão: um timer sobrevivente creditaria tempo de quem já saiu.
+   */
+  creditTimer?: NodeJS.Timeout;
+  creditedAt?: number;
+  /** último som tocado por este socket, para impor `SOUND_COOLDOWN_MS` */
+  soundAt?: number;
   /** bucket de tokens concedidos (não conta recusas — ver o handler) */
   tokenAllowance?: number;
   tokenRefilledAt?: number;
@@ -228,9 +240,19 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       socket.emit('world:snapshot', world.getPlayers(), world.getChatHistory(), scenarioId);
       socket.to(worldKey).emit('player:joined', player);
 
+      /**
+       * Grava o vínculo (nome, cor, personagem e posição) AGORA, e não no
+       * primeiro passo: quem entra e fecha a aba em seguida sem andar teria
+       * saído sem vínculo nenhum, e o mundo pediria o nome de novo na próxima
+       * vez — exatamente o que esta feature existe para não fazer. É a mesma
+       * escrita forçada de sentar/ausentar-se, então não há caminho novo.
+       */
+      persistPosition(true);
+
       // abre a sessão depois de já estar no mundo: é histórico, ninguém espera por ela
       if (placeId && profileId) {
         const userAgent = String(socket.handshake.headers['user-agent'] ?? '').slice(0, 300) || null;
+        startPresenceCredit();
         void openSession(placeId, profileId, socket.id, character, userAgent).then((id) => {
           socket.data.sessionId = id;
           // quem nasceu (ou foi restaurado) dentro de uma sala já conta como
@@ -242,6 +264,53 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       socket.data.joining = false;
     }
   });
+
+  /**
+   * Começa a creditar tempo de presença em fatias de `PRESENCE_CREDIT_MS`.
+   *
+   * É o que alimenta a progressão do soundboard, e é creditado em fatias em vez
+   * de calculado somando `sessions` na leitura por uma razão concreta: sessão
+   * que morre junto com o processo fica com `left_at is null` para sempre, e
+   * `coalesce(left_at, now())` — o que a view `v_place_activity` faz — passaria
+   * a contar dias de alguém que saiu. Em fatias, uma queda custa no máximo uma
+   * fatia.
+   *
+   * O timer é `unref`ado para não segurar o processo vivo no shutdown: crédito
+   * de presença não é motivo para o Node não morrer.
+   */
+  function startPresenceCredit(): void {
+    if (socket.data.creditTimer) return;
+    socket.data.creditedAt = Date.now();
+    socket.data.creditTimer = setInterval(() => creditPresence(), PRESENCE_CREDIT_MS);
+    socket.data.creditTimer.unref?.();
+  }
+
+  /**
+   * Credita o tempo decorrido desde o último crédito e reinicia a contagem.
+   *
+   * Mede pelo relógio em vez de assumir que passou exatamente uma fatia porque
+   * `setInterval` atrasa (event loop ocupado, processo suspenso) — e porque a
+   * chamada final no `disconnect` credita um pedaço de fatia, não uma inteira.
+   */
+  function creditPresence(): void {
+    const profileId = socket.data.profileId;
+    const since = socket.data.creditedAt;
+    if (!profileId || !since) return;
+    const elapsed = Math.floor((Date.now() - since) / 1000);
+    socket.data.creditedAt = Date.now();
+    if (elapsed <= 0) return;
+    void addPresenceSeconds(profileId, elapsed);
+  }
+
+  function stopPresenceCredit(): void {
+    if (socket.data.creditTimer) {
+      clearInterval(socket.data.creditTimer);
+      socket.data.creditTimer = undefined;
+    }
+    // credita o pedaço final: quem ficou 3min e saiu merece os 3min, não 2
+    creditPresence();
+    socket.data.creditedAt = undefined;
+  }
 
   /**
    * Grava a posição atual, no máximo uma vez a cada POSITION_SAVE_MS. `force`
@@ -263,6 +332,11 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       sitting: player.sitting,
       away: player.away,
       character: player.character,
+      // o VÍNCULO com este mundo: como a pessoa se chama aqui. Vai na mesma
+      // escrita da posição de propósito — é a mesma linha de `presence_state`,
+      // então guardar o nome não custa consulta nem tabela nova (ver 0009).
+      name: player.name,
+      color: player.color,
     });
     // `sessions.last_seen_at` só nas gravações forçadas: o heartbeat de verdade
     // é `presence_state.updated_at`, que acabou de ser escrito acima. Tocar a
@@ -316,6 +390,21 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     });
   }
 
+  /**
+   * Difunde uma mudança de booble para o mundo INTEIRO, incluindo quem a causou.
+   *
+   * Incluir o autor (`io.to`, e não `socket.to`) é de propósito: o id da booble
+   * é cunhado aqui, então não existe atualização otimista possível no cliente —
+   * ele *precisa* do broadcast para saber em que booble entrou. De quebra, isso
+   * elimina a classe de bug em que o autor e o resto do mundo discordam.
+   *
+   * Lista vazia não emite nada: é o mesmo contrato do `if (!player) return` dos
+   * outros handlers, só que a mudança pode envolver mais de uma pessoa.
+   */
+  function broadcastBooble(worldKey: string, changed: PlayerState[]): void {
+    for (const p of changed) io.to(worldKey).emit('player:booble', p.id, p.boobleId);
+  }
+
   /** Fecha o que ficou aberto nas correntes de atividade (saída da sessão). */
   function closeActivity(): void {
     const zoneVisit = socket.data.zoneVisit;
@@ -337,6 +426,13 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     if (wasSitting && !player.sitting) {
       socket.to(worldKey).emit('player:sat', socket.id, false);
     }
+    /**
+     * A booble quebra por distância, e é aqui que isso é imposto — não no
+     * cliente. Sai na hora quando a pessoa não está em booble nenhuma, que é o
+     * caso de quase todo tick; quando está, é uma comparação por membro (no
+     * máximo `BOOBLE_MAX_MEMBERS`).
+     */
+    broadcastBooble(worldKey, world.evictFarBooble(socket.id));
     // 15 msgs/s entram aqui; cada um decide sozinho se vale uma escrita
     persistPosition(wasSitting === true && !player.sitting);
     trackZone();
@@ -345,9 +441,19 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
   socket.on('away', (away) => {
     const { scenarioId, worldKey } = socket.data;
     if (!scenarioId || !worldKey) return;
-    const player = getWorld(worldKey, scenarioId).setAway(socket.id, away === true);
+    const world = getWorld(worldKey, scenarioId);
+    const player = world.setAway(socket.id, away === true);
     if (!player) return; // já estava assim
     socket.to(worldKey).emit('player:away', socket.id, player.away);
+    /**
+     * Ficar ausente **sai da booble**. Ausente corta microfone e áudio no
+     * cliente (`VoiceRoom.applySilence`), então continuar membro seria segurar
+     * uma vaga sendo inaudível — e pior: quem está numa booble parece disponível
+     * para quem olha a lista. Voltar não recria a booble, e não deveria:
+     * recomeçar é um clique, e adivinhar com quem a pessoa ainda quer falar
+     * meia hora depois é chute.
+     */
+    if (player.away) broadcastBooble(worldKey, world.leaveBooble(socket.id));
     persistPosition(true);
   });
 
@@ -431,6 +537,28 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     io.to(targetId).emit('presence:nudged', socket.id, from.name);
   });
 
+  /**
+   * Entra na booble de alguém (criando-a se preciso) e sai da própria.
+   *
+   * Toda a validação está em `World.joinBooble` — é lá que estão as posições e o
+   * mapa. Recusa **em silêncio**, como o "toc-toc" e pela mesma razão: um ack
+   * dizendo "não deu" transformaria o clique numa sonda de quem está perto de
+   * quem, e de quem está em que sala.
+   */
+  socket.on('booble:join', (rawTargetId) => {
+    const { scenarioId, worldKey } = socket.data;
+    if (!scenarioId || !worldKey) return;
+    const targetId = String(rawTargetId ?? '');
+    if (!targetId || targetId === socket.id) return;
+    broadcastBooble(worldKey, getWorld(worldKey, scenarioId).joinBooble(socket.id, targetId));
+  });
+
+  socket.on('booble:leave', () => {
+    const { scenarioId, worldKey } = socket.data;
+    if (!scenarioId || !worldKey) return;
+    broadcastBooble(worldKey, getWorld(worldKey, scenarioId).leaveBooble(socket.id));
+  });
+
   socket.on('voice:token', async (ack) => {
     if (typeof ack !== 'function') return;
     if (!voiceConfigured) return ack({ ok: false, reason: 'not-configured' });
@@ -502,9 +630,21 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     // grava a posição final ANTES de tirar do mundo — depois o player não existe
     persistPosition(true);
     closeActivity();
+    stopPresenceCredit();
     const sessionId = socket.data.sessionId;
     if (sessionId) void closeSession(sessionId, reason);
-    if (getWorld(worldKey, scenarioId).removePlayer(socket.id)) {
+    const world = getWorld(worldKey, scenarioId);
+    /**
+     * Sai da booble ANTES de deixar o mundo: depois do `removePlayer` o player
+     * já não existe, e a booble que ficaria com uma pessoa só nunca se
+     * dissolveria. O próprio socket é filtrado porque o `player:left` logo
+     * abaixo já o remove de todas as listas — mandar o `null` dele seria ruído.
+     */
+    broadcastBooble(
+      worldKey,
+      world.leaveBooble(socket.id).filter((p) => p.id !== socket.id),
+    );
+    if (world.removePlayer(socket.id)) {
       socket.to(worldKey).emit('player:left', socket.id);
     }
   });

@@ -1,4 +1,6 @@
+import { receiveBoobleChange } from '../booble';
 import { receiveNudge } from '../presence';
+import { receiveSound } from '../soundboard';
 import { useStore } from '../state/store';
 import type { AppSocket } from './socket';
 
@@ -16,11 +18,13 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
   socket.on('disconnect', onDisconnect);
   socket.on('world:snapshot', (players, chat, scenarioId) => {
     s().setScenario(scenarioId);
-    s().setRoster(players.map(({ id, name, color, away }) => ({ id, name, color, away })));
+    s().setRoster(
+      players.map(({ id, name, color, away, boobleId }) => ({ id, name, color, away, boobleId })),
+    );
     s().setChat(chat);
   });
-  socket.on('player:joined', ({ id, name, color, away }) => {
-    s().upsertRosterEntry({ id, name, color, away });
+  socket.on('player:joined', ({ id, name, color, away, boobleId }) => {
+    s().upsertRosterEntry({ id, name, color, away, boobleId });
   });
   socket.on('player:left', (id) => s().removeRosterEntry(id));
   socket.on('chat:message', (msg) => s().appendChat(msg));
@@ -30,6 +34,20 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
    * de presença é aquele módulo, não este.
    */
   socket.on('presence:nudged', (fromId, fromName) => receiveNudge(fromId, fromName));
+  /**
+   * Alguém perto tocou um som do soundboard. Vai por `soundboard/`, e não pelo
+   * store, pela mesma razão do chamado acima: o evento tem efeito de áudio, e o
+   * dono desse efeito é aquele módulo.
+   */
+  socket.on('soundboard:played', (fromId, fromName, soundId, url) =>
+    receiveSound(fromId, fromName, soundId, url),
+  );
+  /**
+   * A booble de alguém mudou. Vai por `booble.ts` (e não direto no store)
+   * porque a mudança também mexe no jogo — a pastilha no avatar e o que a voz
+   * usa para decidir volume. Mesmo arranjo do chamado acima.
+   */
+  socket.on('player:booble', (id, boobleId) => receiveBoobleChange(id, boobleId));
   /**
    * Recusado: volta para a tela de entrada com o motivo. Sem isto o cliente
    * ficaria para sempre num mundo vazio esperando um snapshot que não vem.
@@ -44,6 +62,8 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
     socket.removeAllListeners('player:left');
     socket.removeAllListeners('chat:message');
     socket.removeAllListeners('presence:nudged');
+    socket.removeAllListeners('soundboard:played');
+    socket.removeAllListeners('player:booble');
     socket.removeAllListeners('join:denied');
   };
 }

@@ -1,8 +1,12 @@
 import {
+  BOOBLE_EXIT_RADIUS,
+  BOOBLE_JOIN_RADIUS,
+  BOOBLE_MAX_MEMBERS,
   CHAT_HISTORY_LIMIT,
   SCENARIOS,
   TILE_SIZE,
   audioZoneAt,
+  distancePx,
   isSolid,
   parseMap,
   sitFacingAt,
@@ -71,6 +75,7 @@ export class World {
       y: at.y,
       sitting: at.sitting,
       away: false,
+      boobleId: null,
     };
     this.players.set(id, player);
     return player;
@@ -166,6 +171,108 @@ export class World {
     if (!player || player.away === away) return undefined;
     player.away = away;
     return player;
+  }
+
+  // ------------------------------------------------------------------ booble
+  //
+  // A booble é um grupo ad-hoc que prioriza o áudio de quem está dentro. Ela
+  // mora aqui, e não num mapa próprio, porque *é* o conjunto de players com o
+  // mesmo `boobleId` — sem lista paralela não há segunda fonte de verdade para
+  // dessincronizar. O servidor é dono da FILIAÇÃO (é quem tem as posições, logo
+  // é quem pode impor o raio); quem decide volume é cada cliente.
+  //
+  // Os três mutadores seguem o contrato do resto da classe, com uma diferença:
+  // devolvem uma LISTA, porque uma mudança de booble pode alterar mais de um
+  // player de uma vez. Lista vazia = nada mudou = não retransmite.
+
+  /** Quem está nesta booble. `null` não é booble nenhuma, é a ausência de uma. */
+  boobleMembers(boobleId: string): PlayerState[] {
+    return [...this.players.values()].filter((p) => p.boobleId === boobleId);
+  }
+
+  private distanceBetween(a: PlayerState, b: PlayerState): number {
+    return distancePx(a.x, a.y, b.x, b.y);
+  }
+
+  /**
+   * Tira alguém da booble em que está.
+   *
+   * **Dissolve a booble se sobrar uma pessoa só**: uma booble de um não prioriza
+   * nada — ela apenas baixaria a sala inteira a 10% para quem ficou, que é o
+   * oposto do que a feature promete. Por isso pode devolver dois players.
+   */
+  leaveBooble(id: string): PlayerState[] {
+    const player = this.players.get(id);
+    if (!player || player.boobleId === null) return [];
+    const previous = player.boobleId;
+    player.boobleId = null;
+    const changed = [player];
+    const remaining = this.boobleMembers(previous);
+    if (remaining.length === 1) {
+      remaining[0].boobleId = null;
+      changed.push(remaining[0]);
+    }
+    return changed;
+  }
+
+  /**
+   * Entra na booble do alvo, criando uma com os dois se ele não tiver nenhuma.
+   *
+   * Todas as recusas devolvem lista vazia, e nenhuma responde nada a quem
+   * pediu — a lista completa e o porquê de cada uma estão no JSDoc de
+   * `booble:join` em `shared/src/events.ts`.
+   */
+  joinBooble(id: string, targetId: string): PlayerState[] {
+    const player = this.players.get(id);
+    const target = this.players.get(targetId);
+    if (!player || !target || player === target) return [];
+    // ausente não fala nem ouve: entrar seria segurar uma vaga em silêncio
+    if (player.away || target.away) return [];
+    // já estamos na mesma: nada a fazer (e nada a retransmitir)
+    if (player.boobleId !== null && player.boobleId === target.boobleId) return [];
+    if (this.distanceBetween(player, target) > BOOBLE_JOIN_RADIUS) return [];
+    /**
+     * Mesma zona só para ENTRAR. Permanecer não exige, e a assimetria é o ponto:
+     * se desse para entrar atravessando a parede, quem está fora de uma sala
+     * fechada puxaria quem está dentro, e morre a promessa "para ouvir, precisa
+     * entrar". Formada a booble, ela atravessa a porta com as pessoas.
+     */
+    if (this.zoneKeyAt(player.x, player.y) !== this.zoneKeyAt(target.x, target.y)) return [];
+
+    const existing = target.boobleId;
+    const size = existing === null ? 2 : this.boobleMembers(existing).length + 1;
+    if (size > BOOBLE_MAX_MEMBERS) return [];
+
+    // sai da anterior primeiro — o que pode dissolvê-la, e isso também é mudança
+    const changed = this.leaveBooble(id);
+    if (existing === null) {
+      const boobleId = crypto.randomUUID();
+      target.boobleId = boobleId;
+      player.boobleId = boobleId;
+      if (!changed.includes(target)) changed.push(target);
+    } else {
+      player.boobleId = existing;
+    }
+    if (!changed.includes(player)) changed.push(player);
+    return changed;
+  }
+
+  /**
+   * Sai da booble quem se afastou de **todos** os outros membros. Chamado depois
+   * de cada movimento: é aqui que a regra de distância é imposta, e é a única
+   * forma de sair sem clicar.
+   *
+   * Compara contra o membro mais próximo, não contra todos, porque uma roda de
+   * quatro pessoas é mais larga que um raio — exigir proximidade de todo mundo
+   * dissolveria a booble por geometria em vez de por intenção. E usa só
+   * distância, **sem** zona: é isto que faz a booble atravessar a parede.
+   */
+  evictFarBooble(id: string): PlayerState[] {
+    const player = this.players.get(id);
+    if (!player || player.boobleId === null) return [];
+    const others = this.boobleMembers(player.boobleId).filter((p) => p !== player);
+    if (others.some((o) => this.distanceBetween(player, o) <= BOOBLE_EXIT_RADIUS)) return [];
+    return this.leaveBooble(id);
   }
 
   getPlayers(): PlayerState[] {

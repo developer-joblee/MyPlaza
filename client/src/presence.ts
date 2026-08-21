@@ -20,6 +20,13 @@ export function setAway(away: boolean): void {
   runtime.voice?.setAway(away);
   runtime.game?.setSelfAway(away);
   runtime.api?.setAway(away);
+  /**
+   * Corta som de soundboard em vôo ao ficar ausente. Ausente cortou o áudio da
+   * sala, e um som de 5s que continua tocando depois disso soa como a feature
+   * ignorando o botão. O caminho de volta não precisa de nada: o próximo som
+   * chega pelo evento.
+   */
+  if (away) runtime.soundboard?.stopAll();
 }
 
 /**

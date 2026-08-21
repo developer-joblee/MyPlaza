@@ -19,6 +19,18 @@ export interface PlayerState {
   sitting: boolean;
   /** ausente: sem microfone, sem áudio, e o avatar aparece no celular */
   away: boolean;
+  /**
+   * Em qual **booble** esta pessoa está; `null` = nenhuma. Uma booble *é* o
+   * conjunto de players que compartilham este id — não existe entidade separada
+   * no servidor, de propósito: com uma lista paralela haveria duas fontes de
+   * verdade para dessincronizar, e o snapshot já carrega os players.
+   *
+   * Efêmero como o `away`: o id é gerado pelo servidor, morre com a conexão e
+   * **não** é persistido no banco. Quem cai e volta é um `socket.id` novo, logo
+   * uma pessoa nova sem booble — o que é o certo, porque a booble pressupõe
+   * estar perto de alguém agora.
+   */
+  boobleId: string | null;
 }
 
 export interface ChatMessage {
@@ -90,6 +102,21 @@ export type WorldRole = 'owner' | 'host' | 'member';
 /** Papel gravável em `place_members.role` — `owner` não entra aqui. */
 export type AssignableWorldRole = 'host' | 'member';
 
+/**
+ * Como EU entro num mundo específico: o vínculo, guardado no banco
+ * (`presence_state`, uma linha por local × perfil).
+ *
+ * É por mundo, e não por conta, de propósito: a mesma pessoa pode ser "Iago" no
+ * mundo do time e "Iago (Joblee)" no mundo de um cliente. `null` no
+ * `WorldSummary` significa "nunca entrei neste mundo" — e é só isso que faz a
+ * tela de entrada aparecer.
+ */
+export interface WorldBinding {
+  name: string;
+  color: number;
+  character: CharacterId;
+}
+
 /** Um mundo na lista do lobby. */
 export interface WorldSummary {
   id: string;
@@ -105,6 +132,12 @@ export interface WorldSummary {
   /** meu papel aqui — é o que habilita (ou não) os botões de administrar */
   myRole: WorldRole;
   organizationName: string;
+  /**
+   * Meu vínculo com este mundo: como eu me chamo aqui, e com que aparência.
+   * `null` = nunca entrei neste mundo, então a tela de entrada precisa
+   * perguntar. Com vínculo, clicar em "Entrar" vai direto para o jogo.
+   */
+  binding: WorldBinding | null;
 }
 
 /**
@@ -135,6 +168,18 @@ export interface LobbyState {
    * conta. Quem decide o acesso é quem administra o mundo.
    */
   myId: string;
+  /**
+   * A última aparência que esta pessoa usou, vinda de `profiles`.
+   *
+   * Não é o vínculo de nenhum mundo — é o **prefill** da tela de entrada quando
+   * ela entra num mundo onde ainda não tem vínculo (`binding: null`). Sem isto,
+   * um mundo novo abriria a tela com o campo de nome vazio depois de cada
+   * logout, que é exatamente a chateação que o vínculo existe para remover.
+   *
+   * Separado de `myId` porque as duas coisas não têm nada a ver: `myId` é o
+   * identificador que se compartilha, `me` é aparência que se edita.
+   */
+  me: WorldBinding;
 }
 
 /** Quem tem acesso a um mundo. Só quem administra vê esta lista. */
@@ -202,3 +247,90 @@ export type LobbyResult =
    */
   | { ok: true; state: LobbyState; detail?: WorldDetail }
   | { ok: false; reason: LobbyErrorReason };
+
+// -----------------------------------------------------------------------------
+// Soundboard: sons curtos, do próprio usuário, tocados para quem está por perto.
+// A quantidade de sons é conquistada pelo tempo na plataforma (`levels.ts`).
+// -----------------------------------------------------------------------------
+
+/**
+ * Um som meu. **Não** carrega os bytes: carrega a URL assinada com que o
+ * navegador de quem ouve baixa o arquivo uma vez e guarda em cache.
+ *
+ * `url` é temporária por desenho — o bucket é privado, e é o servidor que assina
+ * (mesmo padrão do token do LiveKit). Quem recebe não deve persistir essa
+ * string: ela vence, e o `soundId` é a identidade estável.
+ */
+export interface UserSound {
+  id: string;
+  /** Posição na grade, 1..`SOUND_MAX_SLOTS`. */
+  slot: number;
+  label: string;
+  /** URL assinada de leitura, válida por algumas horas. */
+  url: string;
+  /** Medida no navegador de quem subiu (o servidor não decodifica áudio). */
+  durationMs: number;
+}
+
+/**
+ * Todo o estado do soundboard de quem pediu: o que já tem e o que falta para o
+ * próximo slot. Vem inteiro em toda resposta de sucesso, como no lobby — a tela
+ * nunca precisa refazer o `list` depois de subir ou remover.
+ */
+export interface SoundboardState {
+  sounds: UserSound[];
+  /**
+   * Volume com que EU ouço o soundboard, 0..`SOUND_VOLUME_MAX`.
+   *
+   * Preferência **persistida no perfil**, e por isso vem no estado em vez de
+   * viver só no navegador: quem baixou o volume porque a equipe abusa não quer
+   * refazer isso em cada máquina. O mute rápido é outra coisa e continua local —
+   * ver `soundboardMuted` no store do cliente.
+   */
+  volume: number;
+  /** Tempo acumulado na plataforma, em segundos (`profiles.presence_seconds`). */
+  presenceSeconds: number;
+  /** Slots liberados por esse tempo — `slotsFor(presenceSeconds)`. */
+  slots: number;
+  /** Nível atual (`null` = ainda não alcançou o primeiro marco). */
+  level: number | null;
+  /** Rótulo do nível atual, para a tela não reimplementar a busca na tabela. */
+  levelLabel: string | null;
+  /** Segundos até o próximo marco; `0` quando já está no último. */
+  secondsToNext: number;
+  /** Quantos slots o próximo marco dá; `null` quando já está no último. */
+  nextSlots: number | null;
+}
+
+export type SoundboardErrorReason =
+  /** `socket-down` e `timeout` são do CLIENTE — mesma convenção do `LobbyResult`. */
+  | 'socket-down'
+  | 'timeout'
+  /** o servidor não tem Supabase: sem Storage e sem tempo acumulado, sem soundboard */
+  | 'not-configured'
+  | 'auth-required'
+  | 'invalid-token'
+  /** nome vazio/longo demais, slot fora da faixa, id malformado */
+  | 'invalid-input'
+  /** o tempo acumulado ainda não libera esse slot */
+  | 'not-unlocked'
+  /** passou de `SOUND_MAX_BYTES` */
+  | 'too-large'
+  /** MIME fora da whitelist, ou o arquivo não é áudio decodificável */
+  | 'bad-format'
+  /**
+   * O som não existe, ou não é seu.
+   *
+   * Não existe um `slot-taken` aqui de propósito: subir num slot ocupado
+   * **substitui** o som (o caminho no Storage é derivado do slot, e a linha é
+   * upsert por `(profile_id, slot)`). Recusar exigiria remover antes para
+   * trocar, o que é um passo a mais para o caso comum — e deixaria arquivo
+   * órfão se a remoção falhasse no meio.
+   */
+  | 'not-found'
+  | 'error';
+
+/** Resposta das operações do soundboard. Sucesso devolve o estado novo inteiro. */
+export type SoundboardResult =
+  | { ok: true; state: SoundboardState }
+  | { ok: false; reason: SoundboardErrorReason };

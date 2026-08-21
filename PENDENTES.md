@@ -1,7 +1,509 @@
 # Pendências de verificação
 
 O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado em
-2026-08-20.
+2026-08-21.
+
+---
+
+# Soundboard gamificado — 2026-08-21
+
+Feature nova: [`docs/features/soundboard.md`](docs/features/soundboard.md). Sons
+curtos do próprio usuário, liberados por tempo na plataforma
+(`profiles.presence_seconds` + `PRESENCE_LEVELS`), guardados no **Supabase
+Storage** (primeiro uso de Storage no projeto) e tocados em WebAudio para quem
+está perto.
+
+## Já verificado
+
+### Sem banco
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 14/14** contra o servidor headless em modo anônimo
+  (`PORT=3099`, `SUPABASE_*`/`LIVEKIT_*` vazias) — o crédito de presença novo
+  roda no mesmo caminho do `join`/`disconnect` e, sem banco, tem de ser no-op.
+- ✅ Teste dirigido de socket: os três eventos por ack respondem
+  `not-configured`; evento **sem ack** não derruba o socket; `soundboard:play`
+  com id malformado e com uuid inexistente é ignorado em silêncio, sem derrubar
+  socket nenhum.
+- ✅ **`audienceFor` contra o mapa real do Estúdio** (é o coração da entrega, e
+  foi por isso que ela é função exportada e não método do handler): área aberta
+  entrega só a quem está no raio; sala fechada não vaza para fora **e** entrega a
+  quem está na sala mesmo além do raio (192px > 160px, porque dentro da sala o
+  volume é plano); booble atravessa parede e distância; booble alheia não muda o
+  meu alcance; id desconhecido devolve lista vazia; o emissor nunca entra na
+  própria audiência.
+- ✅ **Tabela de níveis**, 20 casos: fronteiras exatas de cada marco (59min→0,
+  1h→1, 7h59→1, 8h→2 …), teto acima do último marco, e as entradas defensivas
+  (negativo, `NaN`, `Infinity`) devolvendo **0 slots** — falha de leitura não
+  vira slot de graça.
+
+- ✅ **`clampVolume`**, 18 casos — e ela **pegou um defeito**: `Number(null)`,
+  `Number('')` e `Number(false)` valem 0, então um valor ausente silenciava a
+  pessoa em vez de cair no default de 70. O comentário prometia uma coisa e o
+  código fazia outra; agora confere o `typeof` antes de converter, e o handler do
+  servidor recusa o que não é número em vez de gravar 0.
+- ✅ **`clampStart` e `peaks`** (a lógica do seletor de trecho), 15 casos:
+  início respeitado no meio, recuado quando passa do fim (`duração - 5`), 0 para
+  negativo/`NaN`, e áudio de 5s ou menos só permitindo início 0; picos usando o
+  **máximo absoluto** por faixa (média de áudio tende a zero e desenharia uma
+  linha reta), sem `NaN` quando há mais buckets que amostras.
+- ✅ **`encodeWav`** (o recorte reescreve em WAV): 22 checagens de cabeçalho RIFF
+  (magic, tamanhos, PCM=1, mono, sample rate, byte rate, block align, 16 bits) e
+  da conversão float→int16 — monotônica, sem dar a volta no complemento de dois,
+  com estouro **clampado** nos dois extremos (sem clamp, um som normalizado no
+  talo viraria estalo). E 5s mono a 22,05 kHz = **215 KB**, dentro do
+  `SOUND_MAX_BYTES` de 512 KB, que é o que torna o teto seguro.
+
+Os scripts de teste rodaram da raiz e **não** ficaram no repo (só o
+`smoke-test.mts`, que continua como estava).
+
+## Corrigido no primeiro uso real (2026-08-21)
+
+**O bucket recusava `audio/wav`.** O upload de um áudio que precisou ser
+recortado falhava com `mime type audio/wav is not supported` no log e "upload
+recusado: error" na tela. Causa: a `0010` foi aplicada **antes** de o recorte
+existir, e o `insert into storage.buckets` dela é `on conflict do nothing` —
+reaplicar a `0010` não atualiza a whitelist de um bucket que já existe. Pior, a
+`0010` tinha sido **editada depois de aplicada**, o que é justamente o que o
+`db/README.md` proíbe, e foi o que fez o banco divergir do repo.
+
+Corrigido em três frentes: a `0010` voltou ao estado em que foi aplicada (arquivo
+aplicado é história), a whitelist nova virou **`0011_soundboard_wav.sql`**, e o
+`insertUserSound` passou a nomear essa causa no log em vez de deixá-la virar
+`error` genérico — no mesmo espírito dos avisos de `42501`/`42P01` no boot.
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada foi executado contra um Supabase real
+
+A `0010` **foi** aplicada (o erro do bucket acima é prova de que o caminho de
+upload chegou ao Storage), mas a **`0011`** (whitelist do bucket) e a **`0012`**
+(`soundboard_volume`) ainda não, e nenhum upload completou. Segue sem verificação: `insertUserSound` (upload no bucket + linha), `deleteUserSound`,
+`listUserSounds` (inclusive o `createSignedUrls` em lote), `getUserSound`,
+`loadPresenceSeconds`, `loadSoundboardPrefs`, `saveSoundboardVolume` e a RPC
+`app_add_presence_seconds`. Roteiro completo em
+"Como testar" no doc da feature.
+
+Três pontos merecem atenção na primeira execução:
+
+- **O bucket pode não existir.** O `insert into storage.buckets` exige
+  privilégio no schema `storage`; se ele falhar, o resto da migração passa e só o
+  upload quebra — com o erro aparecendo apenas como `[db] insertUserSound` no log
+  (o `db.ts` é fail-soft). Confira em *Storage* que existe um bucket **privado**
+  `soundboard`.
+- **`insertUserSound` faz duas escritas sem transação** (arquivo, depois linha).
+  A ordem foi escolhida para que a falha parcial deixe arquivo órfão — invisível
+  e sobrescrito no próximo upload do mesmo slot — em vez de linha apontando para
+  arquivo que não existe. Não foi provado interrompendo no meio.
+- **A RPC nunca rodou.** `app_add_presence_seconds` é a única função nova do
+  schema, e a única coisa neste projeto que usa `client.rpc()`. Se o nome ou a
+  assinatura divergirem, o crédito falha em silêncio e ninguém ganha slot nunca —
+  o sintoma seria "o tempo não sobe".
+
+### 2. Nenhuma tela foi vista num navegador
+
+Todo o `SoundboardPanel` é lógica de client não exercitada: a grade com slots
+bloqueado/vazio/cheio, o `<input type=file>` escondido, a medição de duração com
+`decodeAudioData`, as mensagens de recusa, o slot que acende enquanto o som toca,
+a lista "Quem tocou som" e os dois mutes. O botão novo na barra inferior também
+não foi visto — em particular o estado **desabilitado** em modo anônimo.
+
+### 3. Nenhum som foi ouvido
+
+O `SoundPlayer` nunca tocou nada. Riscos, na ordem: (a) o `AudioContext` nascer
+suspenso e o `resume()` ser recusado porque o som de outra pessoa não vem de um
+gesto do usuário — mesmo risco do `knock.ts`, e aqui **não há aviso visual de
+reforço** para quem recebe, então o som simplesmente não sai; (b) `SOUND_PEAK`
+(0,7) errado na prática, alto ou baixo demais ao lado da voz com AGC do LiveKit;
+(c) o teto de `SOUND_MAX_CONCURRENT` (3) descartando som novo em vez de cortar o
+antigo — nunca exercitado com três pessoas disparando junto.
+
+### 4. O recorte e o seletor de trecho nunca rodaram
+
+`decodeAudio`, `prepareSound`, `previewClip` e todo o `ClipPicker` **não podem**
+ser testados fora do navegador: `AudioContext`, `OfflineAudioContext` e canvas não
+existem no Node. O que foi verificado é a lógica pura (`encodeWav`, `clampStart`,
+`peaks`). Falta ver, com arquivo de verdade:
+
+- **o trecho salvo é o trecho escolhido** — um erro de offset aqui salva o começo
+  do arquivo e ninguém percebe até ouvir;
+- a onda desenhada: `devicePixelRatio`, as cores lidas do tema por
+  `getComputedStyle` (canvas não herda `currentColor` — se a leitura falhar, as
+  barras saem no fallback cinza), e o mínimo de 1px que evita buracos onde há
+  silêncio;
+- a janela de seleção acompanhando o slider sem descolar da onda;
+- o slider pelo **teclado**, e o `stopPropagation` que impede as setas de andarem
+  com o avatar ao mesmo tempo;
+- a prévia: parar no meio, trocar o início enquanto toca, e fechar o painel
+  tocando (o `useEffect` de cleanup é o que evita som órfão);
+
+- que o `OfflineAudioContext` de fato **reamostra** (buffer a 44,1 kHz num
+  contexto a 22,05 kHz) e **faz o downmix** de estéreo para mono ao pedir 1
+  canal. As duas conversões são comportamento da spec, não código nosso — se
+  algum navegador divergir, o sintoma é áudio acelerado ou só um lado da imagem
+  estéreo;
+- que `source.start(0, 0, seconds)` corta onde se espera (e não do fim, ou com
+  offset trocado);
+- que o fade-out de 40ms **elimina** o estalo do corte — é audível, não
+  verificável por código;
+- quanto tempo o corte leva para um mp3 grande (uma música de 5min decodificada
+  inteira em memória antes de cortar: são ~50 MB de PCM para um mp3 de 5 MB). O
+  painel mostra `busy`, mas ninguém mediu, e num arquivo muito grande pode dar
+  uma pausa perceptível — ou estourar a memória da aba;
+- o caminho de arquivo que **não é áudio** (`UndecodableAudioError` → "Formato
+  não aceito"), incluindo o caso chato: arquivo com extensão de áudio e conteúdo
+  corrompido.
+
+### 5. O volume não foi visto persistindo
+
+A `0012` não foi aplicada e nenhuma escrita em `soundboard_volume` aconteceu.
+Falta ver:
+
+- o valor **sobrevivendo ao recarregar** (é o ponto inteiro da feature: se a
+  coluna não existir, o `db.ts` é fail-soft e o sintoma é o slider voltando a 70
+  sem erro na tela);
+- o **gain mestre** mudando o volume de um som **que já está tocando**, e sem
+  clique (a rampa de 30ms é o que evita o clique, e isso é audível, não
+  verificável por código);
+- o **debounce**: arrastar o slider de ponta a ponta tem de gerar **uma** escrita,
+  não dezenas. Contar no log (`[soundboard] setVolume`) é o jeito;
+- fechar o painel **menos de 500ms** depois de mexer no slider — o `useEffect` de
+  cleanup grava o pendente, e é o caminho mais provável na prática (abrir o painel
+  só para baixar o volume e fechar);
+- volume 0 pelo slider (o `start()` desiste antes de agendar nós) contra o mute
+  rápido: são dois controles distintos e a tela precisa deixar isso claro;
+- a **recusa de `invalid-input`** nunca executou. Sem Supabase tudo para em
+  `not-configured` no `whoAmI`, que vem antes da validação — é a mesma situação já
+  registrada para o papel no lobby.
+
+### 6. O crédito de presença não foi observado gravando
+
+O timer de 60s por socket, o `unref()`, o crédito do pedaço final no
+`disconnect`, e o comportamento com **duas abas da mesma conta** (as duas
+creditam, e é por isso que o incremento é RPC e não read-modify-write). Nada
+disso rodou contra um banco. Também não há teto: quem deixa a aba aberta a noite
+inteira acumula a noite inteira — pode ser exatamente o que se quer, mas é
+decisão que ninguém tomou explicitamente.
+
+### 7. Cooldown e recusas do `play` só foram vistos nos caminhos vazios
+
+`SOUND_COOLDOWN_MS` e a recusa de "som que não é seu" / "slot que deixou de
+estar liberado" exigem uma linha em `user_sounds` para serem alcançadas. O que
+foi provado é que id inválido e inexistente não fazem nada.
+
+### 8. A duração de 5s não é imposta pelo servidor
+
+É decisão registrada no doc, não esquecimento: medir duração em Node exigiria
+dependência nova. O limite duro é `SOUND_MAX_BYTES` (512 KB). Consequência
+concreta: um cliente adulterado sobe 4s dizendo que são 500ms, e o efeito é um
+número errado na legenda do próprio botão dele. Se um dia isso incomodar, o lugar
+é uma checagem de duração no servidor — com dependência, e perguntando antes.
+
+### 9. URL assinada vencendo no meio da sessão
+
+`SOUND_URL_TTL_S` é 4h e o cliente cacheia o áudio por `soundId`, então quem já
+baixou não sente. Quem **entra depois** de 4h recebe uma URL vencida no evento
+`soundboard:played` (o servidor assina no `getUserSound`, a cada toque — então
+na prática ela é nova; o caso ruim é a URL da lista, guardada no store desde a
+abertura do painel). Nunca foi exercitado com sessão longa.
+
+### 10. Nada é gravado sobre quem tocou o quê
+
+Sem trilha no banco, por escolha — mesma decisão do `presence:nudge`. Se um dia
+"quem mais toca som" virar métrica, ou se houver denúncia de abuso, não há dado.
+
+### 11. Custo por disparo não medido
+
+Cada `soundboard:play` faz **duas** consultas (o som e o tempo acumulado) mais
+uma assinatura de URL no Storage, antes de emitir. O cooldown de 6s por pessoa
+limita a frequência, e o `guard()` limita a espera a 2,5s — mas com muita gente
+tocando ao mesmo tempo isso é trabalho de banco que a voz e o chat não fazem.
+Dá para cachear a autorização por `soundId` no socket; não foi feito para não
+cachear decisão de acesso antes de ver o custo real.
+
+### 12. `soundSenders` guarda `socket.id`
+
+Como os `nudges`, é identificador de exibição: quem cai e volta é uma pessoa
+"nova" na lista, e o mute dela se perde. É o comportamento desejado (o mute é de
+sessão), mas nunca foi observado com queda real.
+
+---
+
+---
+
+# Booble (conversa paralela) — 2026-08-21
+
+Feature nova: [`docs/features/booble.md`](docs/features/booble.md). Grupo ad-hoc
+que prioriza áudio: dentro 100%, fora 10% nos dois sentidos. A filiação é do
+servidor (raio, zona, teto); o volume é de cada cliente.
+
+**Revisado no mesmo dia, depois do primeiro olhar do usuário:** os raios eram
+grandes demais (entrar no raio audível de 5 tiles, sair só além de 6,5) e a
+booble ficava pendurada atrás de quem já tinha saído da conversa. Agora é escala
+de cochicho — **2 tiles para entrar, 3 para permanecer** — e o indicador virou um
+**círculo dinâmico no chão em volta do grupo** (`game/BoobleRings.ts`), em vez de
+uma pastilha por cabeça: o que importa numa booble é quem está com quem, e isso é
+relação, não etiqueta.
+
+## Já verificado
+
+### `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+
+### O servidor, de verdade (headless em :3099, Supabase e LiveKit desligados)
+
+Script de sockets no molde do `smoke-test.mts`, cenário Estúdio. **25/25**:
+
+- **criar**: A entra na booble de B → os dois recebem `player:booble` com o
+  **mesmo** id, e o terceiro (de fora) também é avisado;
+- **entrar**: C entra na booble existente — id igual, não uma segunda booble; e
+  A **não** recebe evento novo, porque a booble dele não mudou;
+- **sair**: `booble:leave` remove C e os outros dois **continuam** (2 não dissolve);
+- **recusas, todas em silêncio**: alvo longe (> `BOOBLE_JOIN_RADIUS`), alvo
+  ausente, alvo = eu mesmo, alvo inexistente, alvo vazio, e **alvo a 32px do
+  outro lado da parede** (zona diferente barra a entrada). Nenhum socket caiu;
+- **isolamento entre mundos**: quem está na Praça não alcança quem está no Estúdio;
+- **quebra por distância**: o membro que andou para além de `BOOBLE_EXIT_RADIUS`
+  é removido, é avisado, e os dois que ficaram seguem juntos;
+- **atravessa a parede**: formada a booble na área aberta, entrar na sala de
+  reunião **não** a quebra (zona muda, filiação não) — é a decisão central;
+- **ausente sai da booble**, e quem sobrou sozinho é **dissolvido**;
+- **queda**: `disconnect` dissolve a booble que ficaria com uma pessoa só;
+- **teto**: 8 pessoas entram na mesma booble e a nona é recusada em silêncio.
+
+E, sobre os raios novos (segunda rodada, 8/8):
+
+- a invariante `entrar <= permanecer` vale, e permanecer < audível;
+- entrar a **60px** (dentro de 2 tiles) forma; a **128px** — audível, mas longe —
+  é **recusado**, que é a mudança pedida;
+- afastar-se para **82px** (< 3 tiles) **não** remove, e para **122px** remove.
+  Antes era preciso passar de 208px para sair.
+
+### A regra de volume, sem navegador (16/16)
+
+`audioVolumeFor` é função pura, então foi chamada direto. Cobre a **regressão**
+(sem booble em jogo, tudo idêntico a antes: rampa, zona diferente = 0, sala =
+plano), a booble atravessando zona e distância, os 10% nos **dois** sentidos,
+booble alheia contando como "fora", `0.1 × 0 = 0` (a sala fechada não é furada) e
+a **simetria exata** em cinco distâncias.
+
+### No navegador, confirmado pelo usuário — 2026-08-21
+
+"tudo funcionando", depois dos ajustes de raio e do círculo. **Eu não vi a tela**;
+o que segue é o que essa confirmação necessariamente exercitou, não o que foi
+conferido item por item:
+
+- ✅ o botão **booble** aparecendo na linha de quem está ao alcance — o que
+  exercita o `boobleReachIds` novo (perto + mesma zona, calculado no `Game`), e
+  não o predicado do áudio;
+- ✅ a booble se formando pelo clique e o `player:booble` chegando aos dois lados;
+- ✅ **o círculo no chão**, que era o maior risco desta entrega: a geometria
+  (`PAD`, `MIN_RADIUS`, `FLATTEN`) e a camada entre o mapa e os avatares. Nada
+  disso se verifica por `tsc`;
+- ✅ a atenuação sendo audível na prática — ou seja, `BOOBLE_OUTSIDE_VOLUME = 0.1`
+  não ficou inaudível ao ponto de a feature parecer quebrada, que era a dúvida
+  registrada aqui;
+- ✅ sair da booble no raio novo (3 tiles) sendo prático.
+
+### Regressão
+
+`smoke-test.mts` **14/14** contra o servidor headless. Importa porque
+`PlayerState` ganhou um campo e o `world:snapshot` é posicional.
+
+Os dois scripts de teste rodaram da raiz e foram apagados; o `smoke-test.mts`
+continua como está.
+
+## Falta verificar (em ordem de importância)
+
+O caminho principal está confirmado. O que sobra são os cantos.
+
+### 1. Os detalhes visuais que o caminho principal não separa
+
+"Funcionando" cobre o círculo aparecendo e acompanhando o grupo. **Não** separa:
+
+- **duas boobles próximas**: círculos sobrepostos somando alpha podem virar uma
+  mancha só, e aí perde-se justamente a informação que o círculo existe para dar
+  (quem está com quem). Precisa de 4 pessoas em dois pares;
+- **a booble de outra pessoa**, desenhada mais fraca (`OTHER_FILL`/`OTHER_STROKE`)
+  — só aparece com uma terceira pessoa de fora olhando;
+- **o crescimento** de 2 para 3 pessoas, que muda o raio de um frame para o outro
+  sem transição: pode ler como salto;
+- **zoom mínimo e máximo** sobre o círculo;
+- o **"+N"** do aviso a partir de `BOOBLE_MAX_NAMES` (precisa de 4 na booble) e a
+  precedência dos selos `ausente > booble > voz` na lista.
+
+### 2. Sem LiveKit configurado
+
+O botão passou a não depender do tick da voz exatamente para funcionar sem
+LiveKit, e isso foi corrigido **por leitura do código**. A verificação do usuário
+foi com voz ligada, então o caminho sem voz continua não observado. É o passo 11
+do roteiro em "Como testar".
+
+### 3. O teto de 16 subscrições nunca foi provocado
+
+Duas coisas dependem dele e só importam com **mais de 16 pessoas audíveis ao
+mesmo tempo** — situação nunca testada, porque exige 17 abas:
+
+- membros da booble entram na frente do `slice(0, MAX_AUDIO_SUBSCRIPTIONS)`. É o
+  caminho em que a booble falharia de forma silenciosa e difícil de diagnosticar:
+  "sem stream" é silêncio, não volume baixo;
+- o badge `voz` passou a exigir `audioWanted` além de volume audível, o que
+  conserta um caso em que ele mentia **desde antes desta feature** (quem sobrava
+  do teto aparecia como audível). A correção é por leitura do código, não por
+  observação.
+
+### 4. A tela compartilhada dentro de uma booble
+
+O portão do vídeo passou a aceitar membro da booble (atravessando zona). Compila
+e a lógica é o mesmo booleano do áudio, mas ninguém compartilhou tela através de
+uma parede com alguém da mesma booble.
+
+### 5. Custo do `evictFarBooble` por movimento não medido
+
+Roda a cada `move` (15/s por pessoa) e sai na hora para quem não está em booble
+nenhuma. Quando está, é O(membros ≤ 8). Irrelevante em teoria, não medido.
+
+### 6. Reconexão no meio de uma booble
+
+Quem cai e volta é um `socket.id` novo, logo sem booble — por desenho. Mas nunca
+foi exercitado com queda real, e o outro lado recebe `player:left` seguido de um
+`player:joined` sem booble; não foi observado se a pastilha some corretamente
+nessa sequência.
+
+### 7. Não há trilha no banco
+
+`booble:join`/`leave` não gravam nada (nem quem esteve com quem, nem por quanto
+tempo). Foi escolha — a booble é efêmera, como o chamado de ausente —, mas
+`zone_visits` grava o equivalente para salas fechadas. Se um dia isso virar
+métrica ("quanto do dia as pessoas passam em conversa paralela"), vai faltar dado.
+
+### 8. `evictFarBooble` só olha quem se mexeu
+
+A remoção é avaliada no `move` de quem andou. Se um dia existir teletransporte,
+mudança de posição pelo servidor ou restauração de posição salva, esses caminhos
+**não** passam por lá e uma booble poderia esticar pelo mapa.
+
+# Vínculo com o mundo (o nome fica guardado) — 2026-08-20
+
+Feature nova: [`docs/features/vinculo-com-o-mundo.md`](docs/features/vinculo-com-o-mundo.md).
+O nome/cor/personagem de cada pessoa passam a ser gravados **por mundo** em
+`presence_state` (migração `0009`), e o lobby entra direto no jogo quando esse
+vínculo existe.
+
+## Já verificado
+
+### Contra um Supabase real, no navegador (2026-08-20)
+
+A `0009` foi aplicada e **o caminho principal funciona**: sair da conta, entrar de
+novo, clicar Entrar num mundo onde já se entrou antes e cair **direto no jogo**
+com o nome guardado, sem tela de entrada. Isso exercita de uma vez as três coisas
+novas que tocam o banco — `savePosition` gravando `display_name`/`avatar_color`,
+a consulta de vínculo em `listWorldsFor`, e `ensureProfile` devolvendo a
+aparência.
+
+Com isso caem as três pendências que estavam no topo desta lista: "a migração não
+foi aplicada", "nada da interface foi visto num navegador" (o caminho principal
+foi) e "o caminho do logout, que é o pedido original".
+
+### Sem banco
+
+- `npm run typecheck` (server + client) limpo e `npm run build` do client sem
+  erro.
+- **`smoke-test.mts` inteiro: 14/14**, contra o servidor headless em modo anônimo
+  (`PORT=3099` com as `SUPABASE_*`/`LIVEKIT_*` vazias no ambiente). Importa
+  porque o `persistPosition(true)` novo na entrada roda no mesmo caminho e, sem
+  banco, tem de ser um no-op silencioso — e é.
+- **Teste headless do `store`**, cobrindo as seis transições que a feature
+  introduz: prefill vindo do `setLobby`; mundo sem vínculo → tela de entrada com
+  o prefill e o cenário do mundo; mundo com vínculo → **entra direto** com
+  nome/cor/personagem guardados; "Editar" → tela preenchida; recusa
+  (`place-full`) → tela de entrada com o motivo, sem loop; `leave()` mantendo o
+  nome. O script rodou da raiz e **não** ficou no repo.
+
+## Falta verificar (em ordem de importância)
+
+Nada aqui bloqueia o uso — o caminho principal está confirmado. São os cantos.
+
+> **Vale para qualquer outro ambiente (produção incluída):** a `0009` é
+> obrigatória junto com este código. O upsert de posição passou a mandar
+> `display_name`/`avatar_color`, e contra um banco sem essas colunas o Postgres
+> recusa a escrita **inteira** (`42703`) — e como `db.ts` é fail-soft, o sintoma é
+> silencioso e duplo: ninguém volta onde parou **e** nenhum vínculo é criado. Rode
+> o passo 9 do [`db/README.md`](db/README.md) em cada banco.
+
+### 1. Nome diferente em mundos diferentes
+
+O desenho permite ser "Iago" num mundo e "Iago (cliente)" em outro (é o que
+justifica o vínculo ser por mundo, e não por conta). Nunca foi provocado com dois
+mundos de verdade — passo 7 do roteiro.
+
+### 2. O botão **Editar** e a recusa na entrada direta
+
+Trocar nome/cor/personagem num mundo que já tem vínculo (passo 6 do roteiro) e a
+entrada direta sendo **recusada** (`place-full`, `place-restricted`) e caindo na
+tela de entrada com o motivo. O segundo caso foi provado no teste headless do
+store, nunca no navegador.
+
+### 3. Linha antiga de `presence_state`
+
+Quem já entrava antes da `0009` tem `display_name` nulo e deve ser perguntado
+**uma** vez. O filtro (`not display_name is null`) nunca rodou contra uma linha
+dessas.
+
+### 4. A consulta a mais no lobby não foi medida
+
+`listWorldsFor` fazia 4 consultas e agora faz 5, filtrando em JS. Continua fora
+do caminho quente e continua sem medição — igual ao que já estava anotado para a
+entrega do lobby.
+
+### 5. `LobbyState.me` cacheado por socket
+
+Hoje é seguro porque trocar de aparência exige entrar num mundo, e entrar fecha o
+socket do lobby. Se o lobby ganhar socket persistente, esse valor envelhece — não
+há teste que perceba isso.
+
+---
+
+# Indicador visual de ausente (feed + pastilha) — 2026-08-20
+
+Ver [`docs/features/modo-ausente.md`](docs/features/modo-ausente.md). Camada
+visual nova em cima do modo ausente, que já existia: a mini-tela com o feed
+rolando ao lado da cabeça e a pastilha **ausente** acima do nome.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ Por leitura do código: local, remotos e quem **entra depois** passam todos
+  por `Avatar.setAway` (`Game.setSelfAway`, o handler de `player:away` e o
+  `spawnRemote` do `world:snapshot`), então os três casos estão cobertos sem
+  caminho novo. Nada em `shared/` nem no protocolo do Socket.IO mudou.
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada foi visto num navegador
+Todo o indicador é desenho em Pixi, e desenho não se verifica por `tsc`. O que
+pode estar errado e o compilador não pega:
+
+- **A máscara do feed.** Ela é irmã do container (as coordenadas do `feed` estão
+  deslocadas) e precisa estar na árvore de exibição para valer no Pixi v8. Se
+  não valer, os cards aparecem **fora** da telinha, subindo pelo mapa.
+- **Posição e escala.** Os números (`SCREEN_X = 15`, `SCREEN_TOP = -30`) foram
+  derivados da geometria do sprite (16×32 a 2x, pés na borda de baixo), não
+  olhados: a telinha pode encostar no corpo, ou brigar com um nome comprido.
+- **A pastilha.** A altura sai de `label.height`, medido em runtime — se o
+  `Text` do Pixi medir diferente do esperado, ela pode sobrepor o nome.
+- **O loop do feed.** `offset % CARD_PITCH` com 4 cards deveria ser contínuo;
+  uma emenda visível a cada ciclo é o sintoma de a conta estar errada por um card.
+- **Zoom.** O indicador vive em coordenadas do mundo. Em zoom mínimo o texto
+  "ausente" (9px) pode ficar ilegível — nesse caso, ou cresce, ou some abaixo de
+  um limiar de zoom.
+
+O roteiro completo está em "Como testar" no doc da feature — `npm run dev`, duas
+abas (e uma terceira para o caso do `world:snapshot`).
+
+### 2. Custo por frame não medido
+Cada avatar ausente reposiciona 4 `Graphics` por frame e mantém uma máscara
+(uma passada de render a mais). Irrelevante para uma equipe; não medido com
+muita gente ausente ao mesmo tempo.
 
 ---
 

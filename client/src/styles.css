@@ -9,6 +9,14 @@
   --amber: #f4a261;
   /* azul elétrico: só o aviso de compartilhamento de tela usa */
   --electric: #2f9bff;
+  /*
+   * violeta: só a booble usa. Cor própria porque as três de sempre estão
+   * ocupadas por semântica (amber = ausente/degradado, mint = voz/faça-isso,
+   * coral = quebrado) e uma booble não é nenhuma dessas coisas. O valor não é
+   * novo no projeto: é AVATAR_COLORS[5], e o mesmo número está em
+   * `game/BoobleRings.ts` (o círculo no chão) — se um mudar, o outro tem de mudar.
+   */
+  --violet: #8e7dbe;
   --radius: 16px;
   --font-display: 'Fredoka', system-ui, sans-serif;
   --font-body: 'Nunito Sans', system-ui, sans-serif;
@@ -559,6 +567,45 @@ button {
 }
 
 /*
+ * Micro-badge da booble. Mesma métrica de .ausente/.near — os três são
+ * exclusivos (ver a precedência no Hud), então dividem o `margin-left:auto`.
+ */
+.roster .booble {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--violet);
+  border: 1px solid rgba(142, 125, 190, 0.55);
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+/*
+ * "booble"/"entrar" na linha de quem está por perto. Mesma métrica do
+ * .nudge-btn: uma ação dentro de uma linha de lista não pode ler como botão
+ * grande, senão a lista deixa de ser uma lista.
+ */
+.roster .booble-btn {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 99px;
+  padding: 1px 8px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.roster .booble-btn:hover {
+  background: rgba(142, 125, 190, 0.28);
+  border-color: rgba(142, 125, 190, 0.6);
+}
+
+/*
  * "chamar" mora na linha de quem está ausente e usa a métrica dos micro-badges
  * (.ausente/.near) para não virar um botão grande no meio da lista. Opacidade
  * cheia porque a linha inteira já está a 55% (`.ausente-li`) — sem isto a única
@@ -1029,6 +1076,29 @@ button {
   animation: notice-in 0.16s ease-out both, nudge-pulse 1.8s ease-in-out 0.2s infinite;
 }
 
+/*
+ * Booble: violeta, e SEM pulso. Diferente do chamado, este aviso não precisa ser
+ * notado — quem está numa booble sabe que está, porque acabou de clicar. Ele
+ * está ali para responder "com quem?" e para oferecer o "Sair"; um pulso
+ * permanente na tela de quem só quer conversar seria irritação, não informação.
+ */
+.notice.booble {
+  background: rgba(142, 125, 190, 0.18);
+  border-color: rgba(142, 125, 190, 0.55);
+  color: #d9d2f0;
+  padding-right: 8px;
+}
+
+/* o .notice-action padrão é mint; dentro do aviso violeta ele brigaria */
+.notice.booble .notice-action {
+  border-color: rgba(142, 125, 190, 0.65);
+  background: rgba(142, 125, 190, 0.28);
+}
+
+.notice.booble .notice-action:hover {
+  background: rgba(142, 125, 190, 0.42);
+}
+
 @keyframes nudge-pulse {
   50% {
     box-shadow: 0 0 0 6px rgba(61, 220, 132, 0.14);
@@ -1404,6 +1474,7 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   .audio-popover,
+  .soundboard-popover,
   .notice {
     animation: none;
   }
@@ -1766,4 +1837,385 @@ button {
   font-size: 24px;
   letter-spacing: 0.4em;
   font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------- Soundboard (popover) */
+
+/*
+ * Herda a ancoragem e a animação do `.audio-popover` — é o mesmo tipo de
+ * painel, aberto pelo botão vizinho na mesma pílula. Mais largo porque a grade
+ * de slots precisa de duas colunas confortáveis; o `min()` mantém o painel
+ * dentro da tela no celular.
+ */
+.soundboard-popover {
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px 16px;
+  animation: popover-in 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  z-index: 41;
+}
+
+.soundboard-level {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.soundboard-level strong {
+  font-family: var(--font-display);
+  color: var(--mint);
+}
+
+.soundboard-level small {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.soundboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sound-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 6px 8px;
+  border: 1.5px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12px;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+
+/* bloqueado e vazio são estados diferentes de propósito: um é "conquiste", o
+   outro é "clique". O tracejado do vazio é o convite; o cadeado, a promessa. */
+.sound-slot.locked {
+  border-style: dashed;
+  color: var(--text-dim);
+  opacity: 0.55;
+}
+
+.sound-slot.empty {
+  border-style: dashed;
+  cursor: pointer;
+}
+
+.sound-slot.empty:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--mint);
+}
+
+.sound-slot.filled {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* o slot aceso enquanto o som toca: é o retorno visual do clique, e o único
+   sinal que aparece quando o navegador bloqueou o autoplay do áudio */
+.sound-slot.fired {
+  border-color: var(--mint);
+  background: rgba(61, 220, 132, 0.14);
+}
+
+.sound-slot-play {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sound-slot-play svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--text-dim);
+}
+
+.sound-slot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-slot-time {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sound-slot-lock {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.sound-slot-remove {
+  flex: none;
+  width: 24px;
+  height: 100%;
+  border: none;
+  border-left: 1px solid var(--panel-border);
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.sound-slot-remove:hover:not(:disabled) {
+  color: var(--coral);
+  background: rgba(239, 71, 111, 0.12);
+}
+
+.sound-slot-remove svg {
+  width: 13px;
+  height: 13px;
+}
+
+.soundboard-senders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 12px;
+}
+
+.sender-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.sender-row:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.sender-row.muted {
+  color: var(--text-dim);
+}
+
+.sender-row svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.sender-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sender-state {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--text-dim);
+}
+
+.sender-row.muted .sender-state {
+  color: var(--amber);
+}
+
+.soundboard-error {
+  margin: 0 0 10px;
+  color: var(--coral);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.soundboard-info {
+  margin: 0 0 10px;
+  color: var(--mint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.soundboard-hint {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* ----------------------------------------- Escolher o trecho (clip picker) */
+
+.clip-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.clip-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clip-title small {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-wave {
+  position: relative;
+  height: 52px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+}
+
+.clip-wave canvas {
+  display: block;
+  width: 100%;
+  height: 52px;
+  /* o canvas lê estas custom properties para pintar as barras */
+  color: var(--text-dim);
+}
+
+/*
+ * A janela de 5s é overlay em CSS, e não desenho no canvas, de propósito:
+ * arrastar o slider mexe só em `left`/`width` (composição na GPU) em vez de
+ * repintar a onda a cada pixel.
+ */
+.clip-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1.5px solid var(--mint);
+  border-radius: 8px;
+  background: rgba(61, 220, 132, 0.18);
+  pointer-events: none;
+  transition: left 0.04s linear, width 0.04s linear;
+}
+
+.clip-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--mint);
+}
+
+.clip-range:disabled {
+  opacity: 0.5;
+}
+
+.clip-marks {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.clip-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clip-actions .join-secondary,
+.clip-actions .lobby-action {
+  flex: 1;
+  min-width: 0;
+}
+
+.clip-cancel {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.clip-cancel:hover:not(:disabled) {
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clip-window {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------- Volume do soundboard */
+
+.sound-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.sound-volume .join-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.sound-volume .join-label small {
+  margin-left: auto;
+  color: var(--mint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* silenciado: o número deixa de ser mint (não há volume a exibir) e o slider
+   desabilitado explica sozinho que o controle de cima manda */
+.sound-volume.muted .join-label small {
+  color: var(--text-dim);
+}
+
+.sound-volume-hint {
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.4;
 }

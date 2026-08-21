@@ -29,6 +29,13 @@ export interface WorldApi {
   chatSend(text: string): boolean;
   /** Chama quem está ausente. O servidor pode recusar em silêncio (cooldown). */
   nudge(targetId: string): boolean;
+  /**
+   * Entra na booble desta pessoa, criando uma se ela não tiver. O servidor pode
+   * recusar em silêncio (longe, ausente, outra zona, booble cheia).
+   */
+  boobleJoin(targetId: string): boolean;
+  /** Sai da minha booble. Sem argumento: só se sai da própria. */
+  boobleLeave(): boolean;
   /** Comecei/parei de compartilhar a tela — o servidor só registra. */
   share(sharing: boolean): boolean;
 }
@@ -47,6 +54,8 @@ export function createWorldApi(getSocket: () => AppSocket | null): WorldApi {
     setAway: (away) => fire(getSocket(), (s) => s.emit('away', away)),
     chatSend: (text) => fire(getSocket(), (s) => s.emit('chat:send', text)),
     nudge: (targetId) => fire(getSocket(), (s) => s.emit('presence:nudge', targetId)),
+    boobleJoin: (targetId) => fire(getSocket(), (s) => s.emit('booble:join', targetId)),
+    boobleLeave: () => fire(getSocket(), (s) => s.emit('booble:leave')),
     share: (sharing) => fire(getSocket(), (s) => s.emit('share', sharing)),
   };
 }

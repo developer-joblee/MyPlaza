@@ -47,7 +47,10 @@ spawn, nunca a deixa esperando.
 **Gravação.** O cliente manda posição a `TICK_RATE` (15/s). Gravar tudo seria
 15 escritas por pessoa por segundo sem ganho nenhum, então `persistPosition()`
 respeita `POSITION_SAVE_MS` = 3s (`shared/src/constants.ts`) — mas grava **na
-hora** quando o estado muda de verdade: sentar, levantar, ficar ausente, sair.
+hora** quando o estado muda de verdade: **entrar**, sentar, levantar, ficar
+ausente, sair. (Entrar entrou nessa lista com o vínculo: quem entra e fecha a aba
+sem andar precisa sair com o nome gravado — ver
+[Vínculo com o mundo](vinculo-com-o-mundo.md).)
 Na prática o pior caso de perda são ~3s de caminhada, e só se o processo morrer
 de repente.
 
@@ -119,7 +122,10 @@ organizations ──< memberships >── profiles ──< sessions ──< zone
   distingue local aberto à empresa de local restrito.
 - `place_members` — só existe para local restrito.
 - `sessions` — histórico: uma linha por entrada, com `disconnect_reason`.
-- `presence_state` — 1 linha por (local, perfil), sobrescrita: **onde parou**.
+- `presence_state` — 1 linha por (local, perfil), sobrescrita: **onde parou** e,
+  desde a `0009`, **como se chama naquele mundo** (`display_name`,
+  `avatar_color`) — é o vínculo que dispensa a tela de entrada. Ver
+  [Vínculo com o mundo](vinculo-com-o-mundo.md).
 - `chat_messages` — o chat, com `sender_name` em snapshot.
 - `characters` / `scenarios` / `audio_zones` — catálogo espelhando `shared/src/`.
 - `zone_visits` — quem esteve em qual sala fechada, quando, por quanto tempo.
