@@ -107,6 +107,27 @@ export function SlidersIcon() {
   );
 }
 
+/**
+ * Engrenagem: "configurações", e nada mais específico que isso.
+ *
+ * Seis dentes, não os oito ou doze de uma engrenagem realista — a 22px o
+ * espaçamento é o que separa "engrenagem" de "mancha redonda", que é a regra do
+ * topo deste arquivo. E ela só pôde ficar com o significado genérico porque o
+ * áudio já usa `SlidersIcon`: os dois botões vizinhos na barra precisam ser
+ * distinguíveis de relance.
+ */
+export function GearIcon() {
+  return (
+    <svg {...base}>
+      <circle cx="12" cy="12" r="6.6" />
+      <circle cx="12" cy="12" r="2.6" />
+      <path d="M18.6 12h2.8M5.4 12H2.6" />
+      <path d="M15.3 6.28l1.4-2.42M8.7 17.72l-1.4 2.42" />
+      <path d="M8.7 6.28l-1.4-2.42M15.3 17.72l1.4 2.42" />
+    </svg>
+  );
+}
+
 export function CheckIcon() {
   return (
     <svg {...base}>

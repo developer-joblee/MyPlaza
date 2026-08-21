@@ -9,6 +9,7 @@ import { createSoundPlayer } from '../soundboard';
 import { useStore } from '../state/store';
 import { listMics, loadMicPreference, probeMic } from '../voice/mic';
 import type { VoiceRoom } from '../voice/VoiceRoom';
+import { AvatarContextMenu } from './AvatarContextMenu';
 import { Chat } from './Chat';
 import { Hud } from './Hud';
 import { MediaControls } from './MediaControls';
@@ -129,6 +130,7 @@ export function GameView() {
       <MediaControls />
       <ZoomControls />
       <SharingIndicator />
+      <AvatarContextMenu />
     </div>
   );
 }

@@ -3,7 +3,6 @@ import {
   SCENARIOS,
   isProfileId,
   type AssignableWorldRole,
-  type LobbyErrorReason,
   type LobbyResult,
   type ScenarioId,
   type WorldPatch,
@@ -13,7 +12,9 @@ import { createLobbyApi } from '../net/lobbyApi';
 import { createSocket, type AppSocket } from '../net/socket';
 import { useStore } from '../state/store';
 import { signOut } from '../auth/supabase';
+import { REASON_TEXT } from './lobbyReason';
 import { SCENARIO_EMOJI } from './scenarioEmoji';
+import { copyText } from './util';
 import { WorldAdmin } from './WorldAdmin';
 
 /**
@@ -159,18 +160,18 @@ export function LobbyScreen() {
 
   /**
    * Copiar é o caminho normal — o ID é um uuid, e ninguém digita 36 caracteres
-   * sem errar. O `catch` existe porque `navigator.clipboard` falha em contexto
-   * não seguro (HTTP fora de localhost): aí o texto continua selecionável na
-   * tela, que é a saída manual.
+   * sem errar. O caminho de falha (contexto não seguro) está em `copyText`; aqui
+   * ele vira a saída manual, com o texto continuando selecionável na tela.
    */
   const copyMyId = () => {
-    void navigator.clipboard
-      .writeText(myId)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => setError('Não deu para copiar. Selecione o ID e copie à mão.'));
+    void copyText(myId).then((ok) => {
+      if (!ok) {
+        setError('Não deu para copiar. Selecione o ID e copie à mão.');
+        return;
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   /** Dono e host administram; membro comum só entra. */
@@ -460,17 +461,3 @@ export function LobbyScreen() {
     </div>
   );
 }
-
-/** Motivos vindos do servidor, em português. Ele manda código, nunca texto. */
-const REASON_TEXT: Record<LobbyErrorReason, string> = {
-  // os dois primeiros são do transporte: o servidor nem soube do pedido
-  'socket-down': 'Sem conexão com o servidor. Tente de novo.',
-  timeout: 'O servidor não respondeu. Tente de novo.',
-  'not-configured': 'Este servidor não tem login configurado.',
-  'auth-required': 'Entre com sua conta para ver seus mundos.',
-  'invalid-token': 'Sua sessão expirou. Entre de novo.',
-  'invalid-input': 'Confira o que foi digitado.',
-  'not-allowed': 'Só quem administra o mundo pode adicionar gente.',
-  'not-found': 'Isso não existe mais.',
-  error: 'Algo falhou do nosso lado. Se continuar, o motivo está no log do servidor.',
-};

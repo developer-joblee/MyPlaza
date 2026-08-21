@@ -149,6 +149,15 @@ entre as telas exigiria tirar esse ciclo de vida de lá. Duas conexões curtas e
 nunca simultâneas custam menos que a reestruturação — e o servidor já trata
 conexão sem `join` (loga "sem join" no disconnect).
 
+> **Mas os eventos do lobby não são exclusivos do socket do lobby.**
+> `server/src/index.ts` registra `registerLobbyHandlers` em **toda** conexão, e o
+> socket do jogo carrega o mesmo token no handshake — então `lobby:addMember`
+> funciona de dentro de um mundo, e é isso que o
+> [menu de configurações](configuracoes-no-jogo.md) usa para adicionar gente sem
+> obrigar a pessoa a sair. Continua valendo que os dois **sockets** nunca são
+> simultâneos (o cache de `appearance` em `lobby.ts` depende disso): o menu usa o
+> socket do jogo, não abre um segundo.
+
 **Toda resposta de sucesso devolve o estado inteiro.** São operações de um
 clique. A alternativa ("escreve, depois lista de novo") tem uma janela no meio
 em que a tela mostra dado velho, e o dobro de idas ao servidor.

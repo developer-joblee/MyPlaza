@@ -1475,6 +1475,7 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .audio-popover,
   .soundboard-popover,
+  .settings-popover,
   .notice {
     animation: none;
   }
@@ -2218,4 +2219,189 @@ button {
   color: var(--text-dim);
   font-size: 10px;
   line-height: 1.4;
+}
+
+/* --------------------------------------- Menu de configurações (popover) */
+
+/*
+ * Terceiro painel no mesmo molde do `.audio-popover`: mesma ancoragem, mesma
+ * animação, mesmo cabeçalho (`.audio-head`). Largura do soundboard porque o
+ * conteúdo é um uuid de 36 caracteres — num painel de 320px o campo fica
+ * apertado a ponto de não caber o ID inteiro.
+ *
+ * Ancorado na PÍLULA, não no botão: a engrenagem é o último botão da barra, e
+ * pendurar o painel nela jogaria tudo para a direita da tela. É a mesma decisão
+ * documentada no `.audio-popover`.
+ */
+.settings-popover {
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px 16px;
+  animation: popover-in 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  z-index: 41;
+}
+
+/* onde você está: emoji do cenário + nome do mundo */
+.settings-world {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-section {
+  margin-bottom: 16px;
+}
+
+/*
+ * O `.join-hint` nasceu centralizado na tela de entrada, onde ele é a legenda de
+ * um formulário inteiro. Aqui é texto de apoio de uma seção, então volta a ser
+ * alinhado à esquerda e encosta no rótulo.
+ */
+.settings-popover .join-hint {
+  margin: 0;
+  text-align: left;
+  font-size: 11.5px;
+}
+
+.settings-popover .join-input {
+  padding: 9px 12px;
+  font-size: 13px;
+  /* o uuid não quebra em espaço nenhum: sem isto ele estoura o campo */
+  min-width: 0;
+}
+
+.settings-ok {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--mint);
+}
+
+/* mesma semântica de `.join-denied`, em escala de painel */
+.settings-error {
+  margin: 0 0 14px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 71, 111, 0.35);
+  background: rgba(239, 71, 111, 0.12);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-divider {
+  display: block;
+  height: 1px;
+  margin: 0 0 12px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/*
+ * Coral tingido em repouso e sólido no hover — exatamente o tratamento que a
+ * `.media-btn.danger` dava ao telefone na barra. O que mudou foi o formato:
+ * dentro de um menu a ação ganha rótulo, e um rótulo é o que evita o clique por
+ * engano que um telefone solto ao lado do botão de mutar convidava.
+ */
+.settings-danger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(239, 71, 111, 0.5);
+  background: rgba(239, 71, 111, 0.16);
+  color: #ffb3c4;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.settings-danger:hover {
+  background: var(--coral);
+  border-color: transparent;
+  color: #fff;
+}
+
+.settings-danger svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ------------------------------------ Menu de contexto do avatar (Pixi) */
+
+/*
+ * Aberto com o botão direito sobre um boneco. Duas diferenças dos popovers da
+ * barra, e nenhuma é cosmética:
+ *
+ * - `fixed`, não o `absolute` que `.panel` dá: as coordenadas vêm de
+ *   `e.client.x/y` do evento do Pixi, que são px de VIEWPORT. Com `absolute` o
+ *   menu descolaria do cursor no dia em que o `.game-view` deixasse de coincidir
+ *   com a janela.
+ * - **sem animação**: um menu preso ao cursor tem de aparecer instantâneo. O
+ *   `popover-in` também não serviria — ele carrega o `translateX(-50%)` da
+ *   centralização dos outros painéis, que aqui estaria errado. Por isso este
+ *   painel não entra na lista de `prefers-reduced-motion`: não há o que reduzir.
+ *
+ * `left`/`top` são inline (vêm do componente, já virados para dentro da tela);
+ * o CSS não os define para não brigar com a medição.
+ */
+.avatar-menu {
+  position: fixed;
+  z-index: 42;
+  min-width: 168px;
+  max-width: 240px;
+  padding: 10px 12px;
+  /* o --radius de 16px do `.panel` lê como cartão numa caixa deste tamanho */
+  border-radius: 12px;
+}
+
+.avatar-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* a cor vem inline (`colorToCss`); aqui só a forma */
+.avatar-menu-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.avatar-menu-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar-menu-tag {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* estado vazio, não item: sem hover, sem cursor de clique */
+.avatar-menu-empty {
+  margin: 8px 0 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
 }

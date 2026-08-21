@@ -29,6 +29,26 @@ export function joinNames(names: string[], max: number): string {
 }
 
 /**
+ * Copia um texto para a área de transferência. Devolve `false` em vez de lançar.
+ *
+ * O `catch` não é decoração: `navigator.clipboard` **falha em contexto não
+ * seguro** (HTTP fora de `localhost`), que é exatamente o caso de quem testa
+ * pelo IP da máquina na rede local. Quem chama trata o `false` mostrando a saída
+ * manual ("selecione e copie à mão") — o texto continua selecionável na tela.
+ *
+ * Vive aqui porque duas telas copiam o mesmo ID: o lobby e o menu de
+ * configurações dentro do jogo.
+ */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Duração humana e curta, para o progresso do soundboard: "3h 20min", "12min".
  *
  * Arredonda para minuto: o progresso de nível é medido em horas, e mostrar

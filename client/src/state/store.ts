@@ -178,6 +178,19 @@ interface AppState {
   focusedScreenId: string | null;
   /** zoom alvo da câmera, em % */
   zoomPct: number;
+  /**
+   * Menu de contexto aberto sobre um avatar; `null` = nenhum.
+   *
+   * Guarda **só o id e onde clicar** — nome, cor e ausência saem do `roster` na
+   * hora de desenhar. É o que faz o menu morrer sozinho quando a pessoa sai do
+   * mundo (o id some do roster) em vez de ficar apontando para quem não está
+   * mais lá, e o que evita uma segunda cópia do nome que envelheceria.
+   *
+   * `x`/`y` são coordenadas de VIEWPORT (CSS px), porque o menu é um elemento
+   * `fixed` do DOM — não de mundo. Andar não arrasta o menu, e isso é de
+   * propósito: ele pertence ao clique, não ao avatar.
+   */
+  contextMenu: { id: string; x: number; y: number } | null;
 
   join: (name: string, color: number, scenario: ScenarioId, character: CharacterId) => void;
   /** terminou o boot: vai para o login, o lobby, ou direto para a entrada */
@@ -243,6 +256,9 @@ interface AppState {
   setBoobleReachIds: (ids: string[]) => void;
   setFocusedScreen: (peerId: string | null) => void;
   setZoomPct: (pct: number) => void;
+  /** clique direito num avatar (o `Game` chama); `x`/`y` em px de viewport */
+  openContextMenu: (id: string, x: number, y: number) => void;
+  closeContextMenu: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -307,6 +323,7 @@ export const useStore = create<AppState>((set) => ({
   boobleReachIds: [],
   focusedScreenId: null,
   zoomPct: 100,
+  contextMenu: null,
 
   join: (name, color, scenario, character) =>
     set({
@@ -421,6 +438,7 @@ export const useStore = create<AppState>((set) => ({
       boobleReachIds: [],
       focusedScreenId: null,
       zoomPct: 100,
+      contextMenu: null,
     })),
   setScenario: (id) => set({ selfScenario: id }),
   setSelf: (id, connected) => set({ selfId: id, connected }),
@@ -511,4 +529,6 @@ export const useStore = create<AppState>((set) => ({
   setBoobleReachIds: (ids) => set({ boobleReachIds: ids }),
   setFocusedScreen: (peerId) => set({ focusedScreenId: peerId }),
   setZoomPct: (pct) => set({ zoomPct: pct }),
+  openContextMenu: (id, x, y) => set({ contextMenu: { id, x, y } }),
+  closeContextMenu: () => set({ contextMenu: null }),
 }));

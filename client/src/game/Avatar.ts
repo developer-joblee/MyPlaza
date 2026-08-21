@@ -1,4 +1,12 @@
-import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
+import {
+  Container,
+  Graphics,
+  Rectangle,
+  Sprite,
+  Text,
+  TextStyle,
+  type FederatedPointerEvent,
+} from 'pixi.js';
 import { PROXIMITY_RADIUS, TILE_SIZE } from '@together/shared';
 import { AwayIndicator } from './AwayIndicator';
 import { BoobleWhisper } from './BoobleWhisper';
@@ -221,6 +229,44 @@ export class Avatar {
 
   setSpeaking(speaking: boolean): void {
     this.speakingRing.visible = speaking;
+  }
+
+  /**
+   * Liga o clique direito neste avatar (`null` desliga). É a única interação do
+   * Pixi no projeto — o resto da entrada é teclado, na `window`.
+   *
+   * Três detalhes que não são opcionais:
+   *
+   * - **`hitArea` é obrigatória, não otimização.** Sem ela o Pixi testa pelos
+   *   *bounds* do container, e o container do player local inclui o círculo de
+   *   proximidade (`PROXIMITY_RADIUS`): clicar a cinco tiles de distância
+   *   acertaria a pessoa. Com a área explícita, o alvo é o corpo do boneco.
+   * - **A área é derivada do sprite**, não escrita à mão: cada personagem tem
+   *   sua escala e sua âncora (`sprites.ts` normaliza isso), e um retângulo
+   *   fixo descolaria no primeiro boneco com outra geometria.
+   * - **`interactiveChildren = false`**: quem responde é o container, e varrer
+   *   sprite, sombra, anéis, nome e indicador de ausente a cada teste é
+   *   trabalho para chegar sempre à mesma resposta.
+   */
+  setContextMenuHandler(handler: ((e: FederatedPointerEvent) => void) | null): void {
+    this.view.off('rightdown');
+    if (!handler) {
+      this.view.eventMode = 'none';
+      this.view.hitArea = null;
+      return;
+    }
+    const tex = this.frames.idle.down[0];
+    const w = tex.width * this.frames.scale;
+    const h = tex.height * this.frames.scale;
+    this.view.hitArea = new Rectangle(
+      -w / 2,
+      FEET_Y - h * this.frames.anchorY,
+      w,
+      h,
+    );
+    this.view.interactiveChildren = false;
+    this.view.eventMode = 'static';
+    this.view.on('rightdown', handler);
   }
 
   /**

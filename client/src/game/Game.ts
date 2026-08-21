@@ -1,4 +1,4 @@
-import { Application, Container } from 'pixi.js';
+import { Application, Container, type FederatedPointerEvent } from 'pixi.js';
 import {
   BOOBLE_JOIN_RADIUS,
   DEFAULT_CHARACTER,
@@ -106,8 +106,11 @@ export class Game {
     for (const prop of this.tilemap.props) this.playersLayer.addChild(prop);
     this.app.stage.addChild(this.world);
 
+    this.local.avatar.setContextMenuHandler((e) => this.onAvatarRightDown(null, e));
+
     this.keyboard.attach();
     this.app.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+    this.app.canvas.addEventListener('contextmenu', this.onContextMenu);
     this.bindSocket();
     this.app.ticker.add(this.tick);
 
@@ -159,6 +162,32 @@ export class Game {
   };
 
   /**
+   * Some com o menu do navegador em cima do canvas — o botão direito aqui é do
+   * jogo. Vale para o canvas inteiro, e não só sobre um avatar: metade das
+   * tentativas de clicar num boneco erra por alguns pixels, e ver o menu do
+   * Chrome nessas é pior que não ver menu nenhum.
+   *
+   * Ele NÃO abre o nosso menu: quem faz isso é o `rightdown` do avatar, pelo
+   * sistema de eventos do Pixi, que sabe qual boneco está na frente. Os dois são
+   * independentes — não há ordem entre eles para dar errado.
+   */
+  private onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+  /**
+   * Clique direito num avatar. `id` nulo é o player local: o id dele é o
+   * `socket.id`, que muda a cada reconexão, então é lido do store no momento do
+   * clique em vez de capturado quando o handler é criado.
+   */
+  private onAvatarRightDown(id: string | null, e: FederatedPointerEvent): void {
+    const who = id ?? useStore.getState().selfId;
+    if (!who) return;
+    // sem isto o mesmo clique também chegaria a quem estiver atrás
+    e.stopPropagation();
+    // `client` é px de viewport, que é o que um elemento `fixed` precisa
+    useStore.getState().openContextMenu(who, e.client.x, e.client.y);
+  }
+
+  /**
    * Frames do personagem pedido, caindo no padrão se o id não existir. O
    * servidor já valida, então isto só cobre um cliente mais novo que o servidor.
    */
@@ -194,6 +223,18 @@ export class Game {
         antialias: true,
         resolution: Math.min(window.devicePixelRatio || 1, 2),
         autoDensity: true,
+        /**
+         * A única interação do Pixi aqui é o clique direito no avatar, e clique
+         * é o grupo `click` — que fica ligado. Os de MOVIMENTO são desligados
+         * porque cada `mousemove` sobre o canvas dispararia um teste de acerto
+         * na camada de players, dezenas de vezes por segundo, para responder uma
+         * pergunta que ninguém faz: nada aqui reage a passar o mouse por cima.
+         *
+         * Se um dia houver hover (destacar quem está sob o cursor, tooltip),
+         * `move` precisa voltar a `true` — sem ele o `pointerover`/`pointerout`
+         * não existe, e o sintoma é "o hover não funciona e não há erro".
+         */
+        eventFeatures: { move: false, globalMove: false },
       }),
     ]);
     container.appendChild(app.canvas);
@@ -281,6 +322,7 @@ export class Game {
     // aparecer assim — é o caminho de quem abre a aba com o mundo em andamento
     remote.setSitting(p.sitting);
     remote.avatar.setAway(p.away);
+    remote.avatar.setContextMenuHandler((e) => this.onAvatarRightDown(p.id, e));
     this.boobles.set(p.id, p.boobleId);
     remote.avatar.setBooble(p.boobleId !== null);
     this.remotes.set(p.id, remote);
@@ -526,6 +568,9 @@ export class Game {
     for (const unbind of this.unbinders) unbind();
     this.boobleRings.destroy();
     this.app.canvas.removeEventListener('wheel', this.onWheel);
+    this.app.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    // o menu aponta para um avatar que está deixando de existir
+    useStore.getState().closeContextMenu();
     this.keyboard.detach();
     this.app.ticker.remove(this.tick);
     // senão o hook sobrevive à sessão e consulta um Game já destruído

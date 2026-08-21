@@ -3,10 +3,11 @@ import { setAway } from '../presence';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { AudioSettings } from './AudioSettings';
+import { SettingsMenu } from './SettingsMenu';
 import { SoundboardPanel } from './SoundboardPanel';
 import {
   AwayIcon,
-  HangupIcon,
+  GearIcon,
   HeadphonesIcon,
   MicIcon,
   ScreenIcon,
@@ -23,7 +24,6 @@ export function MediaControls() {
   const voiceStatus = useStore((s) => s.voiceStatus);
   const speaking = useStore((s) => s.speaking);
   const selfId = useStore((s) => s.selfId);
-  const leave = useStore((s) => s.leave);
 
   const soundboardMuted = useStore((s) => s.soundboardMuted);
   const authEmail = useStore((s) => s.authEmail);
@@ -31,8 +31,10 @@ export function MediaControls() {
   // visibilidade de painel é estado local (o Chat já faz assim), não da store
   const [open, setOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const boardTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const voiceOff = voiceStatus === 'unavailable';
   // ausente conta como mic desligado no ícone: é o que está acontecendo de fato
@@ -52,6 +54,10 @@ export function MediaControls() {
   const closeBoard = () => {
     setBoardOpen(false);
     boardTriggerRef.current?.focus();
+  };
+  const closeMenu = () => {
+    setMenuOpen(false);
+    menuTriggerRef.current?.focus();
   };
   /**
    * Sem conta não há soundboard: o tempo acumulado e o arquivo no Storage
@@ -79,6 +85,7 @@ export function MediaControls() {
     <>
       {open && <AudioSettings onClose={close} />}
       {boardOpen && <SoundboardPanel onClose={closeBoard} />}
+      {menuOpen && <SettingsMenu onClose={closeMenu} />}
       <div className="panel media-controls">
         <button
           type="button"
@@ -164,17 +171,26 @@ export function MediaControls() {
           <SoundboardIcon off={soundboardMuted} />
         </button>
 
-        {/* a divisória isola a ação destrutiva dos controles que se alternam */}
+        {/*
+          A divisória isola a última posição dos controles que se alternam. Ela
+          fica onde estava: o que mudou é que ali agora mora o menu que CONTÉM a
+          ação destrutiva ("Finalizar chamada"), em vez da ação em si — sair
+          deixou de ser um clique solto ao lado do botão de mutar.
+        */}
         <span className="media-divider" aria-hidden="true" />
 
         <button
+          ref={menuTriggerRef}
           type="button"
-          className="media-btn danger"
-          onClick={leave}
-          aria-label="Sair e voltar para a tela inicial"
-          title="Sair"
+          className={`media-btn${menuOpen ? ' open' : ''}`}
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-label="Configurações"
+          aria-expanded={menuOpen}
+          aria-haspopup="dialog"
+          aria-controls="settings-popover"
+          title="Configurações"
         >
-          <HangupIcon />
+          <GearIcon />
         </button>
       </div>
     </>

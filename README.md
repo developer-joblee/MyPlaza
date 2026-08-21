@@ -132,6 +132,8 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Chat | Painel no canto inferior direito (global) |
+| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa). Por enquanto o menu só mostra de quem é — **ainda não tem ações** — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
+| Configurações / sair | Botão de **engrenagem** na barra inferior (última posição, onde ficava o telefone): mostra em que mundo você está, **o seu ID**, o campo para **adicionar alguém a este mundo pelo ID** — sem sair do mundo — e o **Finalizar chamada** — ver [Menu de configurações](docs/features/configuracoes-no-jogo.md) |
 
 ## Features
 
@@ -157,15 +159,17 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Persistência (Supabase): perfis, empresas, locais, posição salva e atividade da sessão | [Persistência (Supabase)](docs/features/persistencia-supabase.md) | `db/`, `server/src/db.ts` |
 | Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
 | Lobby: criar mundos e convidar pessoas | [Lobby](docs/features/lobby.md) | `client/src/ui/LobbyScreen.tsx`, `server/src/lobby.ts` |
+| Menu de configurações no jogo (adicionar pelo ID sem sair do mundo; sair) | [Menu de configurações](docs/features/configuracoes-no-jogo.md) | `client/src/ui/SettingsMenu.tsx`, `client/src/ui/MediaControls.tsx` |
+| Menu de contexto no avatar (botão direito; **sem itens ainda**) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
 | Vínculo com o mundo (o nome fica guardado; entrar direto depois do logout) | [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md) | `db/migrations/0009_world_binding.sql`, `client/src/state/store.ts`, `server/src/db.ts` |
 | Camada de requisição (client → servidor) | [Camada de requisição](docs/features/camada-de-requisicao.md) | `client/src/net/` |
 
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As nove com doc (persistência, autenticação, lobby, camada de
-> requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble e
-> soundboard) já seguem a convenção.
+> resumo e o link. As onze com doc (persistência, autenticação, lobby, camada de
+> requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble,
+> soundboard, menu de configurações e menu de contexto) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 

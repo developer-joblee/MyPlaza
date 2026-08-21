@@ -5,6 +5,176 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Menu de contexto no avatar (botão direito) — 2026-08-21
+
+Feature nova: [`docs/features/menu-de-contexto.md`](docs/features/menu-de-contexto.md).
+Clique direito num personagem abre um menu ao lado do cursor. **Ele está vazio
+por pedido** — o que a entrega constrói é o caminho clique→store→painel. Entrega
+só de client; nada mudou em `server/`, `shared/` ou `db/`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+  Importa mais que de costume: é a **primeira vez** que o projeto usa a API de
+  eventos do Pixi (`FederatedPointerEvent`, `Rectangle`, `eventFeatures`), e o
+  `tsc` é o único juiz que rodou.
+- ✅ `grep -rn "\.emit(" client/src | grep -v "client/src/net/"` continua vazio.
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada foi clicado num navegador — e aqui isso é quase tudo
+
+A feature **é** uma interação. `tsc` não prova nenhuma das perguntas que
+importam:
+
+- o `rightdown` do Pixi chega? (`eventMode = 'static'` é o que o habilita, e a
+  ausência dele falha **em silêncio**, sem erro no console);
+- a `hitArea` acerta o boneco e **não** o vazio ao lado? O caso que ela existe
+  para resolver é o passo 4 do roteiro: clicar a ~5 tiles do próprio avatar, de
+  dentro do círculo de proximidade, **não** pode abrir o menu. Se abrir, os
+  *bounds* estão vencendo e a área derivada está errada;
+- o menu do navegador some de fato sobre o canvas?
+- **dois bonecos sobrepostos**: deve ganhar o da frente. É raciocínio sobre o
+  `sortableChildren` da `playersLayer`, não observação — precisa de duas pessoas
+  no mesmo tile.
+
+### 2. O posicionamento e o virar na borda
+
+Todo o `useLayoutEffect` que mede o painel e o dobra para dentro da janela é
+código não exercitado. O que pode estar errado sem o `tsc` notar: um frame com o
+menu visível fora da tela antes de virar (o `visibility: hidden` inicial existe
+para isso, e não foi visto); e o menu colado no cursor em vez de ao lado dele.
+
+### 3. O CSS não foi visto
+
+`.avatar-menu` é o **único** painel `fixed` do projeto (os outros são
+`absolute`, herdado de `.panel`) e o único no `z-index` 42. Falta ver: se ele
+fica de fato acima dos popovers da barra, se o nome comprido corta com
+reticências como pedido, e se a caixa não fica larga demais para um menu.
+
+### 4. O fechamento por roda e por saída da pessoa
+
+Dois caminhos deliberados e nenhum observado: girar a roda fecha (o zoom moveria
+o mundo debaixo de um painel preso à tela), e a pessoa **sair do mundo** com o
+menu aberto sobre ela fecha sozinho — que é o ponto inteiro de o store guardar
+só o `id` e resolver o resto pelo `roster`.
+
+### 5. `eventFeatures: { move: false, globalMove: false }` mexeu no app inteiro
+
+É otimização deliberada (sem ela, cada `mousemove` sobre o canvas dispara teste
+de acerto na camada de players) e **não foi medida** — nem antes nem depois.
+Consequência registrada no doc: quem quiser *hover* algum dia precisa religar
+`move`, e o sintoma de esquecer é "o hover não funciona e não dá erro".
+
+### 6. WASD anda com o menu aberto
+
+O painel não tem `data-capture-keys` porque não tem campo de texto. É a decisão
+certa hoje e vira defeito **no primeiro item com input** — o menu de
+configurações já mostra o que fazer nesse dia.
+
+### 7. O balão de cochicho fica meio fora da área clicável
+
+Nasceu do **merge** com o `db4c556` (balão de booble), não de uma decisão: as
+duas features mexem no mesmo container do avatar e nenhuma das duas sabia da
+outra. A `hitArea` do menu é a caixa do sprite (`x ∈ [-16, 16]`), e o balão fica
+em `x ∈ [6, 24]` (`CX = 15`, `W = 18` em `BoobleWhisper.ts`) — então clicar com o
+direito na **metade esquerda** do balão abre o menu e na **metade direita** não.
+
+Nada quebra, mas é incoerente, e ninguém viu isso num navegador. As saídas
+possíveis: alargar a `hitArea` quando há balão, ou aceitar que o alvo é o corpo
+do boneco e nunca o balão (que é a leitura mais defensável — o balão é
+informação, não alvo). Não mexi porque exige ver na tela para escolher.
+
+### 8. O menu não tem itens
+
+Não é pendência de verificação, é o escopo: foi pedido vazio. Fica registrado
+para ninguém ler o doc daqui a três meses e achar que os itens sumiram.
+
+---
+
+# Menu de configurações no jogo — 2026-08-21
+
+Feature nova: [`docs/features/configuracoes-no-jogo.md`](docs/features/configuracoes-no-jogo.md).
+Engrenagem na barra inferior abrindo um menu com o mundo atual, o seu ID,
+**adicionar alguém pelo ID sem sair do mundo** e o "Finalizar chamada" (que saiu
+da barra). Entrega **só de client**: nada mudou em `server/`, `shared/` ou `db/`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ `grep -rn "\.emit(" client/src | grep -v "client/src/net/"` continua vazio —
+  o menu fala com o servidor por `createLobbyApi(() => runtime.socket)`.
+- ✅ **`smoke-test.mts` 14/14** contra o servidor headless em modo anônimo
+  (`PORT=3001`, `SUPABASE_*`/`LIVEKIT_*` vazias). Nada de `server/` mudou, mas é
+  barato.
+- ✅ **A premissa da entrega, executada** (script de socket na raiz, 5/5,
+  apagado depois): `lobby:addMember` e `lobby:list` **respondem no socket do
+  jogo, depois do `join`** — mesmo motivo (`not-configured`) antes e depois de
+  entrar no mundo, e nem o socket nem a sessão de mundo caem por causa deles (o
+  `move` continua passando). Era o único jeito de a entrega estar *estruturalmente*
+  errada, e não está: os handlers de lobby são alcançáveis de dentro do mundo.
+
+  O que isso **não** prova: o caminho autenticado. Sem Supabase tudo para no
+  `whoAmI` com `not-configured`, antes de qualquer verificação de token, papel ou
+  escrita.
+
+## Falta verificar (em ordem de importância)
+
+### 1. O caminho de SUCESSO de `lobby:addMember` de dentro do mundo
+
+Provado que o handler responde; **não** provado que ele adiciona alguém. Falta o
+que exige Supabase: o token do handshake do socket do **jogo** sendo aceito pelo
+`verifyAccessToken` do lobby, o `manageableWorld` reconhecendo o papel, e a
+escrita de `addMemberToWorld`. Se o token não chegar como se espera, o sintoma é
+o menu mostrando "Sua sessão expirou" em vez de adicionar. Roteiro nos passos 1 a
+4 do doc.
+
+Agravante: a escrita de `addMemberToWorld` **também** nunca foi confirmada pelo
+lobby (já registrado na seção de autenticação deste arquivo). Falhando aqui,
+convém separar as duas causas testando o mesmo ID pelo lobby antes.
+
+### 2. Nenhuma tela foi aberta num navegador
+
+Todo o `SettingsMenu` é lógica de client não exercitada: o popover abrindo, o
+fechamento por Escape/clique fora/`×`, o foco voltando para a engrenagem, a linha
+do mundo, o "Copiado" por 2s, a mensagem de sucesso, a de erro, e o campo
+desabilitado até `isProfileId` passar. A barra também não foi vista sem o
+telefone.
+
+Dois riscos específicos:
+
+- **`data-capture-keys`**: sem ele, colar o uuid faz o avatar andar. O atributo
+  está no painel, mas isso só se prova digitando.
+- **O `pointerdown` em fase de captura**: é o que impede o canvas do Pixi de
+  engolir o clique de fora. Copiado do `AudioSettings`, que também nunca foi
+  observado fechando.
+
+### 3. O CSS não foi visto
+
+`.settings-popover` reusa a ancoragem do `.audio-popover` (`bottom: 96px`,
+centrado na pílula) e a largura do `.soundboard-popover`. O que pode estar
+errado e o `tsc` não pega: o uuid de 36 caracteres estourando o `.join-input`
+mesmo com a fonte reduzida; o painel ficando alto demais com as duas seções
+abertas ao mesmo tempo (não há `max-height` nem rolagem); e o `.join-hint`
+realinhado à esquerda por override — se a especificidade não vencer, o texto
+volta a ficar centralizado.
+
+### 4. O caminho de `member` e o modo anônimo
+
+Os dois são condicionais de render (`canAdd`, `myId`) e não foram exercitados.
+O caso `member` depende de `worlds` estar no store com o `myRole` certo — e
+`worlds` é a foto do lobby, que pode estar velha (registrado como armadilha no
+doc).
+
+### 5. `copyText` e `REASON_TEXT` mudaram de lugar
+
+`LobbyScreen` passou a importá-los em vez de declará-los. Compila e o
+comportamento é o mesmo, mas **o lobby não foi reaberto** depois da extração — em
+particular o caminho de falha do `copyText` (contexto não seguro), que já estava
+na lista de não verificados antes desta entrega.
+
+---
+
 # Soundboard gamificado — 2026-08-21
 
 Feature nova: [`docs/features/soundboard.md`](docs/features/soundboard.md). Sons
