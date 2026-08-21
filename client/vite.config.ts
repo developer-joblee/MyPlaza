@@ -10,6 +10,16 @@ if (process.env.HTTPS === '1') {
 
 export default defineConfig({
   plugins,
+  /**
+   * O `.env` vive na RAIZ do repo, um nível acima. Sem isto o Vite procuraria em
+   * `client/` (o default é a pasta do projeto) e as variáveis `VITE_*` seriam
+   * silenciosamente ignoradas — o client acharia que não há login configurado
+   * enquanto o servidor exige token, e todo mundo levaria `auth-required`.
+   *
+   * O servidor lê o mesmo arquivo via `--env-file-if-exists=../.env`; um `.env`
+   * só, para os dois lados.
+   */
+  envDir: '..',
   server: {
     host: true,
     port: 5173,

@@ -15,10 +15,101 @@ npm install
 npm run dev
 ```
 
-- Client: http://localhost:5173
+- Client: **http://localhost:5173** — é aqui que se abre o app
 - Servidor: http://localhost:3001 (o Vite faz proxy de `/socket.io`)
 
 Abra duas abas para testar sozinho.
+
+> `:3001` serve o **build** de `client/dist`, não o dev. Se você abrir essa porta
+> e vir uma versão antiga, é isso.
+
+### Três níveis de configuração
+
+O app roda sem nenhuma variável de ambiente, e cada grupo liga um pedaço:
+
+| Sem nada | `LIVEKIT_*` | `+ SUPABASE_*` |
+|---|---|---|
+| mapa, movimento, chat, entrada anônima | voz por proximidade e tela compartilhada | login obrigatório, lobby, mundos, acesso por ID, tudo salvo |
+
+Nada é obrigatório — mas **os dois grupos do Supabase andam juntos**: definir os
+do servidor sem os do navegador deixa o app exigindo um token que ninguém
+consegue obter, e todos levam "este servidor exige login".
+
+### Variáveis
+
+Crie um `.env` na **raiz** do repo (um só, para os dois lados: o servidor lê via
+`--env-file-if-exists=../.env`, e o Vite lê a raiz por causa do `envDir: '..'`
+em `client/vite.config.ts`). O Vite lê `.env` **só na inicialização** — mexeu,
+reinicie o `npm run dev`.
+
+
+> **Por que duas variáveis do Supabase podem ir para o navegador**, se a regra é
+> nunca colocar segredo em `VITE_*`: a chave `anon` é publicável por projeto — é
+> feita para isso. Quem protege o banco é o RLS
+> ([`0002_rls.sql`](db/migrations/0002_rls.sql)), que não tem **nenhuma**
+> política de escrita: só o servidor escreve. A `service_role` é o segredo, e
+> ela nunca sai de `server/`.
+
+> **O shell ganha do `.env`.** O `--env-file-if-exists` do Node **não sobrepõe**
+> variável que já existe no ambiente: se você tem `SUPABASE_URL` (ou qualquer
+> outra) exportada no shell — de um teste antigo, do `.zshrc`, de um direnv —
+> ela vence, e o `.env` é ignorado **em silêncio**. O sintoma é "está no `.env`
+> e não funciona". Para conferir sem imprimir valor:
+> `printenv SUPABASE_URL >/dev/null && echo "vem do shell" || echo "vem do .env"`.
+
+### Primeiro login, do zero
+
+Ordem importa, e cada passo tem um jeito próprio de falhar. O boot do servidor
+avisa sobre os passos 3 a 5.
+
+1. **`.env` na raiz** com as cinco variáveis do Supabase (bloco acima).
+2. **Confira que nenhuma delas está exportada no shell** — o shell sobrepõe o
+   `.env` em silêncio (aviso acima). Sintoma: "está no `.env` e não funciona".
+3. **Migrações, na ordem, em [`db/README.md`](db/README.md): `0001` → `0008`.**
+   As `0007` e `0008` corrigem defeitos que só aparecem contra um Supabase real e
+   **as duas são obrigatórias** — sem elas ninguém entra. Rode todas com o
+   **mesmo papel**.
+4. **`db/seed.sql`**, e **confira** (`select count(*) from characters;` = 4). O
+   SQL Editor do Supabase roda o script numa transação só: um erro em qualquer
+   linha desfaz o seed inteiro, e o catálogo vazio faz criar perfil falhar com
+   `23503`.
+5. **Desligue "Confirm email"** em *Authentication → Sign In / Providers →
+   Email*. Este app não envia e-mail; com a confirmação ligada, criar conta falha.
+6. **`npm run dev`** e leia o boot. Ele grita se a `SUPABASE_URL` tiver forma
+   errada, se faltar privilégio (`42501`), se faltar schema (`42P01`) ou se o
+   catálogo estiver vazio.
+7. **Crie sua conta** — entra na hora. No lobby aparece **o seu ID**; criar um
+   mundo próprio funciona sem ninguém te dar acesso.
+8. **Mais alguém:** a pessoa cria a conta, copia o ID dela no lobby e te manda.
+   Você cola em "Adicionar" no seu mundo, e ela passa a ver o mundo — sem passo
+   de aceite.
+
+Para o login e o lobby funcionarem, o schema precisa estar aplicado —
+ver **[`db/README.md`](db/README.md)**.
+
+> **Um passo no dashboard, e é o único:** desligue **Confirm email** em
+> *Authentication → Sign In / Providers → Email*. Este app **não envia e-mail
+> nenhum** — sem domínio para configurar SMTP, o envio ficou de fora, e com ele a
+> confirmação de cadastro. Com a confirmação ligada, criar conta falha de um jeito
+> que parece bug. Por que isso não abre um furo de segurança está em
+> [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md).
+
+## Fluxo de telas
+
+Depende de haver Supabase configurado:
+
+```
+sem Supabase:   entrada (nome, personagem, cor, cenário) -> jogo
+com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
+```
+
+- **login** — e-mail e senha. Criar conta **entra na hora**: não há confirmação,
+  porque não há envio de e-mail. O e-mail é só identificador de login.
+- **lobby** — a lista de mundos que você pode acessar, **o seu ID** (é o que você
+  passa para ser adicionado a um mundo de outra pessoa) e criar mundo. Quem criou
+  o mundo administra: adicionar gente pelo ID, papéis, lotação, arquivar.
+- **entrada** — nome, personagem e cor. O cenário vem do mundo escolhido no
+  lobby, então o seletor de cenário só aparece no modo anônimo.
 
 ## Controles
 
@@ -50,11 +141,17 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Modo ausente (celular) | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/ui/MediaControls.tsx`, `client/src/game/Avatar.ts` |
 | Sentar em cadeiras | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/game/LocalPlayer.ts`, `client/src/game/characterDefs.ts` |
 | Cenários e mapas ASCII | [Editando o mapa](#editando-o-mapa) *(sem doc próprio ainda)* | `shared/src/scenarios.ts`, `client/src/game/*Tilemap.ts` |
-| Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/voice/token.ts` |
+| Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/net/voiceApi.ts` |
+| Persistência (Supabase): perfis, empresas, locais, posição salva e atividade da sessão | [Persistência (Supabase)](docs/features/persistencia-supabase.md) | `db/`, `server/src/db.ts` |
+| Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
+| Lobby: criar mundos e convidar pessoas | [Lobby](docs/features/lobby.md) | `client/src/ui/LobbyScreen.tsx`, `server/src/lobby.ts` |
+| Camada de requisição (client → servidor) | [Camada de requisição](docs/features/camada-de-requisicao.md) | `client/src/net/` |
 
-> As features acima nasceram antes desta convenção e hoje estão descritas nas
-> seções deste README. Ao mexer em uma delas, crie o `docs/features/<slug>.md`,
-> mova o detalhe técnico para lá e deixe aqui só o resumo e o link.
+> As features **sem doc próprio** nasceram antes desta convenção e estão
+> descritas nas seções deste README. Ao mexer em uma delas, crie o
+> `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
+> resumo e o link. As quatro com doc (persistência, autenticação, lobby e camada
+> de requisição) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 
@@ -84,8 +181,10 @@ Atalhos disponíveis no Claude Code:
 
 > **Segredos:** o `.env` nunca é lido nem compartilhado — nem por humano em
 > print de tela, nem pelo Claude (há regras `deny` em `.claude/settings.json`).
-> Para saber quais variáveis existem, use o [`.env.example`](.env.example): ele
-> tem os nomes, não os valores. `LIVEKIT_API_SECRET` vive só no server. Se uma
+> Para saber quais variáveis existem, use a seção [Variáveis](#variáveis) acima:
+> ela tem os nomes, não os valores. (O `.env.example` foi removido do working
+> tree por engano — `git checkout -- .env.example` traz de volta; ele ainda não
+> lista as variáveis do Supabase, que estão só aqui.) `LIVEKIT_API_SECRET` vive só no server. Se uma
 > chave vazar, rotacione no dashboard do LiveKit — apagar o commit não desfaz.
 
 ## Usando com a equipe na rede local
@@ -105,8 +204,8 @@ e compartilhe `https://SEU_IP:5173` (aceitem o certificado autoassinado do
 > TURN/TLS vem incluso, o que resolve rede corporativa restritiva.
 >
 > Sem as variáveis `LIVEKIT_*` o app roda normalmente — só sem voz nem tela.
-> Copie o `.env.example` para `.env` e preencha com as credenciais do
-> [LiveKit Cloud](https://cloud.livekit.io).
+> Preencha as `LIVEKIT_*` no `.env` da raiz (ver [Variáveis](#variáveis)) com as
+> credenciais do [LiveKit Cloud](https://cloud.livekit.io).
 
 ## Arquitetura
 
@@ -114,6 +213,7 @@ e compartilhe `https://SEU_IP:5173` (aceitem o certificado autoassinado do
 shared/   tipos, eventos Socket.IO, constantes e o mapa (fonte única client+server)
 server/   Node + Socket.IO: presença, posições, chat e emissão de token do LiveKit
 client/   Vite + React (UI) + PixiJS (jogo, fora do React)
+db/       schema do Supabase em SQL, aplicado à mão por enquanto
 ```
 
 - **PixiJS fora do React**: `client/src/game/Game.ts` roda o game loop no canvas;
@@ -128,6 +228,27 @@ client/   Vite + React (UI) + PixiJS (jogo, fora do React)
 - **Tela compartilhada**: publicada como `ScreenShare` no LiveKit; o consumo usa
   `track.attach()` (obrigatório com `adaptiveStream`, senão o servidor para de
   encaminhar e a tela fica preta). Some quando o peer sai do alcance.
+- **Fronteira de requisição**: `client/src/net/` é o único lugar que fala com o
+  servidor. Componente, objeto de jogo e store **não** chamam `socket.emit` —
+  usam `net/lobbyApi.ts` (operações do lobby), `net/worldApi.ts` (estando
+  dentro de um mundo) ou `net/voiceApi.ts` (token do LiveKit). A primitiva em `net/request.ts` confere
+  se o socket está conectado antes de emitir, resolve na hora se ele cair no
+  meio da espera, e impõe prazo ao ack — sem isso um pedido sumia no
+  `sendBuffer` e o botão ficava travado esperando resposta que nunca vinha.
+- **Login, lobby e acesso**: com Supabase configurado o fluxo é
+  `login → lobby → entrada → jogo`. No **lobby** a pessoa cria mundos e convida
+  gente por e-mail; entrar exige **conta** e **convite**. O mundo é por *local*
+  (não por cenário), o que isola uma empresa da outra — inclusive a sala de voz
+  — e habilita lotação e mundo restrito. Sem Supabase, tudo roda anônimo como
+  antes. Ver [Lobby](docs/features/lobby.md) e
+  [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md).
+- **Persistência**: opcional. Com `SUPABASE_*` definido, o servidor guarda
+  perfis, empresas, locais, acessos, sessões, chat e **a posição onde cada
+  pessoa parou** — cai a internet, você volta no mesmo lugar. Guarda também a
+  atividade de cada conexão: salas fechadas visitadas, compartilhamento de tela
+  e auditoria de token de voz. Sem essas variáveis o app roda igual, só sem
+  persistir. Schema e decisões em
+  [`docs/features/persistencia-supabase.md`](docs/features/persistencia-supabase.md).
 - **Debug**: no console do navegador, `__togetherVoice()` mostra estado da sala,
   identidade, e distância/volume/subscrição por participante; `__togetherPos()`
   mostra a sua posição.
@@ -194,7 +315,19 @@ O TLS do Railway já satisfaz o requisito de HTTPS do microfone e do
 compartilhamento de tela.
 
 Para a voz, adicione em **Variables** do serviço: `LIVEKIT_URL`,
-`LIVEKIT_API_KEY` e `LIVEKIT_API_SECRET`. **Não** defina `LIVEKIT_ROOM_PREFIX`
+`LIVEKIT_API_KEY` e `LIVEKIT_API_SECRET`. Para a persistência e o login:
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ORG_SLUG` e as duas do
+navegador (`VITE_SUPABASE_URL` e a chave `anon`, publicável por design). A
+`service_role` passa por cima do RLS e vive **só** no servidor — detalhes em
+[`db/README.md`](db/README.md).
+
+> Nada de e-mail precisa ser configurado para o deploy: o app não envia e-mail.
+> O único passo no dashboard é **Confirm email** desligado, e ele vale para todos
+> os ambientes de uma vez.
+
+> Definir as variáveis do servidor **sem** as do navegador deixa o app exigindo
+> um token que ninguém consegue obter: todo mundo leva "este servidor exige
+> login". **Não** defina `LIVEKIT_ROOM_PREFIX`
 em produção: sem ele as salas viram `together-*`, distintas do `dev-*` do
 ambiente local — caso contrário dev e produção cairiam na mesma sala.
 

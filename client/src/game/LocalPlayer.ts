@@ -33,6 +33,21 @@ export class LocalPlayer {
     this.avatar.setPosition(x, y);
   }
 
+  /**
+   * Volta para a pose de sentado sem passar pelo `sitDown` — usado quando o
+   * servidor devolve a pessoa sentada na posição em que ela parou (ver o
+   * `world:snapshot` em `Game.ts`).
+   *
+   * `standTarget` fica null de propósito: não existe "de onde ela veio" numa
+   * sessão nova. O `standUp` já cobre esse caso procurando um tile livre ao
+   * lado, que é exatamente o comportamento certo aqui.
+   */
+  resumeSitting(facing: SitFacing): void {
+    this.standTarget = null;
+    this.sitting = facing;
+    this.avatar.setSitting(facing);
+  }
+
   /** Move com colisão por eixo separado, ou trata a cadeira se estiver sentado. */
   update(dt: number, keyboard: Keyboard, tilemap: TilemapBase): LocalUpdate {
     const interact = keyboard.consumeInteract();

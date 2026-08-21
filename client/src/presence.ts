@@ -18,5 +18,5 @@ export function setAway(away: boolean): void {
   useStore.getState().setAway(away);
   runtime.voice?.setAway(away);
   runtime.game?.setSelfAway(away);
-  runtime.socket?.emit('away', away);
+  runtime.api?.setAway(away);
 }

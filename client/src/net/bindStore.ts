@@ -23,6 +23,11 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
   });
   socket.on('player:left', (id) => s().removeRosterEntry(id));
   socket.on('chat:message', (msg) => s().appendChat(msg));
+  /**
+   * Recusado: volta para a tela de entrada com o motivo. Sem isto o cliente
+   * ficaria para sempre num mundo vazio esperando um snapshot que não vem.
+   */
+  socket.on('join:denied', (reason) => s().denyJoin(reason));
 
   return () => {
     socket.off('connect', onConnect);
@@ -31,5 +36,6 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
     socket.removeAllListeners('player:joined');
     socket.removeAllListeners('player:left');
     socket.removeAllListeners('chat:message');
+    socket.removeAllListeners('join:denied');
   };
 }

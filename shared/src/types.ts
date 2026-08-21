@@ -1,4 +1,5 @@
 import type { CharacterId } from './constants';
+import type { ScenarioId } from './scenarios';
 
 export interface PlayerState {
   id: string;
@@ -42,3 +43,162 @@ export type VoiceTokenResponse =
       /** quando recusado por limite: quanto esperar, em ms (o cliente não precisa adivinhar) */
       retryAfterMs?: number;
     };
+
+/**
+ * Por que a entrada no mundo foi recusada. O cliente traduz para uma frase; o
+ * servidor nunca manda texto livre, para a mensagem não virar canal de
+ * vazamento (ex.: "essa empresa existe, você é que não é membro").
+ */
+export type JoinDeniedReason =
+  /** o servidor exige login e o socket chegou sem token */
+  | 'auth-required'
+  /** token inválido, vencido, revogado — ou o Supabase não respondeu */
+  | 'invalid-token'
+  /** conta válida, mas sem convite pendente para este e-mail */
+  | 'no-invite'
+  /** membership existe mas não está ativa (convidada ou suspensa) */
+  | 'no-membership'
+  /** local restrito e a pessoa não está na lista */
+  | 'place-restricted'
+  /** lotação cheia */
+  | 'place-full'
+  /** o cliente não disse em qual mundo quer entrar (o lobby é quem escolhe) */
+  | 'no-world'
+  /** o mundo não existe (foi apagado depois de listado) */
+  | 'no-place'
+  /** falha nossa (banco fora do ar no meio do processo) */
+  | 'error';
+
+// -----------------------------------------------------------------------------
+// Lobby: escolher, criar e ser convidado para mundos, antes de entrar em um.
+// -----------------------------------------------------------------------------
+
+/**
+ * Meu papel num mundo.
+ *
+ * - `owner`  — criou o mundo (`places.created_by`). Único que arquiva e que
+ *              passa a propriedade adiante.
+ * - `host`   — administra: convida, edita, tira membro, define papel de membro.
+ * - `member` — só entra.
+ *
+ * `owner` não é um valor de `place_members.role`: ele é derivado de
+ * `created_by`, justamente para a propriedade não poder ser perdida por uma
+ * edição de papel.
+ */
+export type WorldRole = 'owner' | 'host' | 'member';
+
+/** Papel gravável em `place_members.role` — `owner` não entra aqui. */
+export type AssignableWorldRole = 'host' | 'member';
+
+/** Um mundo na lista do lobby. */
+export interface WorldSummary {
+  id: string;
+  name: string;
+  /** qual mapa este mundo usa — o cliente NÃO escolhe mais, o mundo define */
+  scenarioId: ScenarioId;
+  /** 'organization' = todo membro entra; 'restricted' = só quem está na lista */
+  visibility: 'organization' | 'restricted';
+  /** teto de pessoas ao mesmo tempo; null = sem limite */
+  capacity: number | null;
+  /** quantas pessoas estão dentro AGORA (contado em memória no servidor) */
+  online: number;
+  /** meu papel aqui — é o que habilita (ou não) os botões de administrar */
+  myRole: WorldRole;
+  organizationName: string;
+}
+
+/**
+ * Convite pendente para o e-mail de quem está logado.
+ *
+ * **Dormente.** Enquanto não houver domínio para enviar e-mail, ninguém é
+ * convidado por e-mail — quem administra um mundo adiciona a pessoa pelo ID
+ * dela (`lobby:addMember`). O tipo e o caminho de aceite ficam porque são a
+ * volta para o convite por e-mail quando o envio existir; a lista simplesmente
+ * chega vazia. Ver `docs/features/autenticacao-e-acesso.md`.
+ */
+export interface PendingInvite {
+  id: string;
+  /** nome do mundo, ou null quando o convite é para a empresa toda */
+  worldName: string | null;
+  organizationName: string;
+  scenarioId: ScenarioId | null;
+}
+
+export interface LobbyState {
+  worlds: WorldSummary[];
+  invites: PendingInvite[];
+  /**
+   * O ID desta pessoa — é o que ela passa a quem administra um mundo para ser
+   * adicionada. Vem do servidor porque o cliente **não** pode saber o próprio
+   * `profiles.id` de outra forma (o `join` deixou de carregar identidade), e é
+   * seguro exibir: por si só ele não dá acesso a nada, só nomeia quem já tem
+   * conta. Quem decide o acesso é quem administra o mundo.
+   */
+  myId: string;
+}
+
+/** Quem tem acesso a um mundo. Só quem administra vê esta lista. */
+export interface WorldMember {
+  profileId: string;
+  name: string;
+  role: AssignableWorldRole;
+  /** é quem criou o mundo — não pode ser removido nem ter o papel mudado */
+  owner: boolean;
+}
+
+/** Convite que EU mandei e ninguém aceitou ainda. **Dormente** — ver `PendingInvite`. */
+export interface SentInvite {
+  id: string;
+  email: string;
+  expiresAt: number;
+}
+
+/** Painel de gerenciamento de um mundo. Só dono e host recebem. */
+export interface WorldDetail {
+  worldId: string;
+  members: WorldMember[];
+  invites: SentInvite[];
+}
+
+/** Campos editáveis de um mundo. Ausente = não mexe. */
+export interface WorldPatch {
+  name?: string;
+  /** null = sem limite */
+  capacity?: number | null;
+  visibility?: 'organization' | 'restricted';
+}
+
+export type LobbyErrorReason =
+  /**
+   * `socket-down` e `timeout` são do CLIENTE; o servidor nunca os emite — mesma
+   * convenção do `VoiceTokenResponse` acima. Ficam no mesmo union em vez de num
+   * resultado de transporte separado porque aninhar dois `ok` (`res.ok &&
+   * res.value.ok`) só transferiria a checagem para cada chamador.
+   */
+  | 'socket-down'
+  | 'timeout'
+  /** o servidor não tem Supabase: não existe lobby, só o modo anônimo */
+  | 'not-configured'
+  | 'auth-required'
+  | 'invalid-token'
+  /** nome de mundo vazio, longo demais, ou ID de pessoa malformado */
+  | 'invalid-input'
+  /** não é dono do mundo (só quem administra adiciona gente) */
+  | 'not-allowed'
+  /** o mundo, o convite ou o ID da pessoa não existe (ou não é seu) */
+  | 'not-found'
+  | 'error';
+
+/**
+ * Resposta de qualquer operação do lobby. Sempre por ack, e sempre com o
+ * estado novo em caso de sucesso — assim a tela não precisa refazer o `list`
+ * depois de criar, convidar ou aceitar.
+ */
+export type LobbyResult =
+  /**
+   * `detail` vem junto nas operações de gerenciamento (abrir o painel, editar,
+   * tirar membro, revogar convite): elas mudam as duas coisas ao mesmo tempo, e
+   * duas idas ao servidor deixariam metade da tela velha.
+   */
+  | { ok: true; state: LobbyState; detail?: WorldDetail }
+  | { ok: false; reason: LobbyErrorReason };
