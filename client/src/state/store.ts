@@ -212,6 +212,16 @@ interface AppState {
    * menor que o audível, e o tick da voz nem roda sem LiveKit configurado.
    */
   boobleReachIds: string[];
+  /**
+   * "Cliquei em booble em alguém que estava longe e estou indo até lá."
+   * `socket.id` do alvo, ou `null`.
+   *
+   * A intenção existe porque o clique e o efeito ficaram separados no tempo: a
+   * booble só se forma a 2 tiles, e daqui até lá o avatar caminha sozinho. Ela
+   * vive **enquanto a caminhada vive** — quem a cumpre ou a mata é o `Game`, e
+   * as transições passam todas por `client/src/booble.ts`.
+   */
+  pendingBooble: string | null;
   focusedScreenId: string | null;
   /** zoom alvo da câmera, em % */
   zoomPct: number;
@@ -280,6 +290,8 @@ interface AppState {
   noteSoundSender: (id: string, name: string) => void;
   /** booble de um player (o próprio ou um remoto) — ver `client/src/booble.ts` */
   setPlayerBooble: (id: string, boobleId: string | null) => void;
+  /** a intenção de booble em quem está longe — ver `client/src/booble.ts` */
+  setPendingBooble: (id: string | null) => void;
   /** registra um chamado (substitui o anterior da mesma pessoa) */
   pushNudge: (id: string, name: string) => void;
   clearNudges: () => void;
@@ -366,6 +378,7 @@ export const useStore = create<AppState>((set) => ({
   speaking: {},
   nearbyIds: [],
   boobleReachIds: [],
+  pendingBooble: null,
   focusedScreenId: null,
   zoomPct: 100,
   contextMenu: null,
@@ -483,6 +496,7 @@ export const useStore = create<AppState>((set) => ({
       speaking: {},
       nearbyIds: [],
       boobleReachIds: [],
+      pendingBooble: null,
       focusedScreenId: null,
       zoomPct: 100,
       contextMenu: null,
@@ -597,6 +611,7 @@ export const useStore = create<AppState>((set) => ({
     set((s) => (Boolean(s.speaking[id]) === v ? s : { speaking: { ...s.speaking, [id]: v } })),
   setNearbyIds: (ids) => set({ nearbyIds: ids }),
   setBoobleReachIds: (ids) => set({ boobleReachIds: ids }),
+  setPendingBooble: (id) => set({ pendingBooble: id }),
   setFocusedScreen: (peerId) => set({ focusedScreenId: peerId }),
   setZoomPct: (pct) => set({ zoomPct: pct }),
   openContextMenu: (id, x, y) => set({ contextMenu: { id, x, y } }),

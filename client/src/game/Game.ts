@@ -14,6 +14,7 @@ import {
 } from '@together/shared';
 import type { AppSocket } from '../net/socket';
 import { createWorldApi } from '../net/worldApi';
+import { cancelPendingBooble, fulfillPendingBooble } from '../booble';
 import { setAway } from '../presence';
 import { useStore } from '../state/store';
 import { AutoWalk } from './AutoWalk';
@@ -112,6 +113,7 @@ export class Game {
     this.keyboard.attach();
     this.app.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     this.app.canvas.addEventListener('contextmenu', this.onContextMenu);
+    this.app.canvas.addEventListener('pointerdown', this.onCanvasPointerDown);
     this.bindSocket();
     this.app.ticker.add(this.tick);
 
@@ -173,6 +175,20 @@ export class Game {
    * independentes — não há ordem entre eles para dar errado.
    */
   private onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+  /**
+   * Clique **esquerdo** no mundo desiste de ir até alguém para abrir uma booble.
+   * Nada mais no jogo reage a esse clique (não há clique-para-andar), então ele
+   * está livre para significar "deixa, estou fazendo outra coisa aqui".
+   *
+   * Só o esquerdo: o **direito** abre o menu de contexto, e cancelar por ele
+   * mataria a intenção no instante em que a pessoa foi só conferir as opções de
+   * outro boneco. Cliques na UI (mic, chat, barra) não passam por aqui — mutar o
+   * microfone no caminho não é desistir.
+   */
+  private onCanvasPointerDown = (e: PointerEvent) => {
+    if (e.button === 0) cancelPendingBooble();
+  };
 
   /**
    * Clique direito num avatar. `id` nulo é o player local: o id dele é o
@@ -352,6 +368,13 @@ export class Game {
         )
       : null;
 
+    /**
+     * Chegou em quem eu ia encontrar para abrir uma booble? Aqui a intenção é só
+     * **decidida** — quem a cumpre é o bloco de envio de posição, mais abaixo, e a
+     * ordem é obrigatória: ver o comentário lá.
+     */
+    const boobleAoChegar = this.settlePendingBooble();
+
     // Andar cancela o ausente: quem voltou ao teclado está de volta à conversa,
     // e a pose do celular só existe de frente (andar com ela ficaria quebrado).
     // A auto-caminhada conta como andar — senão o avatar iria até alguém com o
@@ -376,9 +399,17 @@ export class Game {
      * cadeira a pessoa está, e é dela que eles tiram a direção. Se o `move`
      * atrasasse até o próximo tick de envio, o "sentou" chegaria antes da
      * posição e o avatar ficaria de pé por um instante no lugar errado.
+     *
+     * **Chegar para abrir uma booble sai do throttle pelo mesmo motivo, e ali é
+     * ainda mais grave.** A posição vai ao servidor a `TICK_RATE` (15/s = 66,7ms),
+     * e a `MOVE_SPEED` isso são até ~11px de atraso. O servidor recusa
+     * `booble:join` fora de `BOOBLE_JOIN_RADIUS` usando a posição que ELE tem, e
+     * recusa **em silêncio** — então chegar do lado da pessoa e pedir com a
+     * posição velha dava exatamente "cheguei e a booble não abriu", sem erro
+     * nenhum em lugar nenhum. Foi o defeito relatado na primeira versão.
      */
     this.sendAccumulator += dt;
-    if (sittingChanged || this.sendAccumulator >= SEND_INTERVAL) {
+    if (sittingChanged || boobleAoChegar !== null || this.sendAccumulator >= SEND_INTERVAL) {
       this.sendAccumulator = 0;
       const x = Math.round(this.local.x);
       const y = Math.round(this.local.y);
@@ -392,6 +423,13 @@ export class Game {
         this.api.sit(this.local.sitting !== null);
       }
     }
+
+    /**
+     * O pedido da booble sai **depois** do `move` acima, e é o Socket.IO que
+     * garante o resto: a ordem de entrega no mesmo socket é a de emissão, então o
+     * servidor processa a posição nova antes de conferir o raio.
+     */
+    if (boobleAoChegar !== null) fulfillPendingBooble(boobleAoChegar);
 
     this.updateCamera(dt);
     this.updateZoneIndicator();
@@ -448,6 +486,33 @@ export class Game {
     if (key === this.lastBoobleReach) return;
     this.lastBoobleReach = key;
     useStore.getState().setBoobleReachIds(reach);
+  }
+
+  /**
+   * Decide a intenção de booble em quem estava longe — o clique em **booble** no
+   * menu de contexto de alguém fora dos 2 tiles.
+   *
+   * Devolve o alvo quando **chegou** (e aí quem pede é o `tick`, depois de mandar
+   * a posição) e `null` no resto. Desistir acontece aqui mesmo, porque não
+   * depende de posição nenhuma.
+   *
+   * A intenção vive **exatamente enquanto a caminhada vive**, e é uma regra só:
+   * ela cobre de graça tudo que para a caminhada — WASD, o `E` de sentar, o prazo
+   * de 20s, o alvo saindo do mundo, a rota impossível e o clique no chão.
+   *
+   * Quem diz se terminou por CHEGAR é o `AutoWalk` (`arrivedAt`), e não uma
+   * medida de distância feita aqui. A diferença não é cosmética: `boobleReachIds`
+   * é recalculado no fim do tick, com o remoto já interpolado alguns px — quem
+   * está sendo perseguido andando sai do raio no mesmo frame em que a caminhada
+   * termina, e a booble não abriria justo no caso que exige a caminhada. A
+   * validação de verdade (raio **e** zona) é do servidor, que recusa em silêncio.
+   */
+  private settlePendingBooble(): string | null {
+    const pending = useStore.getState().pendingBooble;
+    if (pending === null || this.autoWalk.active) return null;
+    if (this.autoWalk.arrivedAt === pending) return pending;
+    cancelPendingBooble();
+    return null;
   }
 
   /**
@@ -622,6 +687,7 @@ export class Game {
     this.boobleRings.destroy();
     this.app.canvas.removeEventListener('wheel', this.onWheel);
     this.app.canvas.removeEventListener('contextmenu', this.onContextMenu);
+    this.app.canvas.removeEventListener('pointerdown', this.onCanvasPointerDown);
     // o menu aponta para um avatar que está deixando de existir
     useStore.getState().closeContextMenu();
     this.keyboard.detach();

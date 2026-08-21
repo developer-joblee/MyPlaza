@@ -128,11 +128,11 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
 | Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular, com um feed rolando ao lado da cabeça e a pastilha **ausente** acima do nome. Andar volta ao normal, e suas preferências de microfone e fone são preservadas — ver [Modo ausente (celular)](docs/features/modo-ausente.md) |
 | Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
-| Conversa paralela (**booble**) | Chegue **ao lado** de alguém (2 tiles) e clique em **booble** na lista. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 7% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra, e um balãozinho de cochicho ao lado de cada cabeça mostra que a conversa está rolando. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
+| Conversa paralela (**booble**) | **Botão direito** no boneco de alguém → **booble** (ou **entrar na booble**, se ela já tiver uma), **de qualquer distância**: se estiver longe, seu avatar vai até lá caminhando e a booble abre na chegada — andar, clicar no chão ou o **Cancelar** do aviso desistem. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 7% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra, e um balãozinho de cochicho ao lado de cada cabeça mostra que a conversa está rolando. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Chat | Painel no canto inferior direito (global) |
-| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
+| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa: **booble** e **chamar**. É o lugar das ações *sobre uma pessoa* — na lista do canto superior esquerdo ficam os selos de status — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
 | Chamar alguém que está presente | **Botão direito** no boneco → **chamar**. Ela ouve um "pin" e vê no canto superior direito *"SEU NOME te chamou"*, com **Ir até** — que faz o avatar dela **caminhar sozinho** até você, contornando parede, e parar a dois tiles. O item é um interruptor: clicar de novo tira o alerta da tela dela, e clicar mais uma vez toca o pin de novo — ver [Chamar pelo menu de contexto](docs/features/chamar-e-ir-ate.md) |
 | Configurações / sair | Botão de **engrenagem** na barra inferior (última posição, onde ficava o telefone): mostra em que mundo você está, **o seu ID**, o campo para **adicionar alguém a este mundo pelo ID** — sem sair do mundo — e o **Finalizar chamada** — ver [Menu de configurações](docs/features/configuracoes-no-jogo.md) |
 
@@ -148,7 +148,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 |---|---|---|
 | Voz por proximidade | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `voice/proximity.ts` |
 | Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
-| Booble (conversa paralela: dentro 100%, fora 7%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `client/src/game/BoobleWhisper.ts`, `server/src/world.ts` |
+| Booble (conversa paralela: dentro 100%, fora 7%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `client/src/game/BoobleWhisper.ts`, `client/src/game/AutoWalk.ts`, `client/src/ui/AvatarContextMenu.tsx`, `server/src/world.ts` |
 | Soundboard gamificado (sons próprios, liberados por tempo na plataforma) | [Soundboard gamificado](docs/features/soundboard.md) | `client/src/soundboard/`, `server/src/soundboard.ts`, `shared/src/levels.ts` |
 | Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
 | Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
@@ -161,7 +161,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
 | Lobby: criar mundos e convidar pessoas | [Lobby](docs/features/lobby.md) | `client/src/ui/LobbyScreen.tsx`, `server/src/lobby.ts` |
 | Menu de configurações no jogo (adicionar pelo ID sem sair do mundo; sair) | [Menu de configurações](docs/features/configuracoes-no-jogo.md) | `client/src/ui/SettingsMenu.tsx`, `client/src/ui/MediaControls.tsx` |
-| Menu de contexto no avatar (botão direito) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
+| Menu de contexto no avatar (botão direito; itens **booble** e **chamar**) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
 | Chamar pelo menu de contexto ("pin", alerta e **ir até** com caminhada automática) | [Chamar pelo menu de contexto](docs/features/chamar-e-ir-ate.md) | `client/src/call.ts`, `client/src/ui/CallAlerts.tsx`, `client/src/game/pathfind.ts`, `client/src/game/AutoWalk.ts`, `server/src/handlers.ts` |
 | Vínculo com o mundo (o nome fica guardado; entrar direto depois do logout) | [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md) | `db/migrations/0009_world_binding.sql`, `client/src/state/store.ts`, `server/src/db.ts` |
 | Camada de requisição (client → servidor) | [Camada de requisição](docs/features/camada-de-requisicao.md) | `client/src/net/` |
@@ -338,7 +338,8 @@ A **[booble](docs/features/booble.md)** é a terceira camada: um grupo ad-hoc qu
 **atravessa** a parede de uma zona depois de formado — mas só se forma entre
 pessoas na mesma zona, justamente para não furar o parágrafo acima. Os raios dela
 são de cochicho (2 tiles para entrar, 3 para permanecer), bem menores que os
-5 tiles audíveis.
+5 tiles audíveis — e como o clique vale de qualquer distância, é o avatar que
+caminha até o raio, não você que precisa estar nele.
 
 > Quem impõe é o SFU: fora da zona o cliente desassina e o servidor **para de
 > enviar** aquele áudio — não é volume zero com o som chegando. Mas quem pede a

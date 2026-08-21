@@ -11,10 +11,20 @@ abre um menu de contexto ao lado do cursor, com o nome de quem foi clicado
 
 Este doc é sobre o **caminho** — do clique no canvas do Pixi até um painel do DOM
 no lugar certo, sobre a pessoa certa. Ele nasceu vazio de propósito, e hoje tem
-um item: **chamar**, documentado em
-[Chamar pelo menu de contexto](chamar-e-ir-ate.md). No próprio avatar não há ação
-ainda, e aí o painel mostra "Nenhuma ação sobre você por enquanto." — um painel
-completamente vazio pareceria quebrado.
+dois itens, nesta ordem:
+
+| Item | O que faz | Doc |
+|---|---|---|
+| **booble** / **entrar na booble** | abre (ou entra na) conversa paralela com essa pessoa — de qualquer distância: de longe o avatar vai até lá | [Booble](booble.md) |
+| **chamar** / **cancelar chamado** | acende um alerta na tela dela, com "Ir até" | [Chamar pelo menu de contexto](chamar-e-ir-ate.md) |
+
+A ordem não é arbitrária: os dois são as duas metades da mesma pergunta — "quero
+falar com essa pessoa". **booble** é *eu vou até ela* (e o avatar caminha
+sozinho); **chamar** é *ela vem até mim*. Ir você mesmo é o caso comum e não
+interrompe ninguém, então fica em cima.
+
+No próprio avatar não há ação, e aí o painel mostra "Nenhuma ação sobre você por
+enquanto." — um painel completamente vazio pareceria quebrado.
 
 ## Como funciona
 
@@ -78,7 +88,7 @@ que o clique nasce no Pixi e não num teste de distância feito à mão.
 |---|---|
 | `client/src/game/Avatar.ts` | `setContextMenuHandler()` — `eventMode`, `hitArea`, `rightdown` |
 | `client/src/game/Game.ts` | suprime o menu nativo, liga local e remotos, abre o menu, limpa no `destroy` |
-| `client/src/ui/AvatarContextMenu.tsx` | o painel e seus itens |
+| `client/src/ui/AvatarContextMenu.tsx` | o painel e seus dois itens |
 | `client/src/ui/GameView.tsx` | renderiza o painel |
 | `client/src/state/store.ts` | `contextMenu`, `openContextMenu`, `closeContextMenu` |
 | `client/src/styles.css` | `.avatar-menu*` |
@@ -124,7 +134,40 @@ carrega o `translateX(-50%)` da centralização deles. Por isso este painel tamb
 
 **O clique direito vale também no próprio avatar.** Custa nada (é o mesmo
 handler, com o id lido do store) e é onde ações sobre si mesmo caberiam
-naturalmente depois.
+naturalmente depois. Continua sem nenhuma: "sair da booble" foi considerada e
+recusada (escolha explícita do usuário) — sair já tem o **Sair** do aviso violeta
+e os três passos para o lado, e um terceiro caminho atrás de um botão direito no
+próprio boneco não é onde alguém procura.
+
+**Item indisponível aparece desabilitado com o motivo, nunca escondido.** Vale
+para os dois itens. Um menu que muda de tamanho conforme a pessoa anda é pior de
+usar que um de altura estável, e um item que desaparece é indistinguível de
+defeito — foi exatamente o que o botão de booble fazia na lista do HUD, onde ele
+simplesmente não existia fora dos 2 tiles.
+
+**Um item pode aceitar um clique que o servidor recusaria *neste instante*.** É a
+booble: fora dos 2 tiles ela não sai, e o clique mesmo assim vale — ele manda o
+avatar caminhar até lá e o pedido acontece na chegada. É a única exceção, e ela é
+possível porque existe uma ação intermediária honesta ("estou indo"), com aviso e
+cancelamento. Sem isso, aceitar o clique seria mentir.
+
+**Os itens leem o estado ao vivo, mesmo com o menu parado.** O painel é `fixed` e
+não segue o boneco (decisão acima), mas `roster`, `myCalls` e `pendingBooble` vêm
+do store, então um item muda de rótulo e de estado enquanto o menu está aberto. É
+o certo, e é a explicação para "o item mudou sozinho debaixo do cursor".
+
+**O menu fecha quando a ação continua fora dele.** Só a booble de longe faz isso:
+o painel é `fixed`, e deixá-lo aberto o abandonaria no ponto do clique enquanto o
+avatar atravessa a sala. Quando a ação resolve na hora (booble perto, `chamar`) o
+menu fica, porque é ali que se vê o item mudar de estado.
+
+**Ações sobre uma pessoa vêm para cá; status fica na lista do HUD.** É a linha
+que decidiu a migração da booble: a lista responde bem "quem está aqui, e como"
+(selos `ausente`/`booble`/`voz`), e responde mal "quero fazer algo com aquele
+boneco ali" — você identifica a pessoa na tela e teria de achar o nome dela numa
+lista. O `chamar` do "toc-toc" continua na lista por um motivo específico: ele é
+para quem está **ausente**, e o menu de contexto exige acertar um boneco que pode
+estar longe e atrás de outros.
 
 ## Armadilhas
 
@@ -137,6 +180,10 @@ naturalmente depois.
 - **O id do player local é o `socket.id`, que muda a cada reconexão.** Por isso o
   handler lê `selfId` do store **no momento do clique**, em vez de capturar o id
   quando é criado.
+- **Nenhum item valida de verdade.** Todos os impedimentos aqui são conforto: a
+  regra é do servidor (`World.joinBooble`, `presence:call`), e um cliente
+  modificado que mande o evento leva a mesma recusa em silêncio. Quem for
+  adicionar item novo deve espelhar a recusa do servidor, não inventar uma.
 - **WASD continua andando com o menu aberto.** O painel não tem
   `data-capture-keys` porque nenhum item tem campo de texto (o `chamar` é um
   botão). É aceitável hoje (o menu é transitório e não se move com o avatar) e
@@ -153,8 +200,8 @@ naturalmente depois.
 
 ## Como testar
 
-`npm run dev`, duas abas no mesmo mundo (o roteiro do item **chamar** está no
-[doc dele](chamar-e-ir-ate.md)):
+`npm run dev`, duas abas no mesmo mundo (os roteiros dos itens estão nos docs
+deles: [chamar](chamar-e-ir-ate.md) e [booble](booble.md)):
 
 1. Botão direito **no seu boneco** → menu com o seu nome e o selo **você**.
 2. Botão direito **no boneco do outro** → menu com o nome dele.
@@ -166,6 +213,12 @@ naturalmente depois.
 7. A outra aba **sai do mundo** com o menu aberto sobre ela → o menu fecha
    sozinho.
 8. Dois bonecos sobrepostos → abre o da frente.
+9. **Altura estável:** o menu tem sempre os **dois** itens, perto ou longe.
+10. Botão direito em alguém **longe** → `booble`: o menu **fecha** e o avatar sai
+    andando. Botão direito em alguém **perto** → `booble`: o menu **fica**, e o
+    item vira `na sua booble`.
+11. Com a caminhada em curso, botão direito na pessoa de destino: o item aparece
+    violeta dizendo `cancelar`.
 
 ## Não verificado
 
@@ -175,7 +228,13 @@ client limpos, que é o que valida a API do Pixi v8 usada aqui pela primeira vez
 (`FederatedPointerEvent`, `Rectangle`, `eventFeatures`).
 
 Com a chegada do item **chamar**, a pendência "o menu não tem itens" deixou de
-existir; a do balão de cochicho fora da `hitArea` continua aberta.
+existir; a do balão de cochicho fora da `hitArea` continua aberta — e ela ficou
+**mais importante** com a booble aqui dentro: o balão só existe em quem está numa
+booble, e é justamente nesse boneco que se vai clicar para ver o menu.
+
+A migração do item de booble para cá (2026-08-21) e o clique valendo de qualquer
+distância também não foram vistos num navegador: `typecheck` e `build` limpos, e
+um script de 23 casos sobre a chegada do `AutoWalk` — nada de tela.
 
 ## Relacionado
 
@@ -183,7 +242,8 @@ existir; a do balão de cochicho fora da `hitArea` continua aberta.
   sessão, e de onde veio a receita de fechar em Escape/clique fora
 - [Chamar pelo menu de contexto](chamar-e-ir-ate.md) — o primeiro (e por
   enquanto único) item
-- [Booble](booble.md) e [Chamado de quem está ausente](chamado-ausente.md) — as
-  ações que ainda vivem na lista do HUD, e as candidatas naturais a virar item
-  aqui
+- [Booble](booble.md) — o segundo item, que **veio** da lista do HUD; o doc dela
+  tem a regra de filiação e o porquê da migração
+- [Chamado de quem está ausente](chamado-ausente.md) — o "chamar" que **fica** na
+  lista, porque é para quem está ausente
 - README, seção [Controles](../../README.md#controles)

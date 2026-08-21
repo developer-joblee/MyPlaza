@@ -47,8 +47,9 @@ O **"ir até"** é 100% de cliente, e é a única parte sem precedente no projet
    usando o mesmo predicado da colisão (`TilemapBase.isSolidAt`), com corte de
    canto por linha de visão (`collidesCircle`).
 2. `client/src/game/AutoWalk.ts` — recalcula a rota a cada **500ms** (o alvo é
-   uma pessoa e ela anda), desiste em **20s**, e para em `BOOBLE_JOIN_RADIUS`
-   (2 tiles). Devolve um vetor **contínuo** por frame.
+   uma pessoa e ela anda), desiste em **20s**, e para a **1,5 tile** (meio tile
+   dentro de `BOOBLE_JOIN_RADIUS` — a folga é da booble, ver abaixo). Devolve um
+   vetor **contínuo** por frame.
 3. `client/src/game/Game.ts` — passa esse vetor para `LocalPlayer.update`, que só
    o usa **quando o teclado está parado**. É assim que WASD cancela.
 
@@ -70,7 +71,7 @@ O **"ir até"** é 100% de cliente, e é a única parte sem precedente no projet
 | `client/src/ui/ping.ts` | o "pin" |
 | `client/src/ui/knock.ts` | passou a usar o `sfx` (o "toc-toc" não mudou de som) |
 | `client/src/game/pathfind.ts` | BFS + corte de canto |
-| `client/src/game/AutoWalk.ts` | alvo, repath, prazo, parada |
+| `client/src/game/AutoWalk.ts` | alvo, repath, prazo, parada, `arrivedAt` |
 | `client/src/game/Game.ts` | `walkTo`, `cancelWalk`, o vetor no tick |
 | `client/src/game/LocalPlayer.ts` | o `autoAxis` no `update` |
 | `client/src/styles.css` | `.top-right-stack`, `.call-stack`, `.avatar-menu-item` |
@@ -144,6 +145,21 @@ exatamente o raio em que a [booble](booble.md) fica disponível, então o "ir at
 desemboca na distância de conversa. Avatares não colidem, então terminar
 sobreposto é possível — e feio, e não serve para nada.
 
+> Isto **deixou de ser só elegância**, e o raio ganhou uma folga (`STOP_MARGIN`,
+> meio tile): a booble pelo menu de contexto passou a valer de qualquer distância,
+> e ela abre **onde esta caminhada para**. O servidor confere o raio com a posição
+> que ele tem, atrasada em até um tick de rede (~11px a `MOVE_SPEED`) — parar na
+> borda do raio fazia o pedido cair fora dele e ser recusado **em silêncio**. Não
+> reduza o `STOP_MARGIN` a zero; ver [Booble](booble.md).
+
+**`arrivedAt` distingue chegar de desistir.** A caminhada termina de cinco
+maneiras (chegou, prazo, alvo saiu do mundo, rota impossível, cancelada de fora) e
+as cinco deixam `active` em `false`. Para o "ir até" isso bastava: chegar ou
+desistir dá no mesmo, o avatar simplesmente para. Quem precisou da diferença foi a
+booble, que abre **só** na chegada. Guarda o id do alvo, e não um booleano, porque
+quem lê isso lê um frame depois — com um booleano uma chegada antiga responderia
+"sim" para um alvo novo.
+
 **A auto-caminhada conta como andar** nas duas regras que liam `keyboard.moving`:
 levantar da cadeira (`LocalPlayer`) e cancelar o ausente (`Game`). Sem isso o
 avatar deslizaria pelo chão na pose de sentado, ou caminharia com o celular na
@@ -187,6 +203,10 @@ acontecendo — em poucos segundos a pessoa aparece do lado.
   propósito: chamado de quem está presente não tem nada a ver com o celular. Se
   alguém "consertar" isso, o alerta passa a sumir ao ficar ausente e o
   cancelamento de quem chamou vira ruído.
+- **O `AutoWalk` é compartilhado com a [booble](booble.md), e há UM por cliente.**
+  Clicar em `booble` em alguém enquanto se vai até quem chamou **troca o destino**.
+  É de propósito (são a mesma intenção, e duas caminhadas simultâneas não
+  existem), mas quem mexer aqui está mexendo nas duas features.
 - **A auto-caminhada não passa pelo `Keyboard`.** Quem for adicionar outra regra
   que dependa de "o avatar está andando" precisa somar `autoWalk.active` (ou o
   `autoAxis`), como fizeram o levantar-da-cadeira e o cancelar-ausente. Esquecer
@@ -250,6 +270,7 @@ real do Estúdio (10 casos), `npm run typecheck` e o build do client — mais o
   que a `hitArea` existe
 - [Chamado de quem está ausente](chamado-ausente.md) — o outro "chamar", para
   quem está no celular
-- [Booble](booble.md) — o raio de 2 tiles em que a caminhada termina
+- [Booble](booble.md) — o raio de 2 tiles em que a caminhada termina, e a outra
+  feature que usa esta mesma caminhada (de onde veio o `arrivedAt`)
 - [Modo ausente (celular)](modo-ausente.md)
 - README, seção [Controles](../../README.md#controles)

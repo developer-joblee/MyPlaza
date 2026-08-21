@@ -582,30 +582,6 @@ button {
 }
 
 /*
- * "booble"/"entrar" na linha de quem está por perto. Mesma métrica do
- * .nudge-btn: uma ação dentro de uma linha de lista não pode ler como botão
- * grande, senão a lista deixa de ser uma lista.
- */
-.roster .booble-btn {
-  flex: none;
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--panel-border);
-  border-radius: 99px;
-  padding: 1px 8px;
-  transition: background 0.12s, border-color 0.12s;
-}
-
-.roster .booble-btn:hover {
-  background: rgba(142, 125, 190, 0.28);
-  border-color: rgba(142, 125, 190, 0.6);
-}
-
-/*
  * "chamar" mora na linha de quem está ausente e usa a métrica dos micro-badges
  * (.ausente/.near) para não virar um botão grande no meio da lista. Opacidade
  * cheia porque a linha inteira já está a 55% (`.ausente-li`) — sem isto a única
@@ -2488,4 +2464,27 @@ button {
 .avatar-menu-item:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/*
+ * "na sua booble": violeta (a cor da booble) e desabilitado, porque é ESTADO e
+ * não impedimento — entrar de novo é no-op no servidor. Opacidade própria: o
+ * 0.45 do `:disabled` acima é para "você não pode", e apagar assim uma
+ * informação positiva a faria ler como bloqueio.
+ *
+ * Não usa `aria-pressed` como o `chamar`: aquele é um interruptor de verdade (o
+ * clique liga e desliga), e o mint dele significa "há uma ação sua no ar". Aqui
+ * não há o que desligar por este botão.
+ */
+.avatar-menu-item.on-booble:disabled {
+  background: rgba(142, 125, 190, 0.22);
+  border-color: rgba(142, 125, 190, 0.6);
+  color: #ded6f2;
+  opacity: 0.85;
+}
+
+/* hover do item de booble: violeta, como o botão do HUD que ele substituiu */
+.avatar-menu-item.booble-join:hover:not(:disabled) {
+  background: rgba(142, 125, 190, 0.28);
+  border-color: rgba(142, 125, 190, 0.6);
 }

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BOOBLE_MAX_MEMBERS, NUDGE_COOLDOWN_MS } from '@together/shared';
-import { joinBooble } from '../booble';
+import { NUDGE_COOLDOWN_MS } from '@together/shared';
 import { nudge } from '../presence';
 import { useStore, type RosterEntry } from '../state/store';
 import { colorToCss } from './util';
@@ -12,7 +11,6 @@ export function Hud() {
   const speaking = useStore((s) => s.speaking);
   const nearbyIds = useStore((s) => s.nearbyIds);
   const selfBooble = useStore((s) => s.selfBooble);
-  const boobleReachIds = useStore((s) => s.boobleReachIds);
   const audioZone = useStore((s) => s.audioZone);
   const canSit = useStore((s) => s.canSit);
 
@@ -37,23 +35,13 @@ export function Hud() {
   };
 
   /**
-   * Quanta gente há numa booble. Sai do roster porque o roster já é a lista
-   * completa do mundo — contar aqui evita mandar o tamanho pela rede e evita a
-   * janela em que o número enviado envelhece.
+   * Está na MINHA booble? A lista mostra isso como selo, e só isso: **abrir ou
+   * entrar numa booble é ação do menu de contexto do boneco**
+   * (`AvatarContextMenu`), não desta lista. Aqui ficou o status, que é o que uma
+   * lista de pessoas faz bem — dizer de relance com quem você está.
    */
-  const boobleSize = (boobleId: string | null): number =>
-    boobleId === null ? 0 : roster.filter((r) => r.boobleId === boobleId).length;
-
   const inMyBooble = (p: RosterEntry): boolean =>
     selfBooble !== null && p.boobleId === selfBooble;
-
-  /**
-   * Dá para entrar na booble desta pessoa? Booble que ela ainda não tem sempre
-   * dá (nasce com dois). O teto é conferido de novo no servidor — esconder o
-   * botão é conforto, não limite (mesma regra do "chamar").
-   */
-  const canJoinBooble = (p: RosterEntry): boolean =>
-    p.boobleId === null || boobleSize(p.boobleId) < BOOBLE_MAX_MEMBERS;
 
   const sorted = [...roster].sort((a, b) =>
     a.id === selfId ? -1 : b.id === selfId ? 1 : a.name.localeCompare(b.name),
@@ -130,30 +118,6 @@ export function Hud() {
               >
                 booble
               </span>
-            ) : p.id !== selfId && boobleReachIds.includes(p.id) ? (
-              /*
-                `boobleReachIds`, não `nearbyIds`: o alcance de abrir uma booble
-                é 2 tiles, e o audível é 5. Com o predicado do áudio o botão
-                apareceria para quem está longe demais, e o clique morreria numa
-                recusa silenciosa do servidor.
-              */
-              canJoinBooble(p) ? (
-                <button
-                  type="button"
-                  className="booble-btn"
-                  onClick={() => joinBooble(p.id)}
-                  title={
-                    p.boobleId !== null
-                      ? `Entrar na booble de ${p.name}` +
-                        (selfBooble !== null ? ' (você sai da sua)' : '')
-                      : `Abrir uma booble com ${p.name}: vocês se ouvem a 100% e o resto da sala a 7%`
-                  }
-                >
-                  {p.boobleId !== null ? 'entrar' : 'booble'}
-                </button>
-              ) : (
-                <span className="near">voz</span>
-              )
             ) : p.id !== selfId && nearbyIds.includes(p.id) ? (
               <span className="near">voz</span>
             ) : null}

@@ -5,6 +5,114 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Booble no menu de contexto, valendo de qualquer distância — 2026-08-21
+
+Mudança em duas features que já existem: [`booble.md`](docs/features/booble.md) e
+[`menu-de-contexto.md`](docs/features/menu-de-contexto.md). O botão
+`booble`/`entrar` **saiu da linha do roster** (canto superior esquerdo) e virou o
+primeiro item do menu de contexto do boneco (**botão direito** no avatar). Na
+lista ficou só o selo violeta `booble`, que é status.
+
+E o clique passou a valer **de qualquer distância**: de longe ele não pede a
+booble, cria uma **intenção** (`store.pendingBooble`) e manda o avatar caminhar
+até lá pelo mesmo `AutoWalk` do "ir até"; a booble abre na chegada. Andar, clicar
+no chão (esquerdo) ou o **Cancelar** do aviso desistem.
+
+**Nada em `shared/`, nada no protocolo do Socket.IO, nada no servidor** — a regra
+de filiação continua inteira em `World.joinBooble`. Sete arquivos de client:
+`ui/AvatarContextMenu.tsx`, `ui/Hud.tsx` (ficou menor), `ui/Notices.tsx`,
+`booble.ts`, `state/store.ts`, `game/Game.ts`, `game/AutoWalk.ts`, mais
+`styles.css`.
+
+> **Atenção para quem mexer no "ir até":** o `AutoWalk` agora é compartilhado
+> pelas duas features, e a booble depende de `STOP_RADIUS === BOOBLE_JOIN_RADIUS`.
+> Ver [`chamar-e-ir-ate.md`](docs/features/chamar-e-ir-ate.md).
+
+## Já verificado
+
+- `npm run typecheck` (server + client) limpo.
+- `npm run build -w client` limpo.
+- **A chegada e a intenção, em script `tsx`: 25/25.** `AutoWalk` instanciado
+  direto contra um grid falso, com a máquina de estados de
+  `Game.resolvePendingBooble` replicada. Casos: alvo parado (chega e abre), **alvo
+  andando** (a corrida), `cancel()` no meio (não abre), alvo saindo do mundo (não
+  abre), chegada antiga contra alvo novo (não abre), e `start()`/`cancel()`
+  zerando `arrivedAt`. Um dos casos mede também **o que a regra anterior faria** e
+  reproduz **a aritmética do servidor** (distância na chegada + atraso de um tick
+  contra `BOOBLE_JOIN_RADIUS`) e confirma que a conta estouraria sem o
+  `STOP_MARGIN` — mexer nele ou no `TICK_RATE` quebra o teste em vez de quebrar a
+  feature em silêncio. Receita e as duas armadilhas de escrever esse script em
+  [`booble.md`](docs/features/booble.md#a-chegada-e-a-intenção-sem-navegador-foi-o-que-se-fez--2323).
+- **Três defeitos corrigidos, os dois últimos com a feature já na tela do
+  usuário:**
+  1. cumprir a intenção a partir de `boobleReachIds` (recalculado no fim do tick)
+     perdia quem estava sendo perseguido *andando*;
+  2. **o pedido saía com a posição atrasada** — a posição vai ao servidor a
+     `TICK_RATE` (15/s), e `World.joinBooble` confere o raio com a posição que ELE
+     tem, recusando em silêncio. Foi o "cheguei perto e a booble não abriu"
+     relatado. Agora a chegada **fura o throttle**: `move` primeiro,
+     `booble:join` depois;
+  3. **a caminhada parava na borda do raio** — a posição do *alvo* também está
+     atrasada, e se ele vem na sua direção o servidor o vê mais longe. Entrou
+     `STOP_MARGIN` (meio tile) no `AutoWalk`.
+
+  Os três eram invisíveis: nada falha, nada loga, o servidor só recusa em
+  silêncio.
+- Por leitura de código: `boobleReachIds` continua vindo do `Game` (distância +
+  zona), então `requestBooble` decide perto/longe também **sem LiveKit**.
+- Por leitura de código: os impedimentos do item espelham as recusas de
+  `World.joinBooble` (mesma booble, eu ausente, alvo ausente, booble cheia). A
+  distância deixou de ser impedimento de propósito, e a **zona** passou a ser
+  conferida só no servidor.
+
+## Falta verificar (em ordem de importância)
+
+1. **Nada disto foi aberto num navegador.** Tudo abaixo é observação por fazer.
+2. **O caminho principal:** encostar em alguém, botão direito no boneco dela,
+   `booble` → a booble se forma (círculo violeta, balão de cochicho, selo na
+   lista, aviso do topo).
+3. **`entrar na booble`:** o rótulo muda para quem já tem booble, e o clique
+   entra na dela (saindo da sua, se você tinha uma).
+4. **O estado `na sua booble`:** botão direito em quem já está com você → item
+   violeta e desabilitado, com o motivo no `title`. É o CSS novo
+   (`.avatar-menu-item.on-booble:disabled`), e é o único visual inédito da
+   entrega — a opacidade de 0.85 pode não ser suficiente para não ler como
+   bloqueio.
+5. **A CAMINHADA — o defeito relatado foi aqui, e a correção não voltou para a
+   tela.** Clicar em `booble` em quem está longe → o menu fecha, o avatar anda, o
+   aviso *"Indo até X para abrir uma booble"* aparece, e a booble **abre na
+   chegada**. Repita umas cinco vezes: a falha original era intermitente (dependia
+   de onde caía o tick de envio de posição), então uma tentativa boa não prova nada.
+6. **Os três cancelamentos, um por vez:** `WASD`, **clique esquerdo no chão** e o
+   **Cancelar** do aviso. E o que **não** cancela: botão direito em outro boneco.
+7. **Perseguir alguém andando**, nas **duas** direções: o alvo fugindo e o alvo
+   vindo ao seu encontro. A segunda é a que o `STOP_MARGIN` existe para cobrir. O
+   script cobre a aritmética; falta ver na tela.
+8. **Trocar de destino** no meio do caminho (clicar em `booble` em outra pessoa) e
+   **reabrir o menu** no destino (o item vira `cancelar`, violeta).
+9. **Atravessar a porta:** alvo dentro da sala de reunião do Estúdio, você fora →
+   o BFS entra pela porta e a booble abre na chegada (mesma zona).
+10. **O prazo de 20s** com o alvo fugindo, e o alvo **saindo do mundo** no meio do
+    caminho: os dois têm de tirar o aviso da tela sem abrir booble.
+11. **Sentado** clicando em `booble` em alguém longe: levanta e vai.
+12. **O caso exótico que hoje é um clique sem efeito:** estar a 2 tiles de alguém
+    **através da parede** de uma sala fechada. O `AutoWalk` desiste na hora (mede
+    distância crua) e o servidor recusaria pela zona — o sintoma é "cliquei e nada
+    aconteceu". Decisão consciente; se incomodar na prática, é aqui que se mexe.
+13. **Os impedimentos restantes, cada um na tela:** alvo ausente, você ausente,
+    booble cheia (essa exige 8 pessoas — provavelmente não dá para ver).
+14. **A lista não tem mais botão nenhum de booble** — e o selo continua aparecendo
+    nas linhas de quem está com você, com a precedência `ausente > booble > voz`
+    intacta.
+15. **Altura estável do menu:** os dois itens aparecem sempre, perto ou longe.
+16. **A `hitArea` e o balão de cochicho.** Já era pendência do menu de contexto
+   (`BoobleWhisper` vai até `x = 24`, a `hitArea` até `x = 16`), e ficou mais
+   relevante: agora se clica com botão direito justamente em quem está numa
+   booble. Falta ver se acertar o boneco é confortável nesse caso.
+17. **Sem LiveKit** (`LIVEKIT_*` vazias): a booble tem de se formar, perto e depois
+    de caminhar. Verificado só por leitura.
+18. **Zoom mínimo:** com o boneco pequeno, acertar o clique direito nele.
+
 # Chamar pelo menu de contexto ("pin" e "ir até") — 2026-08-21
 
 Feature nova: [`docs/features/chamar-e-ir-ate.md`](docs/features/chamar-e-ir-ate.md).

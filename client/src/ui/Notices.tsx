@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BOOBLE_MAX_NAMES, NUDGE_MAX_NAMES } from '@together/shared';
-import { leaveBooble } from '../booble';
+import { cancelPendingBooble, leaveBooble } from '../booble';
 import { setAway } from '../presence';
 import { runtime } from '../runtime';
 import { useStore, type Nudge } from '../state/store';
@@ -40,6 +40,7 @@ export function Notices() {
   const nudges = useStore((s) => s.nudges);
   const clearNudges = useStore((s) => s.clearNudges);
   const selfBooble = useStore((s) => s.selfBooble);
+  const pendingBooble = useStore((s) => s.pendingBooble);
   const roster = useStore((s) => s.roster);
   const selfId = useStore((s) => s.selfId);
   const [dismissedUnavailable, setDismissed] = useState(false);
@@ -53,6 +54,14 @@ export function Notices() {
     selfBooble === null
       ? []
       : roster.filter((r) => r.boobleId === selfBooble && r.id !== selfId).map((r) => r.name);
+
+  /**
+   * Para quem estou caminhando, se cliquei em `booble` em alguém que estava
+   * longe. O nome sai do **roster**, como no menu de contexto: quem sai do mundo
+   * faz o aviso morrer sozinho em vez de anunciar uma caminhada para ninguém (a
+   * intenção também morre, no `Game`, mas um frame depois).
+   */
+  const goingTo = pendingBooble === null ? null : roster.find((r) => r.id === pendingBooble);
 
   return (
     <div className="notice-stack" role="status" aria-live="polite">
@@ -102,6 +111,28 @@ export function Notices() {
           </span>
           <button type="button" className="notice-action" onClick={() => leaveBooble()}>
             Sair
+          </button>
+        </div>
+      )}
+
+      {/*
+        "Estou indo até alguém para abrir uma booble." Existe porque o clique e o
+        efeito ficaram separados no tempo: de longe, `booble` não abre nada — o
+        avatar sai andando, e sem este aviso a única pista seria o boneco se
+        mexendo sozinho.
+
+        Ele é também o **cancelamento explícito**. Andar e clicar no chão também
+        cancelam, mas nenhum dos dois se anuncia; um botão, sim.
+
+        Mesma classe do aviso da booble (violeta, com `.notice-action`): é a mesma
+        feature em outro momento, e uma cor nova diria que é outra coisa.
+      */}
+      {goingTo && (
+        <div className="notice booble">
+          <BoobleIcon />
+          <span>Indo até {goingTo.name} para abrir uma booble</span>
+          <button type="button" className="notice-action" onClick={cancelPendingBooble}>
+            Cancelar
           </button>
         </div>
       )}
