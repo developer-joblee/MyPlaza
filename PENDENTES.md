@@ -5,6 +5,35 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Deploy no Railway: Node 22 — 2026-08-20
+
+O deploy depois do commit `eec1849` entrou em **loop de restart**. Causa, nos
+logs do Railway: `Error: Node.js detected but native WebSocket not found` em
+`@supabase/realtime-js`, com `Node.js v20.20.2`. O `createClient` de
+`server/src/supabase.ts` roda no import do módulo, então o processo morre antes
+de subir o HTTP — o fail-soft do `supabase.ts` cobre "sem variável" e "banco
+fora do ar", não "runtime sem `WebSocket`".
+
+Correção aplicada: `engines.node` para `>=22` e **`.nvmrc` com `22`** (o
+Nixpacks resolve a versão pelo `.nvmrc`; o range `>=20.12` ele resolvia para o
+Node 20). README atualizado nos dois lugares que citavam Node 20.12+.
+
+## Falta verificar
+
+### 1. O deploy em si
+Ninguém confirmou que o Railway rebuildou com Node 22 e que o serviço ficou de
+pé. Como verificar: novo deploy, e no log de boot esperar o listen do server
+sem o `Node.js detected but native WebSocket not found`. Se o log ainda mostrar
+`Node.js v20.*`, o Nixpacks ignorou o `.nvmrc` — nesse caso definir
+`NIXPACKS_NODE_VERSION=22` nas Variables do serviço.
+
+### 2. Nada foi rodado localmente em Node 22
+A máquina de desenvolvimento está em Node 24, então o `>=22` só foi verificado
+por `npm run typecheck` (limpo). Se alguém estiver em Node 20, o `npm install`
+agora avisa/quebra por `engines` — é o comportamento desejado.
+
+---
+
 # Camada de requisição no client — 2026-08-20
 
 Ver a seção **Arquitetura** do `README.md` e `docs/features/lobby.md`.
@@ -327,11 +356,27 @@ convenção de `db/` no meio de uma depuração.
 estática (o `App` precisa dele no boot para restaurar a sessão). Não medi o
 antes/depois. O chunk de 6 MB do Pixi continua dominante.
 
-### 12. `.env.example` continua sem as variáveis do Supabase
-Faltam as três do servidor e as duas do navegador. As regras `deny` do
-`.claude/settings.json` casam com `.env.example` e impediram ler e escrever o
-arquivo em todas as sessões até aqui. Vale decidir se o padrão abre exceção para
-ele, que por definição não tem valores.
+### 12. `.env.example` — quase-acidente de segredo, e ainda sem as variáveis
+**2026-08-20, achado na varredura de fechamento:** o `.env.example` da árvore de
+trabalho continha **valores reais**, incluindo uma `SUPABASE_SERVICE_ROLE_KEY`.
+O arquivo é versionado, então isso teria virado vazamento no primeiro commit.
+
+Nada vazou: a versão em `HEAD` não tem nenhum JWT, nenhum commit do histórico
+introduziu um, e nada estava staged. **A chave não precisou de rotação.** O
+`.githooks/pre-commit` (ativo, `core.hooksPath=.githooks`) também teria barrado —
+ele isenta `.env.example` **por nome**, o que é correto, mas a regra de conteúdo
+para JWT pega o valor. A rede funcionou; o que faltou foi não ter posto o valor
+ali.
+
+Pendente, e é o usuário que executa (as regras `deny` do `.claude/settings.json`
+impedem a mim ler e escrever esse arquivo): restaurar o `.env.example` para
+`HEAD` e acrescentar **só os nomes** das cinco variáveis do Supabase — que
+continuam faltando lá (`HEAD` só tem as quatro do LiveKit). Comando no
+fechamento da sessão.
+
+Vale decidir se o padrão `deny` abre exceção para `.env.example`, que por
+definição não tem valores — a impossibilidade de eu inspecioná-lo é justamente o
+que deixou o valor real passar tanto tempo ali.
 
 ---
 
