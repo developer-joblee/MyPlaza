@@ -27,11 +27,12 @@ on conflict (id) do update
   set label = excluded.label,
       sort_order = excluded.sort_order;
 
+-- Um cenário só: o projeto ficou num estilo de arte (Modern Interiors, LimeZu)
+-- e os outros três (`office`, `plaza`, `ruins`) saíram do código. Este insert
+-- não apaga o que já existe — quem tem um banco de antes roda a
+-- `0013_single_scenario.sql`, que é o único lugar que remove.
 insert into scenarios (id, label, description, sort_order) values
-  ('studio', 'Estúdio',   'Escritório moderno',      1),
-  ('office', 'Escritório','Salas, mesas e lounge',   2),
-  ('plaza',  'Praça',     'Jardim ao ar livre',      3),
-  ('ruins',  'Ruínas',    'Ruínas antigas de pedra', 4)
+  ('studio', 'Estúdio', 'Escritório moderno', 1)
 on conflict (id) do update
   set label = excluded.label,
       description = excluded.description,
@@ -56,10 +57,13 @@ insert into organizations (slug, name) values
   ('demo', 'Equipe demo')
 on conflict (slug) do update set name = excluded.name;
 
--- Um local por cenário, com o Estúdio como padrão (é o DEFAULT_SCENARIO do
--- shared). O slug do local é o próprio id do cenário para o MVP: um local por
--- cenário por empresa. Quando existirem dois Estúdios na mesma empresa, os
--- slugs passam a divergir e nada aqui precisa mudar.
+-- Um local por cenário — hoje, portanto, um só: o Estúdio (que é também o
+-- DEFAULT_SCENARIO do shared). O slug do local é o próprio id do cenário para o
+-- MVP: um local por cenário por empresa. Quando existirem dois Estúdios na mesma
+-- empresa, os slugs passam a divergir e nada aqui precisa mudar.
+--
+-- O `cross join` continua: entrando um cenário novo no catálogo acima, o local
+-- dele nasce na próxima rodada do seed.
 insert into places (organization_id, scenario_id, slug, name, is_default)
 select o.id, s.id, s.id, s.label, (s.id = 'studio')
 from organizations o

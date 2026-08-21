@@ -348,8 +348,11 @@ nenhuma política de escrita. A `service_role` continua só no servidor.
    continuar `owner`, não `guest`.
 10. Lotação: `update places set capacity = 1 where slug = 'studio';` — a segunda
    aba tem que levar **"este local está cheio"**.
-11. Restrito: `update places set visibility = 'restricted' where slug = 'plaza';`
-   — entrar na Praça tem que ser recusado até a pessoa ser adicionada.
+11. Restrito: crie um segundo mundo no lobby e rode
+   `update places set visibility = 'restricted' where id = '<id do mundo>';`
+   — entrar nele tem que ser recusado até a pessoa ser adicionada. (Não use o
+   local do seed: se você restringir o `studio`, perde o caminho de teste dos
+   outros passos.)
 12. Isolamento: crie uma segunda empresa e um segundo local no mesmo cenário;
    duas pessoas, uma em cada, **não** podem se ver nem se ouvir.
 13. Sessão: derrube a sessão no dashboard do Supabase e recarregue — tem que

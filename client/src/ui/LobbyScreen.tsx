@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  DEFAULT_SCENARIO,
   SCENARIOS,
   isProfileId,
   type AssignableWorldRole,
@@ -13,7 +14,7 @@ import { createSocket, type AppSocket } from '../net/socket';
 import { useStore } from '../state/store';
 import { signOut } from '../auth/supabase';
 import { REASON_TEXT } from './lobbyReason';
-import { SCENARIO_EMOJI } from './scenarioEmoji';
+import { MULTIPLE_SCENARIOS, SCENARIO_EMOJI, SCENARIO_LIST } from './scenarioEmoji';
 import { copyText } from './util';
 import { WorldAdmin } from './WorldAdmin';
 
@@ -45,7 +46,7 @@ export function LobbyScreen() {
   // formulário de criação
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newScenario, setNewScenario] = useState<ScenarioId>('studio');
+  const [newScenario, setNewScenario] = useState<ScenarioId>(DEFAULT_SCENARIO);
   const [newCapacity, setNewCapacity] = useState('');
 
   // adicionar gente: qual mundo está com o campo aberto
@@ -388,20 +389,26 @@ export function LobbyScreen() {
                 autoFocus
               />
 
-              <span className="join-label">Cenário</span>
-              <div className="scenario-row">
-                {Object.values(SCENARIOS).map((sc) => (
-                  <button
-                    key={sc.id}
-                    type="button"
-                    className={`scenario-card${sc.id === newScenario ? ' selected' : ''}`}
-                    onClick={() => setNewScenario(sc.id)}
-                  >
-                    <span className="scenario-emoji">{SCENARIO_EMOJI[sc.id]}</span>
-                    <span className="scenario-name">{sc.label}</span>
-                  </button>
-                ))}
-              </div>
+              {/* Com um cenário só, escolher não é escolha — o mundo novo sai
+                  no `newScenario`, que já nasce no padrão. */}
+              {MULTIPLE_SCENARIOS && (
+                <>
+                  <span className="join-label">Cenário</span>
+                  <div className="scenario-row">
+                    {SCENARIO_LIST.map((sc) => (
+                      <button
+                        key={sc.id}
+                        type="button"
+                        className={`scenario-card${sc.id === newScenario ? ' selected' : ''}`}
+                        onClick={() => setNewScenario(sc.id)}
+                      >
+                        <span className="scenario-emoji">{SCENARIO_EMOJI[sc.id]}</span>
+                        <span className="scenario-name">{sc.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <label className="join-label" htmlFor="world-capacity">
                 Lotação (vazio = sem limite)
