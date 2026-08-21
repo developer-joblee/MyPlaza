@@ -181,7 +181,8 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
         // arquivado é indistinguível de inexistente para quem tenta entrar
         if (!place || place.archivedAt) return deny('no-place');
         // o MAPA vem do mundo, não do pedido: senão dava para entrar num mundo
-        // do Estúdio carregando a colisão da Praça
+        // carregando a colisão de outro cenário. Com um cenário só isto não
+        // separa nada hoje — e é o que impede o furo no dia em que separar.
         scenarioId = place.scenarioId;
 
         /**

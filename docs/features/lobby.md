@@ -101,7 +101,9 @@ paralelo que poderia discordar dele.
 **O `join` mudou de novo**: agora leva `worldId`. O servidor **não deriva mais o
 local a partir do cenário** — com mundos criados por gente, o mesmo cenário
 existe muitas vezes. E o **mapa vem do mundo**, não do pedido: sem isso daria
-para entrar num mundo do Estúdio carregando a colisão da Praça.
+para entrar num mundo carregando a colisão de outro cenário. Hoje há um cenário
+só (o Estúdio), então a regra não separa nada na prática — mas é ela que faz um
+cenário novo não abrir esse furo no dia em que entrar.
 
 **A contagem de "quem está dentro"** (`worldOnlineCount`) sai da memória do
 processo, não de `sessions` no banco: sessão que não fechou por queda de conexão
@@ -124,15 +126,16 @@ contaria gente que já saiu, e o mundo apareceria cheio e vazio ao mesmo tempo.
 | `client/src/net/lobbyApi.ts` | as 12 operações como funções `async` tipadas |
 | `client/src/net/request.ts` | primitiva de ack (socket caído, queda no meio, prazo) e `once()` |
 | `client/src/ui/LobbyScreen.tsx` | a tela |
-| `client/src/ui/scenarioEmoji.ts` | emoji por cenário, agora usado em duas telas |
+| `client/src/ui/scenarioEmoji.ts` | emoji por cenário e `MULTIPLE_SCENARIOS` (esconde o seletor quando há um só), usados nas duas telas |
 | `client/src/state/store.ts` | fase `lobby`, `worlds`, `pendingInvites`, `selfWorldId` |
 | `client/src/ui/JoinScreen.tsx` | mostra o mundo escolhido; sem seletor de cenário |
 
 ## Decisões e por quê
 
 **Mundo é `place`, não `organization`.** Colapsar os dois deixaria o lobby mais
-simples e mataria a ideia de uma equipe com vários ambientes (Estúdio + Praça da
-mesma empresa), que foi o pedido original. A empresa pessoal automática é o
+simples e mataria a ideia de uma equipe com vários ambientes (dois mundos da
+mesma empresa — hoje no mesmo mapa, amanhã em mapas diferentes), que foi o pedido
+original. A empresa pessoal automática é o
 preço para manter `organizations` como raiz única de autorização: sem ela, um
 local órfão exigiria um segundo caminho em **cada** política de RLS.
 

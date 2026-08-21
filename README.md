@@ -100,7 +100,7 @@ ver **[`db/README.md`](db/README.md)**.
 Depende de haver Supabase configurado:
 
 ```
-sem Supabase:   entrada (nome, personagem, cor, cenário) -> jogo
+sem Supabase:   entrada (nome, personagem, cor) -> jogo
 com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
                 login -> lobby -----------------------------------> jogo
                          (mundo em que você já entrou: o nome está guardado)
@@ -111,8 +111,10 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 - **lobby** — a lista de mundos que você pode acessar, **o seu ID** (é o que você
   passa para ser adicionado a um mundo de outra pessoa) e criar mundo. Quem criou
   o mundo administra: adicionar gente pelo ID, papéis, lotação, arquivar.
-- **entrada** — nome, personagem e cor. O cenário vem do mundo escolhido no
-  lobby, então o seletor de cenário só aparece no modo anônimo. **Só aparece na
+- **entrada** — nome, personagem e cor. Não há seletor de cenário: existe um
+  cenário só (o Estúdio), e o mapa de um mundo vem do mundo. O seletor volta
+  sozinho nas duas telas se um segundo cenário entrar em `SCENARIOS` — ver
+  [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md). **Só aparece na
   primeira vez em cada mundo**: depois disso o nome fica guardado no vínculo com
   aquele mundo e "Entrar" vai direto para o jogo, mesmo depois de um logout — ver
   [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md).
@@ -155,7 +157,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Modo ausente (celular) | [Modo ausente (celular)](docs/features/modo-ausente.md) | `client/src/presence.ts`, `client/src/game/AwayIndicator.ts`, `client/src/ui/MediaControls.tsx` |
 | Chamado de quem está ausente ("toc-toc") | [Chamado de quem está ausente](docs/features/chamado-ausente.md) | `client/src/presence.ts`, `client/src/ui/knock.ts`, `server/src/handlers.ts` |
 | Sentar em cadeiras | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/game/LocalPlayer.ts`, `client/src/game/characterDefs.ts` |
-| Cenários e mapas ASCII | [Editando o mapa](#editando-o-mapa) *(sem doc próprio ainda)* | `shared/src/scenarios.ts`, `client/src/game/*Tilemap.ts` |
+| Cenários e mapas ASCII (hoje um só: o Estúdio) | [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md) | `shared/src/scenarios.ts`, `shared/src/map.ts`, `client/src/game/ModernTilemap.ts` |
 | Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/net/voiceApi.ts` |
 | Persistência (Supabase): perfis, empresas, locais, posição salva e atividade da sessão | [Persistência (Supabase)](docs/features/persistencia-supabase.md) | `db/`, `server/src/db.ts` |
 | Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
@@ -285,11 +287,16 @@ db/       schema do Supabase em SQL, aplicado à mão por enquanto
 
 ## Editando o mapa
 
-Os mapas são ASCII em `shared/src/scenarios.ts`, um por cenário (Praça,
-Escritório, Ruínas e Estúdio), cada um com sua legenda `charToTile` e spawns
-próprios. Todas as linhas precisam ter o mesmo comprimento. No cenário
-Ruínas o visual é uma imagem única da cena (`client/public/tiles/ruins/`);
-o ASCII define apenas a colisão (`#` sólido, `.` livre).
+O mapa é ASCII em `shared/src/scenarios.ts`: um caractere por tile, uma legenda
+`charToTile` e os spawns. Todas as linhas precisam ter o mesmo comprimento —
+`buildMap` estoura no boot se uma divergir. Mover uma mesa é trocar um caractere.
+
+Hoje existe **um cenário, o Estúdio** (Modern Interiors, by LimeZu): o projeto
+tinha quatro, de três packs diferentes, e ficou num estilo só em 2026-08-21.
+A legenda completa, o que cada `TileType` decide, como o `ModernTilemap` recorta
+as sheets e as armadilhas (editar o ASCII invalida posição salva; trocar a sheet
+invalida todos os recortes) estão em
+**[Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md)**.
 
 ## Zonas de áudio (salas fechadas)
 
@@ -320,8 +327,8 @@ audioZones: [
 
 Incluir a linha da porta é de propósito: quem para na soleira conta como dentro,
 o que evita um limbo onde ninguém se ouve. Paredes dentro do retângulo não
-incomodam, porque não são caminháveis. Cenário sem `audioZones` funciona como
-antes, 100% por proximidade — hoje só o Estúdio tem zonas (reunião e copa).
+incomodam, porque não são caminháveis. Cenário sem `audioZones` funciona 100% por
+proximidade; o Estúdio, que é o único cenário, tem duas — reunião e copa.
 
 Dentro de uma sala o círculo de alcance do avatar desaparece (ele mentiria, já
 que o alcance passa a ser a sala) e o HUD mostra o nome dela.
@@ -388,13 +395,19 @@ ambiente local — caso contrário dev e produção cairiam na mesma sala.
 
 ## Créditos de assets
 
-- **Praça (terreno e objetos)**: [Sprout Lands — Basic pack](https://cupnooble.itch.io/sprout-lands-asset-pack),
-  by **Cup Nooble** — uso não-comercial, conforme a licença do pack.
-- **Ruínas (cena e objetos)**: [Pixel Art Top Down — Basic](https://cainos.itch.io/pixel-art-top-down-basic),
-  by **Cainos** — licença CC0.
-- **Interiores modernos (Estúdio) e personagens**: [Modern Interiors — free](https://limezu.itch.io/moderninteriors),
+Um pack só, desde 2026-08-21 — os assets dos cenários que saíram (Sprout Lands
+by Cup Nooble, na Praça; Pixel Art Top Down by Cainos, nas Ruínas) foram
+removidos do repo junto com os mapas.
+
+- **Estúdio (interiores) e personagens**: [Modern Interiors — free](https://limezu.itch.io/moderninteriors),
   by **LimeZu** — uso não-comercial, conforme a licença do pack. Os quatro
   personagens (Adam, Alex, Amélia, Bob) vêm daí, incluindo as poses de sentar.
 
-> Atenção: a licença do Sprout Lands Basic é **não-comercial**. Para uso
-> comercial, contate o autor (Discord: `cup_nooble`).
+> **A versão completa do pack foi comprada e ainda não entrou no repo.** O que
+> está em `client/public/tiles/modern/` e `client/public/characters/` continua
+> sendo recorte da versão **free**. Ao trocar pelas sheets do pack completo,
+> atualize este crédito (a linha acima diz "free") e confira a licença que vem
+> com ele — a do free é não-comercial, e a paga pode não ser a mesma. Os
+> retângulos de recorte do `ModernTilemap` são coordenadas em pixel das sheets
+> atuais e **não sobrevivem** à troca: ver
+> [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md#armadilhas).

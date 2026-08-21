@@ -273,6 +273,110 @@ descuido.
 
 O item não aparece no próprio boneco (o painel diz "Nenhuma ação sobre você por
 enquanto"). É escopo, não pendência.
+# Um cenário só: o Estúdio — 2026-08-21
+
+Doc: [`docs/features/cenarios-e-mapas.md`](docs/features/cenarios-e-mapas.md).
+Saíram os cenários **Praça**, **Ruínas** e **Escritório** — mapas, renderers,
+tilesets e assets — junto com o campo `theme`, doze `TileType` e o seletor de
+cenário das duas telas. Toca `shared/`, `client/`, `server/` e `db/`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ **O risco real desta entrega, coberto: a renumeração do `TileType`.**
+  Remover doze tiles deixaria buracos no enum, e renumerar mexe em *todo* tile do
+  único mapa que ficou. Script dirigido (rodado da raiz, apagado depois),
+  **21 checagens**, cobrindo as **864 células** do Estúdio: cada caractere
+  parseando para o tile que `charToTile` manda **e** com a solidez esperada por
+  uma tabela escrita à mão no teste, derivada da legenda e **independente do
+  enum** — é isso que pegaria um `Sofa` que herdou o valor de `Grass` e virou
+  chão caminhável (670 caminháveis / 194 sólidas). Mais: `isWallLike` valendo
+  para `#/w/q/b` e só para eles; as 8 cadeiras sentáveis com o lado certo e
+  nenhum outro tile virando cadeira; `isScenarioId` recusando
+  `plaza`/`ruins`/`office` (e lixo); as duas zonas de áudio, **inclusive as duas
+  soleiras** e o tile logo abaixo, que tem de ser fora.
+- ✅ **Cliente antigo pedindo cenário que não existe mais**: `join` com
+  `'plaza'` cai no Estúdio, spawna dentro do mapa e **não** derruba o socket
+  (3 checagens, script apagado). É o caminho que o `isScenarioId` do `join`
+  sempre cobriu; agora foi executado.
+- ✅ **`smoke-test.mts` 14/14** contra o servidor headless em modo anônimo
+  (`PORT=3001`, `SUPABASE_*`/`LIVEKIT_*` vazias).
+- ✅ Nenhuma referência sobrando aos assets removidos: o único
+  `Assets.load('/tiles/...')` do client aponta para `modern/`.
+
+## Falta verificar (em ordem de importância)
+
+### 1. A `0013` não foi aplicada, e sem ela o banco divergiu do código
+
+`db/migrations/0013_single_scenario.sql` repõe todo `places.scenario_id` para
+`studio` e limpa o catálogo `scenarios`. **Não rodou.** O banco de desenvolvimento
+tem os quatro locais do seed (um por cenário), então três deles apontam para
+cenário que o código não conhece mais.
+
+Isso **não quebra** — foi para isso que o `toScenarioId` novo em `server/src/db.ts`
+entrou —, mas o comportamento sem a migração nunca foi observado: o esperado é
+`[db] getPlaceById: cenário "plaza" não existe mais — usando studio (rode a 0013)`
+no log e o mundo abrindo com o mapa do Estúdio. Vale ver isso **antes** de aplicar
+a `0013`, porque depois o caminho deixa de ser alcançável.
+
+Ao aplicar, conferir: `select id, count(*) from places group by 1` sem nada fora
+de `studio`, e `select * from scenarios` com uma linha só. O `delete from
+scenarios` falhando por FK significa que sobrou referência numa tabela que o
+passo 1 da migração não cobre — não force.
+
+### 2. Nenhuma tela foi aberta num navegador
+
+Nem o mapa depois da renumeração (as 864 células foram conferidas por cálculo, o
+que é diferente de ver o Estúdio desenhado), nem as duas telas **sem o seletor de
+cenário**:
+
+- **`JoinScreen`**: o bloco do cenário virou um `&&` sobre `showScenarios`
+  (`MULTIPLE_SCENARIOS && !selfWorldName`) em vez do `hidden` de antes. Com um
+  cenário só, os dois caminhos levam a "não aparece" — mas o layout do cartão sem
+  aquela linha (espaçamento entre a cor e o botão Entrar) não foi visto.
+- **`LobbyScreen`**: o formulário "Novo mundo" perdeu a linha do cenário. O mundo
+  criado tem de sair no `DEFAULT_SCENARIO`, e isso não foi exercitado — a criação
+  de mundo já estava na lista de escritas nunca executadas.
+
+### 3. A posição salva num mundo repontado
+
+O Estúdio (36x24) é **menor** que a Praça (40x26) e que as Ruínas (58x70). Quem
+tinha posição gravada fora dessa área, ou em cima do que agora é parede, deve
+nascer no spawn — é o `validResume` de `server/src/world.ts`, que existe
+justamente para isso e **não** foi exercitado com uma linha dessas. Sintoma se
+estiver errado: pessoa presa dentro de parede, ou fora do mapa.
+
+### 4. O pack completo não entrou no repo
+
+O que está em `client/public/tiles/modern/` e `client/public/characters/` continua
+sendo recorte da versão **free** do Modern Interiors. Quando as sheets do pack
+comprado entrarem, duas coisas quebram de uma vez e **nenhuma dá erro**:
+
+- **todos** os retângulos de `RB` e `IN` em `client/src/game/ModernTilemap.ts` são
+  coordenadas em pixel das sheets atuais — layout diferente = sprite cortado ou
+  pedaço de outro móvel;
+- o mesmo vale para os recortes de personagem em `client/src/game/characterDefs.ts`.
+
+E o **crédito no README** ainda diz "free": a licença do pack pago pode não ser a
+mesma (a do free é não-comercial). É decisão de licenciamento, não de código —
+por isso ficou registrado aqui em vez de eu ter chutado.
+
+### 5. `ScenarioId` virou uma união de um só elemento
+
+Compila e é intencional (mapa novo continua sendo uma entrada nova em
+`SCENARIOS`), mas alguns caminhos passaram a ser inalcançáveis por tipo em vez de
+por lógica — em particular `MULTIPLE_SCENARIOS`, que é `false` constante e faz o
+compilador aceitar o `&&` sem nunca renderizar o bloco. O dia em que um segundo
+cenário entrar, esse código volta a executar **sem** ter sido testado nunca.
+
+### 6. O que foi apagado não tem volta fácil
+
+`Tilemap.ts`, `OfficeTilemap.ts`, `RuinsTilemap.ts`, `tilesets.ts`, as nove sheets
+de `client/public/tiles/` e a pasta `ruins/` saíram por `git rm` — estão no
+histórico (`5e0197f` e anteriores), não no working tree. Os packs originais
+continuam em `assets_temp/` (que é gitignored), então nada foi perdido de
+verdade. Fica registrado porque "voltar a Praça" é `git show`, não `git checkout`
+de um arquivo que ainda existe.
 
 ---
 
