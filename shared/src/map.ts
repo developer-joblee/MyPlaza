@@ -1,48 +1,46 @@
 import { TILE_SIZE } from './constants';
 
+/**
+ * Vocabulário de tiles do Estúdio (Modern Interiors, by LimeZu) — o único
+ * estilo do projeto.
+ *
+ * Os valores são de uso interno: nada é gravado no banco nem transmitido pela
+ * rede em termos de `TileType` (posição vai em pixels), e client e server
+ * constroem o mapa da MESMA fonte, este módulo. Então renumerar aqui é seguro —
+ * foi o que se fez ao remover os tiles dos três cenários antigos (Praça,
+ * Ruínas e o Escritório procedural), que deixaram buracos no enum.
+ */
 export enum TileType {
-  // Praça (Sprout Lands)
-  Grass = 0,
-  Water = 1,
-  Bridge = 2,
-  Path = 3,
-  Fence = 4,
-  Tree = 5,
-  Bush = 6,
-  Rock = 7,
-  Flower = 8,
-  Sunflower = 9,
-  Table = 10,
-  Chair = 11,
-  Rug = 12,
-  House = 13,
-  // Escritório (render procedural)
-  Floor = 14,
-  Wall = 15,
-  Desk = 16,
-  Plant = 17,
-  Carpet = 18,
-  // Estúdio (Modern Interiors)
-  FloorLounge = 19,
-  FloorMeeting = 20,
-  FloorKitchen = 21,
-  Workstation = 22,
-  Sofa = 23,
-  Shelf = 24,
-  Counter = 25,
-  Fridge = 26,
-  Globe = 27,
-  WallWindow = 28,
-  WallArt = 29,
-  WallBoard = 30,
+  // pisos caminháveis
+  Floor = 0,
+  FloorLounge = 1,
+  FloorMeeting = 2,
+  FloorKitchen = 3,
+  Rug = 4,
+  // paredes (ver `isWallLike`)
+  Wall = 5,
+  WallWindow = 6,
+  WallArt = 7,
+  WallBoard = 8,
+  // móveis e props
+  Table = 9,
+  Chair = 10,
+  Desk = 11,
+  Plant = 12,
+  Workstation = 13,
+  Sofa = 14,
+  Shelf = 15,
+  Counter = 16,
+  Fridge = 17,
+  Globe = 18,
   /**
    * Cadeiras com orientação, e por isso sentáveis. Só existem de perfil porque
    * a arte de sentar do pack só tem perfil — ver `characterDefs.ts`. `Chair`
    * (sem orientação) continua existindo para as cadeiras decorativas, como as
    * de frente para a câmera.
    */
-  ChairLeft = 31,
-  ChairRight = 32,
+  ChairLeft = 19,
+  ChairRight = 20,
 }
 
 /** Tiles que se comportam como parede (cap + face no tema modern). */
@@ -94,17 +92,10 @@ export function buildMap(
 
 export function isSolid(tile: TileType): boolean {
   switch (tile) {
-    case TileType.Water:
-    case TileType.Fence:
-    case TileType.Tree:
-    case TileType.Bush:
-    case TileType.Rock:
-    case TileType.Sunflower:
     case TileType.Table:
     case TileType.Chair:
     case TileType.ChairLeft:
     case TileType.ChairRight:
-    case TileType.House:
     case TileType.Wall:
     case TileType.Desk:
     case TileType.Plant:

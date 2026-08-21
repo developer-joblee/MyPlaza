@@ -80,9 +80,18 @@ ordem**:
     mostra o slider mas o valor não sobrevive ao recarregar — o `db.ts` é
     fail-soft, então a falha aparece só como `[db] saveSoundboardVolume` no log.
 
-13. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+13. `migrations/0013_single_scenario.sql` — **um cenário só: o Estúdio**.
+    Os outros três (`office`, `plaza`, `ruins`) saíram do código quando o projeto
+    ficou num estilo de arte só, e o banco não acompanha sozinho: `places` tem FK
+    para `scenarios (id)`. A migração **repõe todo local para `studio`** (não
+    apaga mundo nenhum — nome e membros ficam) e depois limpa o catálogo.
+    Sem ela o servidor não quebra, mas avisa
+    `[db] getPlaceById: cenário "plaza" não existe mais` a cada entrada nesse
+    mundo, e o mapa carregado é o do Estúdio de todo jeito.
 
-O passo 13 **não é opcional**: sem as linhas de `characters`, `scenarios` e
+14. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+
+O passo 14 **não é opcional**: sem as linhas de `characters`, `scenarios` e
 `audio_zones` os FKs de `profiles`, `places`, `sessions`, `presence_state` e
 `zone_visits` não fecham, e o servidor falha em toda escrita.
 
@@ -187,17 +196,17 @@ select email, role, expires_at from invites where accepted_at is null;
 ## Controlando o acesso a um local
 
 ```sql
--- no máximo 8 pessoas ao mesmo tempo no Estúdio (null = sem limite)
+-- no máximo 8 pessoas ao mesmo tempo neste local (null = sem limite)
 update places set capacity = 8 where slug = 'studio';
 
--- a Praça passa a ser restrita: só quem estiver na lista entra
-update places set visibility = 'restricted' where slug = 'plaza';
+-- passa a ser restrito: só quem estiver na lista entra
+update places set visibility = 'restricted' where slug = 'studio';
 
 -- ... e a lista
 insert into place_members (place_id, profile_id, role)
 select pl.id, p.id, 'host'
 from places pl, profiles p
-where pl.slug = 'plaza' and p.display_name = 'Iago';
+where pl.slug = 'studio' and p.display_name = 'Iago';
 
 -- quem está dentro agora, e quantas vagas sobram
 select * from v_place_occupancy;

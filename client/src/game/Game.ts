@@ -2,7 +2,6 @@ import { Application, Container, type FederatedPointerEvent } from 'pixi.js';
 import {
   BOOBLE_JOIN_RADIUS,
   DEFAULT_CHARACTER,
-  SCENARIOS,
   TICK_RATE,
   TILE_SIZE,
   audioZoneAt,
@@ -17,16 +16,12 @@ import { createWorldApi } from '../net/worldApi';
 import { setAway } from '../presence';
 import { useStore } from '../state/store';
 import { Keyboard } from './input';
-import { TilemapBase } from './TilemapBase';
-import { Tilemap } from './Tilemap';
-import { OfficeTilemap } from './OfficeTilemap';
-import { RuinsTilemap, loadRuinsTextures, type RuinsTextures } from './RuinsTilemap';
+import type { TilemapBase } from './TilemapBase';
 import { ModernTilemap, loadModernTextures, type ModernTextures } from './ModernTilemap';
 import type { Avatar } from './Avatar';
 import { LocalPlayer } from './LocalPlayer';
 import { RemotePlayer } from './RemotePlayer';
 import { loadAllCharacterFrames, type CharacterFrames } from './sprites';
-import { loadTilesets, type Tilesets } from './tilesets';
 import { BoobleRings, type RingMember } from './BoobleRings';
 import type { AudioInfo, PeerAudio } from '../voice/proximity';
 
@@ -78,7 +73,7 @@ export class Game {
     private socket: AppSocket,
     /** frames de todos os personagens; cada player usa o que escolheu */
     private characters: Map<CharacterId, CharacterFrames>,
-    themeAssets: Tilesets | RuinsTextures | ModernTextures | null,
+    tiles: ModernTextures,
     selfName: string,
     selfColor: number,
     scenarioId: ScenarioId,
@@ -86,16 +81,13 @@ export class Game {
   ) {
     this.app = app;
     this.scenarioId = scenarioId;
-    const map = parseMap(scenarioId);
-    const theme = SCENARIOS[scenarioId].theme;
-    this.tilemap =
-      theme === 'garden'
-        ? new Tilemap(map, themeAssets as Tilesets)
-        : theme === 'ruins'
-          ? new RuinsTilemap(map, themeAssets as RuinsTextures)
-          : theme === 'modern'
-            ? new ModernTilemap(map, themeAssets as ModernTextures)
-            : new OfficeTilemap(map);
+    /**
+     * Um renderer só, porque hoje há um estilo só (Modern Interiors). Isto era
+     * um encadeado de ternários sobre `SCENARIOS[id].theme`, com um renderer por
+     * pack; se um dia entrar um estilo novo, o `theme` volta e o despacho volta
+     * com ele — mas manter a bifurcação com um único caso era código morto.
+     */
+    this.tilemap = new ModernTilemap(parseMap(scenarioId), tiles);
     this.local = new LocalPlayer(this.framesFor(selfCharacter), selfName, selfColor);
 
     this.playersLayer.sortableChildren = true;
@@ -204,19 +196,11 @@ export class Game {
     selfCharacter: CharacterId,
   ): Promise<Game> {
     const app = new Application();
-    const theme = SCENARIOS[scenarioId].theme;
-    const [characters, themeAssets] = await Promise.all([
+    const [characters, tiles] = await Promise.all([
       // todos de uma vez: sai mais previsível que carregar sob demanda quando
       // alguém entra com um boneco ainda desconhecido
       loadAllCharacterFrames(),
-      // o escritório é procedural — não carrega texturas de tiles
-      theme === 'garden'
-        ? loadTilesets()
-        : theme === 'ruins'
-          ? loadRuinsTextures()
-          : theme === 'modern'
-            ? loadModernTextures()
-            : Promise.resolve(null),
+      loadModernTextures(),
       app.init({
         resizeTo: container,
         backgroundColor: 0x1f2129,
@@ -242,7 +226,7 @@ export class Game {
       app,
       socket,
       characters,
-      themeAssets,
+      tiles,
       selfName,
       selfColor,
       scenarioId,

@@ -4,11 +4,10 @@ import {
   CHARACTERS,
   DEFAULT_SCENARIO,
   NAME_MAX_LENGTH,
-  SCENARIOS,
   type CharacterId,
   type ScenarioId,
 } from '@together/shared';
-import { SCENARIO_EMOJI } from './scenarioEmoji';
+import { MULTIPLE_SCENARIOS, SCENARIO_EMOJI, SCENARIO_LIST } from './scenarioEmoji';
 import type { JoinDeniedReason } from '@together/shared';
 import { authConfigured, signOut } from '../auth/supabase';
 import { characterPreview } from '../game/characterDefs';
@@ -95,6 +94,7 @@ export function JoinScreen() {
   );
 
   const canJoin = name.trim().length > 0;
+  const showScenarios = MULTIPLE_SCENARIOS && !selfWorldName;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,22 +164,28 @@ export function JoinScreen() {
         </div>
 
         {/* Com mundo escolhido no lobby, o cenário é DELE — escolher aqui daria
-            a impressão de trocar de mapa dentro do mesmo mundo. */}
-        {!selfWorldName && <span className="join-label">Cenário</span>}
-        <div className="scenario-row" hidden={Boolean(selfWorldName)}>
-          {Object.values(SCENARIOS).map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`scenario-card${s.id === scenario ? ' selected' : ''}`}
-              onClick={() => setScenario(s.id)}
-            >
-              <span className="scenario-emoji">{SCENARIO_EMOJI[s.id]}</span>
-              <span className="scenario-name">{s.label}</span>
-              <span className="scenario-desc">{s.description}</span>
-            </button>
-          ))}
-        </div>
+            a impressão de trocar de mapa dentro do mesmo mundo. Com um cenário
+            só (o caso de hoje), escolher também não é escolha: o seletor sai
+            inteiro e o `scenario` fica no `DEFAULT_SCENARIO`. */}
+        {showScenarios && (
+          <>
+            <span className="join-label">Cenário</span>
+            <div className="scenario-row">
+              {SCENARIO_LIST.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`scenario-card${s.id === scenario ? ' selected' : ''}`}
+                  onClick={() => setScenario(s.id)}
+                >
+                  <span className="scenario-emoji">{SCENARIO_EMOJI[s.id]}</span>
+                  <span className="scenario-name">{s.label}</span>
+                  <span className="scenario-desc">{s.description}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         <button className="join-button" type="submit" disabled={!canJoin}>
           Entrar

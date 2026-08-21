@@ -2,6 +2,8 @@ import {
   AVATAR_COLORS,
   CHAT_HISTORY_LIMIT,
   DEFAULT_CHARACTER,
+  DEFAULT_SCENARIO,
+  isScenarioId,
   type CharacterId,
   type ChatMessage,
   type AssignableWorldRole,
@@ -57,6 +59,24 @@ async function resolveOrgId(): Promise<string | null> {
     orgIdCache = id;
     return id;
   });
+}
+
+/**
+ * `places.scenario_id` como `ScenarioId`, caindo no padrão quando o banco tem um
+ * cenário que o código não conhece mais.
+ *
+ * Existe porque a lista de cenários encolheu (só o Estúdio ficou) e o banco NÃO
+ * encolhe junto: um mundo criado na Praça continua com `scenario_id = 'plaza'`
+ * até a `0013` rodar. Sem isto o cast mentia, e a mentira estourava longe daqui
+ * — `parseMap` num `SCENARIOS[id]` undefined no `join`, e um `.label` de
+ * undefined no render do lobby. A `0013` conserta os dados; isto conserta o
+ * caminho de quem ainda não rodou a migração, e continua valendo para qualquer
+ * cenário que saia no futuro.
+ */
+function toScenarioId(raw: unknown, where: string): ScenarioId {
+  if (isScenarioId(raw)) return raw;
+  console.warn(`[db] ${where}: cenário "${String(raw)}" não existe mais — usando ${DEFAULT_SCENARIO} (rode a 0013)`);
+  return DEFAULT_SCENARIO;
 }
 
 /** O local, com o que o controle de acesso precisa saber sobre ele. */
@@ -821,7 +841,7 @@ export async function listWorldsFor(
           return {
             id: r.id as string,
             name: r.name as string,
-            scenarioId: r.scenario_id as ScenarioId,
+            scenarioId: toScenarioId(r.scenario_id, 'listWorldsFor'),
             visibility: r.visibility as WorldSummary['visibility'],
             capacity: (r.capacity as number | null) ?? null,
             myRole,
@@ -856,7 +876,12 @@ export async function listPendingInvites(email: string | null): Promise<PendingI
           id: r.id as string,
           worldName: place?.name ?? null,
           organizationName: org?.name ?? '—',
-          scenarioId: (place?.scenario_id as ScenarioId | undefined) ?? null,
+          // convite sem mundo não tem cenário — `null` é diferente de "cenário
+          // que não existe mais", e só o segundo cai no padrão
+          scenarioId:
+            place?.scenario_id === undefined
+              ? null
+              : toScenarioId(place.scenario_id, 'listPendingInvites'),
         };
       });
     },
@@ -1010,7 +1035,7 @@ export async function getPlaceById(placeId: string): Promise<(PlaceRef & { scena
         capacity: (data.capacity as number | null) ?? null,
         createdBy: (data.created_by as string | null) ?? null,
         archivedAt: (data.archived_at as string | null) ?? null,
-        scenarioId: data.scenario_id as ScenarioId,
+        scenarioId: toScenarioId(data.scenario_id, 'getPlaceById'),
       };
     },
     null,

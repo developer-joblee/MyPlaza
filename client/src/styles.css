@@ -279,6 +279,13 @@ button {
   font-weight: 700;
 }
 
+/**
+ * Seletor de cenário. `.scenario-row`, `.scenario-emoji` e `.scenario-desc` NÃO
+ * estão na tela hoje: com um cenário só, `MULTIPLE_SCENARIOS` esconde o seletor
+ * na entrada e no lobby. Não são CSS morto — voltam inteiros no dia em que um
+ * segundo mapa entrar em `SCENARIOS`. Já `.scenario-card`/`.scenario-name` são
+ * usados agora, pelo par de botões "Quem entra" do `WorldAdmin`.
+ */
 .scenario-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
