@@ -39,6 +39,27 @@ export interface Nudge {
   at: number;
 }
 
+/**
+ * Um cartão da pilha de chamados do canto superior direito.
+ *
+ * `incoming` = "X te chamou" (com "ir até" e fechar); `coming` = "X está vindo",
+ * a confirmação que quem chamou recebe quando o outro aceita. Os dois moram no
+ * mesmo array porque moram na mesma pilha da tela, e um `kind` é mais honesto
+ * que duas listas que precisariam ser ordenadas entre si na hora de desenhar.
+ *
+ * `id` é o `socket.id` da outra pessoa — é o que permite resolver nome e cor no
+ * `roster` na hora de desenhar, e é o que faz o cartão morrer sozinho quando ela
+ * sai do mundo (mesma regra do `contextMenu`). O `name` é cópia só para o caso
+ * de a pessoa sair no mesmo instante: aí o cartão do "está vindo" ainda diz de
+ * quem era em vez de virar vazio.
+ */
+export interface CallAlert {
+  id: string;
+  name: string;
+  at: number;
+  kind: 'incoming' | 'coming';
+}
+
 export interface RemoteScreen {
   peerId: string;
   /** a faixa, não um MediaStream: o adaptiveStream depende de track.attach() */
@@ -117,6 +138,22 @@ interface AppState {
    * ganha). Só enche estando ausente, e zera ao voltar — ver `presence.ts`.
    */
   nudges: Nudge[];
+  /**
+   * A pilha de chamados do menu de contexto (canto superior direito). Ao
+   * contrário dos `nudges`, **não** é zerada ao trocar de ausência: chamado de
+   * quem está presente não tem nada a ver com o celular.
+   */
+  calls: CallAlert[];
+  /**
+   * Quem EU chamei -> quando toquei o pin nessa pessoa. É o que deixa o item do
+   * menu "pressionado" e o que impõe o `CALL_COOLDOWN_MS` na interface.
+   *
+   * Vive no store, e não em `useState` do menu como o cooldown do `Hud`, porque
+   * o menu de contexto **desmonta ao fechar**: um estado local não sobreviveria
+   * a reabrir o menu na mesma pessoa, e o botão nasceria despressionado com o
+   * chamado no ar.
+   */
+  myCalls: Record<string, number>;
   /**
    * Meu soundboard, como o servidor o devolveu (sons, tempo acumulado, próximo
    * marco). `null` = ainda não pedi, ou este servidor não tem Supabase — e é
@@ -246,6 +283,12 @@ interface AppState {
   /** registra um chamado (substitui o anterior da mesma pessoa) */
   pushNudge: (id: string, name: string) => void;
   clearNudges: () => void;
+  /** empilha um cartão de chamado (um por pessoa e por tipo) */
+  pushCall: (id: string, name: string, kind: CallAlert['kind']) => void;
+  removeCall: (id: string, kind: CallAlert['kind']) => void;
+  /** marca/desmarca "eu chamei essa pessoa" — ver `client/src/call.ts` */
+  setMyCall: (id: string) => void;
+  clearMyCall: (id: string) => void;
   setNoiseFilter: (v: boolean) => void;
   setNoiseFilterActive: (v: boolean) => void;
   setSharing: (v: boolean) => void;
@@ -292,6 +335,8 @@ export const useStore = create<AppState>((set) => ({
   away: false,
   selfBooble: null,
   nudges: [],
+  calls: [],
+  myCalls: {},
   soundboard: null,
   /**
    * Lido do `localStorage` no boot, no mesmo idioma do `noiseFilter` abaixo:
@@ -425,6 +470,8 @@ export const useStore = create<AppState>((set) => ({
       away: false,
       selfBooble: null,
       nudges: [],
+      calls: [],
+      myCalls: {},
       // `soundboardMuted` e `soundboardVolume` NÃO entram aqui: são preferência
       // (a segunda vive no perfil, no banco). O que morre é o estado de sessão.
       soundboard: null,
@@ -448,10 +495,17 @@ export const useStore = create<AppState>((set) => ({
       roster: [...s.roster.filter((r) => r.id !== entry.id), entry],
     })),
   removeRosterEntry: (id) =>
-    set((s) => ({
-      roster: s.roster.filter((r) => r.id !== id),
-      speaking: { ...s.speaking, [id]: false },
-    })),
+    set((s) => {
+      // quem saiu do mundo não deixa chamado pendurado: nem o alerta na minha
+      // tela, nem o item do menu "pressionado" para um id que já morreu
+      const { [id]: _gone, ...myCalls } = s.myCalls;
+      return {
+        roster: s.roster.filter((r) => r.id !== id),
+        speaking: { ...s.speaking, [id]: false },
+        calls: s.calls.filter((c) => c.id !== id),
+        myCalls,
+      };
+    }),
   setChat: (chat) => set({ chat }),
   appendChat: (msg) => set((s) => ({ chat: [...s.chat.slice(-199), msg] })),
   setMicAvailable: (v) => set({ micAvailable: v }),
@@ -511,6 +565,22 @@ export const useStore = create<AppState>((set) => ({
       nudges: [...s.nudges.filter((n) => n.id !== id), { id, name, at: Date.now() }],
     })),
   clearNudges: () => set({ nudges: [] }),
+  pushCall: (id, name, kind) =>
+    set((s) => ({
+      // um por pessoa E por tipo: chamar de novo é o mesmo cartão com hora nova
+      calls: [
+        ...s.calls.filter((c) => !(c.id === id && c.kind === kind)),
+        { id, name, at: Date.now(), kind },
+      ],
+    })),
+  removeCall: (id, kind) =>
+    set((s) => ({ calls: s.calls.filter((c) => !(c.id === id && c.kind === kind)) })),
+  setMyCall: (id) => set((s) => ({ myCalls: { ...s.myCalls, [id]: Date.now() } })),
+  clearMyCall: (id) =>
+    set((s) => {
+      const { [id]: _gone, ...rest } = s.myCalls;
+      return { myCalls: rest };
+    }),
   setNoiseFilter: (v) => set({ noiseFilter: v }),
   setNoiseFilterActive: (v) => set({ noiseFilterActive: v }),
   setSharing: (v) => set({ sharing: v }),

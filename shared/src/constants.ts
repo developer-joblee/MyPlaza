@@ -49,6 +49,21 @@ export const NUDGE_COOLDOWN_MS = 15000;
 /** Quantos nomes o aviso lista antes de virar "e +N". */
 export const NUDGE_MAX_NAMES = 2;
 
+/**
+ * Intervalo mínimo entre dois "pins" da MESMA pessoa para o MESMO alvo (ms).
+ *
+ * Muito mais curto que o `NUDGE_COOLDOWN_MS` de propósito: chamar quem está
+ * presente é um interruptor, e **repinar é a feature** — cancelar e chamar de
+ * novo é como se insiste com quem não respondeu. Estes 3s existem só para o
+ * clique repetido não virar metralhadora de som na tela alheia.
+ *
+ * Vale só para acender (`on: true`); apagar é sempre imediato, senão o botão
+ * ficaria preso pressionado. Vive aqui porque os dois lados usam: o servidor
+ * **impõe** e o cliente desabilita o item pelo mesmo tempo, para o menu não
+ * mostrar um clique que não teria efeito.
+ */
+export const CALL_COOLDOWN_MS = 3000;
+
 // ------------------------------------------------------------------- booble
 //
 // Uma "booble" é um grupo ad-hoc que PRIORIZA o áudio de quem está dentro, sem

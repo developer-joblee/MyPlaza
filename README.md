@@ -132,7 +132,8 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Chat | Painel no canto inferior direito (global) |
-| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa). Por enquanto o menu só mostra de quem é — **ainda não tem ações** — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
+| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
+| Chamar alguém que está presente | **Botão direito** no boneco → **chamar**. Ela ouve um "pin" e vê no canto superior direito *"SEU NOME te chamou"*, com **Ir até** — que faz o avatar dela **caminhar sozinho** até você, contornando parede, e parar a dois tiles. O item é um interruptor: clicar de novo tira o alerta da tela dela, e clicar mais uma vez toca o pin de novo — ver [Chamar pelo menu de contexto](docs/features/chamar-e-ir-ate.md) |
 | Configurações / sair | Botão de **engrenagem** na barra inferior (última posição, onde ficava o telefone): mostra em que mundo você está, **o seu ID**, o campo para **adicionar alguém a este mundo pelo ID** — sem sair do mundo — e o **Finalizar chamada** — ver [Menu de configurações](docs/features/configuracoes-no-jogo.md) |
 
 ## Features
@@ -160,16 +161,18 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
 | Lobby: criar mundos e convidar pessoas | [Lobby](docs/features/lobby.md) | `client/src/ui/LobbyScreen.tsx`, `server/src/lobby.ts` |
 | Menu de configurações no jogo (adicionar pelo ID sem sair do mundo; sair) | [Menu de configurações](docs/features/configuracoes-no-jogo.md) | `client/src/ui/SettingsMenu.tsx`, `client/src/ui/MediaControls.tsx` |
-| Menu de contexto no avatar (botão direito; **sem itens ainda**) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
+| Menu de contexto no avatar (botão direito) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
+| Chamar pelo menu de contexto ("pin", alerta e **ir até** com caminhada automática) | [Chamar pelo menu de contexto](docs/features/chamar-e-ir-ate.md) | `client/src/call.ts`, `client/src/ui/CallAlerts.tsx`, `client/src/game/pathfind.ts`, `client/src/game/AutoWalk.ts`, `server/src/handlers.ts` |
 | Vínculo com o mundo (o nome fica guardado; entrar direto depois do logout) | [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md) | `db/migrations/0009_world_binding.sql`, `client/src/state/store.ts`, `server/src/db.ts` |
 | Camada de requisição (client → servidor) | [Camada de requisição](docs/features/camada-de-requisicao.md) | `client/src/net/` |
 
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As onze com doc (persistência, autenticação, lobby, camada de
+> resumo e o link. As doze com doc (persistência, autenticação, lobby, camada de
 > requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble,
-> soundboard, menu de configurações e menu de contexto) já seguem a convenção.
+> soundboard, menu de configurações, menu de contexto e chamar pelo menu de
+> contexto) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 

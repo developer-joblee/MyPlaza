@@ -5,6 +5,169 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Chamar pelo menu de contexto ("pin" e "ir até") — 2026-08-21
+
+Feature nova: [`docs/features/chamar-e-ir-ate.md`](docs/features/chamar-e-ir-ate.md).
+Primeiro item real do menu de contexto: um interruptor que acende um alerta na
+tela de quem está **presente**, com "Ir até" que faz o avatar **caminhar sozinho**
+até quem chamou. Toca `shared/` (quatro eventos + `CALL_COOLDOWN_MS`),
+`server/src/handlers.ts` e bastante client — inclusive a **primeira navegação
+automática** do projeto.
+
+## Já verificado
+
+### O servidor, de verdade (headless em :3099, Supabase e LiveKit desligados)
+
+Script de quatro sockets no molde do `smoke-test.mts`, cenário Estúdio. **15/15**:
+
+- o chamado chega **só** no alvo, com id, nome e `on: true`, e **não** em
+  terceiros do mesmo mundo;
+- **cooldown por par**: o segundo pin dentro de `CALL_COOLDOWN_MS` é recusado em
+  silêncio; e ele é **por par** — outro alvo passa na hora, outro remetente
+  alcança o mesmo alvo na hora;
+- **apagar (`on: false`) não passa pelo cooldown**;
+- **alvo ausente recusado**, e o "toc-toc" para o mesmo alvo continuando a passar
+  (os dois canais convivem);
+- **isolamento entre mundos**, nos dois eventos (chamado e resposta);
+- lixo não derruba socket nenhum: alvo vazio, eu mesmo, inexistente, `null`, e
+  `on` não-booleano;
+- a **resposta** chega em quem chamou com nome e `accepted`, não chega em
+  terceiros, e a **recusa** (`accepted: false`) também chega — é ela que
+  despressiona o botão;
+- chamar quem já **saiu** não entrega nada e não derruba nada.
+
+Depois, um teste dirigido de 3 casos com **par limpo** (nenhum chamado anterior
+entre os dois, então nenhum cooldown pode explicar a recusa pelo motivo errado) —
+e ele **pegou um defeito**, já corrigido: `on: false` era barrado quando o alvo
+estava ausente, então o alvo que ficasse ausente com um chamado no ar prendia o
+alerta na tela e o cancelamento nunca chegava. Agora a guarda de ausência vale só
+para acender.
+
+### O `findPath`, contra o mapa real do Estúdio (10/10)
+
+É a parte nova de verdade, e é função pura — foi chamada direto, com uma grade
+montada do ASCII pelo `parseMap`/`isSolid` do `shared` (sem Pixi, sem navegador):
+
+- acha rota do open space até dentro da **sala de reunião** (a que tem uma porta
+  de 2 tiles), e no sentido inverso;
+- **cada trecho** da rota está livre, amostrado a 1/8 de tile — o que valida o
+  corte de canto, que é onde um bug atravessaria parede;
+- nenhum ponto amostrado cai em tile sólido (ou seja: passou pela porta);
+- alvo em tile **sólido** (cadeira) termina num tile **livre** e adjacente;
+- alvo **inalcançável** devolve rota sem lançar;
+- alvo no próprio tile devolve rota vazia;
+- o corte de canto de fato reduz a contagem de waypoints (não é escadinha).
+
+### Regressão e compilação
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 14/14** contra o servidor headless — importa porque
+  `shared/` mudou.
+- ✅ `grep -rn "\.emit(" client/src | grep -v "client/src/net/"` continua vazio.
+
+Os scripts de teste rodaram da raiz e **não** ficaram no repo.
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada foi visto num navegador — e metade da feature é interação
+
+`tsc` não prova nenhuma das perguntas que importam:
+
+- **a caminhada em si.** O `AutoWalk` nunca rodou dentro do `requestAnimationFrame`
+  do Pixi. O `findPath` está exercitado, mas a integração (vetor por frame,
+  consumo de waypoint, `WAYPOINT_EPS` de 4px) não: os sintomas possíveis são o
+  avatar oscilando em torno de um waypoint, travando num canto, ou chegando e não
+  parando;
+- **o repath de 500ms com o alvo andando.** É a decisão do usuário (perseguir), e
+  é a que pode ler mal na tela: a rota trocando no meio do trajeto pode fazer o
+  avatar mudar de direção de um frame para o outro, sem transição;
+- **o prazo de 20s** nunca venceu;
+- **o pin nunca foi ouvido.** Mesmos riscos do `knock.ts` (item 2 da seção do
+  chamado-ausente): o `AudioContext` pode nascer suspenso e o `resume()` ser
+  recusado, porque o som **não** vem de um gesto do usuário. Aqui o alerta visual
+  é o canal principal, então o pior caso é silêncio — mas os valores (`PEAK` 0,11,
+  880→1320 Hz, 95ms) foram escolhidos por cálculo, não por ouvido;
+- **o alerta e o item do menu**, inteiros: o cartão, o "×", o "Ir até", o
+  pressionado mint, o desabilitado por ausência e por cooldown, e o `setTimeout`
+  que reabilita o item quando o cooldown vence.
+
+### 2. A coluna nova do canto superior direito mexeu em layout que já existia
+
+`.top-right-stack` tirou o `position/top/right` do `.zoom-controls` e do
+`.screens`, que antes eram ancorados **os dois** no mesmo ponto e se sobrepunham
+quando alguém compartilhava tela. Isso é correção, mas não foi vista:
+
+- o zoom continua onde estava? (é o primeiro item da coluna, então deveria);
+- as prévias de tela descem quando há alerta, sem ficar por baixo dele?
+- a **tela ampliada** (`.screen-focus`, `fixed; inset: 0; z-index: 20`) agora é
+  filha da coluna. Ela continua cobrindo a janela **porque a coluna não tem
+  `z-index`** — se alguém adicionar um ali, a tela ampliada fica presa no
+  contexto de empilhamento novo. O raciocínio está no comentário do CSS e do
+  `GameView`, mas ninguém abriu uma tela ampliada depois da mudança.
+
+### 3. O `knock.ts` foi refatorado e o toc-toc não foi ouvido depois
+
+O padrão (frequências, `REPEATS`, `CYCLE_S`, `PEAK`) é idêntico, e o `busyUntil`
+continua por módulo. O que mudou é o `AudioContext`, agora **compartilhado** com o
+pin via `ui/sfx.ts` — o que é o que o próprio comentário do arquivo pedia. Mas o
+toc-toc já estava na lista de "nunca foi ouvido", e continua.
+
+### 4. Cancelamentos da caminhada, um por um
+
+Só o "tecla de movimento cancela" é óbvio no código. Não foram exercitados:
+
+- **`E` no meio do trajeto** (sentar cancela — o `sittingChanged` com
+  `local.sitting` verdadeiro);
+- **começar a caminhada sentado**: a auto-caminhada entra na condição de levantar
+  em `LocalPlayer`, então deveria levantar e sair andando;
+- **começar ausente**: `Game` cancela o ausente quando o `autoAxis` existe. Sem
+  isso o avatar andaria com o celular na mão. É uma linha, e é raciocínio;
+- **o alvo saindo do mundo no meio do trajeto** (`walkTargetPos()` devolve `null`
+  → `AutoWalk` desiste). Não observado com queda real.
+
+### 5. Duas caminhadas em sequência, e a câmera
+
+Aceitar um chamado enquanto já se caminha para outro simplesmente troca o alvo
+(`start` sobrescreve). Ninguém testou, e não há aviso na tela de que a primeira
+foi abandonada. A câmera segue o player local, então ela acompanha — mas em zoom
+mínimo, com trajeto longo, ninguém olhou como isso lê.
+
+### 6. Custo do BFS não medido
+
+Roda no clique e a cada 500ms enquanto se caminha, sobre até 4060 tiles (Ruínas),
+com um `Map` de strings como visitados. Em teoria é sub-milissegundo; não foi
+medido, e o `Map<string>` é a escolha que pagaria caro primeiro se algum dia
+houver mapa muito maior (a alternativa é um array plano indexado, que exige expor
+`cols`/`rows` do `TilemapBase`).
+
+### 7. O cenário Ruínas nunca foi testado com o pathfinder
+
+O `findPath` foi exercitado contra o **Estúdio**. As Ruínas são 58x70 com muros em
+U e vãos estreitos, e é o cenário onde uma rota ruim apareceria primeiro. Nada
+indica problema (o BFS é ótimo em passos), mas o corte de canto em corredor
+estreito é o candidato a surpresa.
+
+### 8. Não há trilha no banco
+
+`presence:call` não grava nada — nem quem chamou, nem quem aceitou. Mesma escolha
+do `presence:nudge` e da booble. Se um dia "quem chama e ninguém vai" virar
+métrica, vai faltar dado.
+
+### 9. O servidor não valida o `callAnswer`
+
+Como ele não guarda os chamados (decisão registrada no doc), um cliente adulterado
+pode mandar `presence:callAnswer` para alguém que nunca o chamou. O efeito máximo
+é despressionar o item do menu daquela pessoa e mostrar "está vindo" — não abre
+acesso a nada e não revela posição. Fica anotado porque é uma escolha, não um
+descuido.
+
+### 10. Chamar a si mesmo não existe, e o próprio avatar não tem ação
+
+O item não aparece no próprio boneco (o painel diz "Nenhuma ação sobre você por
+enquanto"). É escopo, não pendência.
+
+---
+
 # Menu de contexto no avatar (botão direito) — 2026-08-21
 
 Feature nova: [`docs/features/menu-de-contexto.md`](docs/features/menu-de-contexto.md).
@@ -85,10 +248,13 @@ possíveis: alargar a `hitArea` quando há balão, ou aceitar que o alvo é o co
 do boneco e nunca o balão (que é a leitura mais defensável — o balão é
 informação, não alvo). Não mexi porque exige ver na tela para escolher.
 
-### 8. O menu não tem itens
+### 8. O menu não tem itens — RESOLVIDO em 2026-08-21
 
-Não é pendência de verificação, é o escopo: foi pedido vazio. Fica registrado
-para ninguém ler o doc daqui a três meses e achar que os itens sumiram.
+O menu nasceu vazio por pedido. Ele ganhou o primeiro item (**chamar**) na
+entrega registrada no topo deste arquivo — ver
+[`docs/features/chamar-e-ir-ate.md`](docs/features/chamar-e-ir-ate.md). O item 6
+acima (WASD anda com o menu aberto) **continua** valendo e continua aceitável: o
+`chamar` é um botão, não um campo de texto.
 
 ---
 

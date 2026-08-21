@@ -1,12 +1,18 @@
 # Chamado de quem está ausente ("toc-toc")
 
 **Status:** em uso
-**Última atualização:** 2026-08-20
+**Última atualização:** 2026-08-21
 
 ## O que faz
 
 Quando alguém está **ausente** (botão de celular na barra inferior), quem
-precisa dela clica em **"chamar"** ao lado do nome dela na lista do HUD. Na tela
+precisa dela clica em **"chamar"** ao lado do nome dela na lista do HUD.
+
+> **Há dois "chamar" no app, e a diferença é o estado de quem recebe.** Este é
+> para quem está **ausente**: o aviso não expira, o som é um "toc-toc" longo e a
+> resposta é *Voltar*. Para quem está **presente** o canal é o menu de contexto do
+> avatar, com um "pin" curto e *Ir até* — ver
+> [Chamar pelo menu de contexto](chamar-e-ir-ate.md). Na tela
 de quem está ausente aparece um aviso — *"Ana está te chamando · 14:32"* — junto
 com um "toc-toc" de ~2,5s (quatro batidas duplas, com pausa entre elas), e um
 botão **Voltar** que desfaz a ausência na hora.
@@ -67,6 +73,12 @@ Valores, todos em `shared/src/constants.ts`: `NUDGE_COOLDOWN_MS` = 15000,
 - **Só para quem está ausente.** O servidor confere `target.away`. Sem isso o
   evento viraria um "cutucar" genérico — outra feature, com outro problema de
   abuso. Quem está presente é alcançável por voz ou pelo chat.
+
+  Essa outra feature existe desde 2026-08-21, e nasceu como **par de eventos
+  próprio** em vez de uma flag aqui, exatamente por causa deste parágrafo: a
+  guarda é invertida (`!target.away`), o cooldown é de 3s em vez de 15s (repinar é
+  a feature lá), e a resposta é *ir até* em vez de *voltar*. Ver
+  [Chamar pelo menu de contexto](chamar-e-ir-ate.md).
 - **Recusa em silêncio, sem ack.** Responder "não deu" transformaria o chamado
   em sonda: dá para descobrir se alguém está ausente, ou se está no seu mundo,
   sem estar perto. Segue a convenção dos outros eventos de mundo
@@ -142,5 +154,7 @@ Nada da interface foi visto num navegador — ver `PENDENTES.md`.
 
 ## Relacionado
 
-- README: [Controles](../../README.md#controles) (o modo ausente em si, ainda
-  sem doc próprio) e o índice de Features.
+- [Chamar pelo menu de contexto](chamar-e-ir-ate.md) — o outro "chamar", para
+  quem está presente
+- [Modo ausente (celular)](modo-ausente.md) — o estado que este chamado atravessa
+- README: [Controles](../../README.md#controles) e o índice de Features.

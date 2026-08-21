@@ -10,6 +10,7 @@ import { useStore } from '../state/store';
 import { listMics, loadMicPreference, probeMic } from '../voice/mic';
 import type { VoiceRoom } from '../voice/VoiceRoom';
 import { AvatarContextMenu } from './AvatarContextMenu';
+import { CallAlerts } from './CallAlerts';
 import { Chat } from './Chat';
 import { Hud } from './Hud';
 import { MediaControls } from './MediaControls';
@@ -124,11 +125,26 @@ export function GameView() {
     <div className="game-view">
       <div ref={containerRef} className="canvas-host" />
       <Hud />
-      <ScreenShareView />
       <Chat />
       <Notices />
       <MediaControls />
-      <ZoomControls />
+      {/*
+        Uma coluna só para o canto superior direito. Antes o zoom e as prévias de
+        tela eram ancorados os DOIS em `top:16 right:16` e se sobrepunham quando
+        alguém compartilhava; empilhar resolve isso e abre lugar para o alerta de
+        chamado. O zoom fica primeiro de propósito: é controle, e controle que se
+        desloca quando chega um aviso é pior que aviso 44px mais abaixo.
+
+        A tela AMPLIADA (`.screen-focus`) é `fixed; inset: 0`, então continua
+        cobrindo a janela mesmo aninhada aqui — e por isso esta coluna não pode
+        ganhar `z-index`: criar um contexto de empilhamento aqui prenderia a tela
+        ampliada dentro dele.
+      */}
+      <div className="top-right-stack">
+        <ZoomControls />
+        <CallAlerts />
+        <ScreenShareView />
+      </div>
       <SharingIndicator />
       <AvatarContextMenu />
     </div>

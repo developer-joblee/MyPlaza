@@ -16,6 +16,7 @@ import type { AppSocket } from '../net/socket';
 import { createWorldApi } from '../net/worldApi';
 import { setAway } from '../presence';
 import { useStore } from '../state/store';
+import { AutoWalk } from './AutoWalk';
 import { Keyboard } from './input';
 import { TilemapBase } from './TilemapBase';
 import { Tilemap } from './Tilemap';
@@ -329,18 +330,42 @@ export class Game {
     this.playersLayer.addChild(remote.avatar.view);
   }
 
+  /**
+   * A auto-caminhada do "ir até" (chamado pelo menu de contexto). Vive aqui
+   * porque o `Game` é o único que tem as posições dos remotos — o `roster` do
+   * store não tem coordenada.
+   */
+  private autoWalk = new AutoWalk();
+
   private tick = () => {
     const dt = Math.min(this.app.ticker.deltaMS / 1000, 0.1);
 
+    // Tecla de movimento cancela a auto-caminhada. Fica antes do `local.update`
+    // porque é ele que consome o `E`, e o `E` também cancela (quem senta desistiu
+    // de ir até alguém).
+    if (this.keyboard.moving) this.autoWalk.cancel();
+    const autoAxis = this.autoWalk.active
+      ? this.autoWalk.step(
+          { x: this.local.x, y: this.local.y },
+          this.walkTargetPos(),
+          this.tilemap,
+        )
+      : null;
+
     // Andar cancela o ausente: quem voltou ao teclado está de volta à conversa,
     // e a pose do celular só existe de frente (andar com ela ficaria quebrado).
-    if (this.keyboard.moving && useStore.getState().away) setAway(false);
+    // A auto-caminhada conta como andar — senão o avatar iria até alguém com o
+    // celular na mão.
+    if ((this.keyboard.moving || autoAxis !== null) && useStore.getState().away) setAway(false);
 
     const { moved, sittingChanged, nearbyChair } = this.local.update(
       dt,
       this.keyboard,
       this.tilemap,
+      autoAxis,
     );
+    // o `E` foi consumido lá dentro; sentar e ir até alguém são intenções opostas
+    if (sittingChanged && this.local.sitting) this.autoWalk.cancel();
     for (const remote of this.remotes.values()) remote.update(dt, this.tilemap);
     this.tilemap.animate(dt);
 
@@ -423,6 +448,34 @@ export class Game {
     if (key === this.lastBoobleReach) return;
     this.lastBoobleReach = key;
     useStore.getState().setBoobleReachIds(reach);
+  }
+
+  /**
+   * Posição atual de quem estou indo encontrar, ou `null` se essa pessoa não
+   * está mais no mundo (aí o `AutoWalk` desiste sozinho).
+   */
+  private walkTargetPos(): { x: number; y: number } | null {
+    const id = this.autoWalk.target;
+    if (!id) return null;
+    const remote = this.remotes.get(id);
+    return remote ? { x: remote.x, y: remote.y } : null;
+  }
+
+  /**
+   * Vai até o personagem desta pessoa ("ir até" do alerta de chamado). Quem
+   * chama é `client/src/call.ts`, nunca a UI direto — no molde do `setSelfAway`.
+   *
+   * Levantar da cadeira acontece **antes** de começar a andar: é mais simples
+   * que tratar durante, e o servidor só tem rede de segurança para o sentar
+   * (`world.ts`), não para a pose.
+   */
+  walkTo(id: string): void {
+    if (!this.remotes.has(id)) return;
+    this.autoWalk.start(id);
+  }
+
+  cancelWalk(): void {
+    this.autoWalk.cancel();
   }
 
   /** Pose de ausente do player local (chamado por `presence.setAway`). */

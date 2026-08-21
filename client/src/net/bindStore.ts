@@ -1,4 +1,5 @@
 import { receiveBoobleChange } from '../booble';
+import { receiveCall, receiveCallAnswer } from '../call';
 import { receiveNudge } from '../presence';
 import { receiveSound } from '../soundboard';
 import { useStore } from '../state/store';
@@ -35,6 +36,15 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
    */
   socket.on('presence:nudged', (fromId, fromName) => receiveNudge(fromId, fromName));
   /**
+   * Chamado pelo menu de contexto (o "pin"), e a resposta a um chamado meu. Vão
+   * por `call.ts` pela mesma razão: têm efeito de som e de jogo (a
+   * auto-caminhada), e o dono desses efeitos não é este arquivo.
+   */
+  socket.on('presence:called', (fromId, fromName, on) => receiveCall(fromId, fromName, on));
+  socket.on('presence:callAnswered', (byId, byName, accepted) =>
+    receiveCallAnswer(byId, byName, accepted),
+  );
+  /**
    * Alguém perto tocou um som do soundboard. Vai por `soundboard/`, e não pelo
    * store, pela mesma razão do chamado acima: o evento tem efeito de áudio, e o
    * dono desse efeito é aquele módulo.
@@ -62,6 +72,8 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
     socket.removeAllListeners('player:left');
     socket.removeAllListeners('chat:message');
     socket.removeAllListeners('presence:nudged');
+    socket.removeAllListeners('presence:called');
+    socket.removeAllListeners('presence:callAnswered');
     socket.removeAllListeners('soundboard:played');
     socket.removeAllListeners('player:booble');
     socket.removeAllListeners('join:denied');

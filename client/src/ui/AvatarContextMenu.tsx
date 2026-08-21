@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { callCooldownLeft, toggleCall } from '../call';
 import { useStore } from '../state/store';
 import { colorToCss } from './util';
 
@@ -8,10 +9,14 @@ const EDGE_PAD = 8;
 /**
  * Menu de contexto de um avatar, aberto com o **botão direito** sobre o boneco.
  *
- * **Está vazio de propósito** — por enquanto ele só prova o caminho inteiro:
- * clique direito no Pixi → store → menu do DOM no lugar certo, sobre a pessoa
- * certa. Os itens entram depois. Um painel sem conteúdo nenhum pareceria
- * quebrado, então ele mostra de quem é e diz que ainda não há ação.
+ * Mostra de quem é (bolinha da cor, nome, selo **você** no próprio) e, para as
+ * outras pessoas, a ação **chamar** — um interruptor: pressionado significa que
+ * há um alerta seu na tela dela agora. Ver `client/src/call.ts`.
+ *
+ * O "pressionado" vem do store (`myCalls`), e não de estado local como o
+ * cooldown do botão da lista do HUD: este painel **desmonta ao fechar**, então
+ * um `useState` nasceria despressionado ao reabrir o menu na mesma pessoa,
+ * mentindo sobre um chamado que continua no ar.
  *
  * Quem detecta o clique é o `Game` (`Avatar.setContextMenuHandler`), que é o
  * único lugar com a árvore de exibição e, portanto, o único que sabe qual boneco
@@ -22,6 +27,7 @@ export function AvatarContextMenu() {
   const close = useStore((s) => s.closeContextMenu);
   const roster = useStore((s) => s.roster);
   const selfId = useStore((s) => s.selfId);
+  const myCalls = useStore((s) => s.myCalls);
 
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -91,9 +97,33 @@ export function AvatarContextMenu() {
     });
   }, [menu, entry]);
 
+  /**
+   * Quanto falta do cooldown deste alvo, e um timer para re-renderizar quando ele
+   * vencer: sem isso o item ficaria desabilitado até alguém fechar e reabrir o
+   * menu, porque nada no store muda quando o tempo simplesmente passa.
+   */
+  const cooldown = callCooldownLeft(menu ? myCalls[menu.id] : undefined);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = window.setTimeout(() => setTick((n) => n + 1), cooldown + 20);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
   if (!menu || !entry) return null;
 
   const isSelf = entry.id === selfId;
+  const chamando = myCalls[entry.id] !== undefined;
+  /**
+   * Ausente **não** é chamável por aqui: o canal de quem está no celular é o
+   * botão da lista, com o "toc-toc" e o "Voltar". O item aparece desabilitado com
+   * o motivo em vez de sumir — sumir faria parecer defeito.
+   */
+  const impedimento = entry.away
+    ? `${entry.name} está ausente — use o "chamar" da lista`
+    : cooldown > 0
+      ? `Você acabou de chamar ${entry.name} — espere um instante`
+      : null;
 
   return (
     <div
@@ -116,7 +146,25 @@ export function AvatarContextMenu() {
         <span className="avatar-menu-name">{entry.name}</span>
         {isSelf && <span className="avatar-menu-tag">você</span>}
       </div>
-      <p className="avatar-menu-empty">Nenhuma ação por enquanto.</p>
+      {isSelf ? (
+        <p className="avatar-menu-empty">Nenhuma ação sobre você por enquanto.</p>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          className="avatar-menu-item"
+          aria-pressed={chamando}
+          disabled={!chamando && impedimento !== null}
+          title={
+            chamando
+              ? `Tirar o seu chamado da tela de ${entry.name}`
+              : (impedimento ?? `Chamar ${entry.name} (toca um aviso na tela dela)`)
+          }
+          onClick={() => toggleCall(entry.id)}
+        >
+          {chamando ? 'cancelar chamado' : 'chamar'}
+        </button>
+      )}
     </div>
   );
 }

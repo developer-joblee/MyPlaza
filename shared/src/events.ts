@@ -30,6 +30,31 @@ export interface ServerToClientEvents {
    */
   'presence:nudged': (fromId: string, fromName: string) => void;
   /**
+   * Alguém te **chamou** pelo menu de contexto (botão direito no seu boneco),
+   * estando você presente. Vai **só para o alvo**, como o `presence:nudged`.
+   *
+   * `on` é o que faz o chamado ser um interruptor e não um disparo: `true`
+   * acende o alerta e toca o "pin", `false` o apaga porque quem chamou desistiu.
+   * Um evento com booleano em vez de dois eventos, seguindo o `away`.
+   *
+   * Por que não é o `presence:nudged`: aquele existe para atravessar o silêncio
+   * de quem está ausente (o SFU nem entrega a voz), e por isso o servidor exige
+   * `target.away`. Este é o oposto — a pessoa está na frente da tela, e o que se
+   * quer dela é que **venha até aqui**. Mesma palavra em português, dois canais
+   * com regra de aceitação inversa.
+   */
+  'presence:called': (fromId: string, fromName: string, on: boolean) => void;
+  /**
+   * O alvo **respondeu** ao seu chamado: `accepted` = clicou em "ir até" (e o
+   * avatar dela já está vindo), `false` = fechou o alerta.
+   *
+   * Vai só para quem chamou, e existe por um motivo de honestidade da interface:
+   * sem ele o item do menu ficaria "pressionado" apontando para um alerta que a
+   * outra pessoa já tirou da tela, e o clique seguinte cancelaria algo que não
+   * existe mais. Não é sonda de presença — quem responde escolheu responder.
+   */
+  'presence:callAnswered': (byId: string, byName: string, accepted: boolean) => void;
+  /**
    * A **booble** desta pessoa mudou (`null` = saiu de todas). Vai para o mundo
    * inteiro, incluindo quem mudou: o id da booble é cunhado no servidor, então
    * não há atualização otimista possível no cliente — e como todo mundo desenha
@@ -122,6 +147,32 @@ export interface ClientToServerEvents {
    * deve virar sonda de presença.
    */
   'presence:nudge': (targetId: string) => void;
+  /**
+   * **Chama** alguém que está presente, pelo menu de contexto do avatar: acende
+   * (`on: true`) ou apaga (`on: false`) o alerta na tela dela. Sem ack, como os
+   * outros eventos de mundo — o efeito acontece na tela da outra pessoa.
+   *
+   * Recusas, todas **em silêncio** (a resposta a "consegui chamar?" não deve
+   * virar sonda de presença, mesma razão do `presence:nudge`): alvo fora do meu
+   * mundo, alvo inexistente ou vazio, alvo sendo eu mesmo, alvo **ausente** (aí
+   * o canal é o `presence:nudge`, com o "toc-toc") e, só para `on: true`,
+   * cooldown por par ainda correndo (`CALL_COOLDOWN_MS`).
+   *
+   * `on: false` **não** passa pelo cooldown nem pela guarda de ausência, de
+   * propósito: desistir de um chamado é limpeza. Com cooldown, o botão ficaria
+   * preso pressionado; barrando por ausência, um alvo que ficasse ausente com o
+   * chamado no ar prenderia o alerta na tela dele para sempre.
+   */
+  'presence:call': (targetId: string, on: boolean) => void;
+  /**
+   * Responde ao chamado de `fromId`: `accepted` = "ir até", `false` = fechei.
+   *
+   * O servidor é só relay aqui — ele **não guarda** quem chamou quem, então não
+   * tem como conferir se o chamado existia. Mentir custa o quê: fazer o botão
+   * de outra pessoa despressionar. É menos dano do que um registro de chamados
+   * no servidor precisaria de manutenção para evitar.
+   */
+  'presence:callAnswer': (fromId: string, accepted: boolean) => void;
   /**
    * Entra na booble desta pessoa, criando uma com vocês dois se ela ainda não
    * tiver nenhuma. Um evento só para os três casos (criar, entrar numa

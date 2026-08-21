@@ -1,18 +1,20 @@
 # Menu de contexto no avatar (botão direito)
 
-**Status:** experimental (o menu existe e está **vazio**, por pedido)
+**Status:** em uso
 **Última atualização:** 2026-08-21
 
 ## O que faz
 
 Clicar com o **botão direito** num personagem — o seu ou o de outra pessoa —
-abre um menu de contexto ao lado do cursor, com o nome de quem foi clicado.
+abre um menu de contexto ao lado do cursor, com o nome de quem foi clicado
+(bolinha da cor, nome, e o selo **você** no próprio).
 
-**Ele não tem nenhuma ação ainda, e isso é o pedido**, não uma pendência: o que
-esta entrega constrói é o *caminho* — do clique no canvas do Pixi até um painel
-do DOM no lugar certo, sobre a pessoa certa. Os itens entram depois. Como um
-painel completamente vazio pareceria quebrado, ele mostra de quem é (bolinha da
-cor, nome, e o selo **você** no próprio) e diz "Nenhuma ação por enquanto.".
+Este doc é sobre o **caminho** — do clique no canvas do Pixi até um painel do DOM
+no lugar certo, sobre a pessoa certa. Ele nasceu vazio de propósito, e hoje tem
+um item: **chamar**, documentado em
+[Chamar pelo menu de contexto](chamar-e-ir-ate.md). No próprio avatar não há ação
+ainda, e aí o painel mostra "Nenhuma ação sobre você por enquanto." — um painel
+completamente vazio pareceria quebrado.
 
 ## Como funciona
 
@@ -76,7 +78,7 @@ que o clique nasce no Pixi e não num teste de distância feito à mão.
 |---|---|
 | `client/src/game/Avatar.ts` | `setContextMenuHandler()` — `eventMode`, `hitArea`, `rightdown` |
 | `client/src/game/Game.ts` | suprime o menu nativo, liga local e remotos, abre o menu, limpa no `destroy` |
-| `client/src/ui/AvatarContextMenu.tsx` | o painel |
+| `client/src/ui/AvatarContextMenu.tsx` | o painel e seus itens |
 | `client/src/ui/GameView.tsx` | renderiza o painel |
 | `client/src/state/store.ts` | `contextMenu`, `openContextMenu`, `closeContextMenu` |
 | `client/src/styles.css` | `.avatar-menu*` |
@@ -86,8 +88,14 @@ que o clique nasce no Pixi e não num teste de distância feito à mão.
 **O menu guarda só o `id`.** Nome e cor saem do `roster` na hora de desenhar. É
 o que faz o menu **morrer sozinho** quando a pessoa sai do mundo — o id some do
 roster e o componente se fecha — em vez de ficar apontando para quem não está
-mais lá. Uma cópia do nome no store envelheceria, e um item futuro ("chamar",
-"booble") agiria sobre um id morto.
+mais lá. Uma cópia do nome no store envelheceria, e o item **chamar** agiria
+sobre um id morto.
+
+**Estado de item vive no store, não no componente.** O painel desmonta ao fechar,
+então qualquer coisa que precise sobreviver a reabrir o menu na mesma pessoa (o
+"pressionado" do chamar, por exemplo) não pode ser `useState` — é a diferença em
+relação ao cooldown do botão da lista do HUD, que vive no painel porque o painel
+não desmonta.
 
 **O `contextmenu` do navegador é suprimido no canvas inteiro**, não só sobre um
 avatar. Metade das tentativas de clicar num boneco erra por alguns pixels, e ver
@@ -130,9 +138,10 @@ naturalmente depois.
   handler lê `selfId` do store **no momento do clique**, em vez de capturar o id
   quando é criado.
 - **WASD continua andando com o menu aberto.** O painel não tem
-  `data-capture-keys` porque não tem campo de texto. É aceitável hoje (o menu é
-  transitório e não se move com o avatar) e vira problema **no primeiro item com
-  input** — nesse dia, o atributo entra, como no menu de configurações.
+  `data-capture-keys` porque nenhum item tem campo de texto (o `chamar` é um
+  botão). É aceitável hoje (o menu é transitório e não se move com o avatar) e
+  vira problema **no primeiro item com input** — nesse dia, o atributo entra,
+  como no menu de configurações.
 - **`hitArea` não acompanha a pose.** Ela é o retângulo do sprite de pé. Sentado
   ou ausente o boneco ocupa área parecida, então na prática não incomoda — mas
   se alguém adicionar uma pose bem maior, a área não cresce junto.
@@ -144,7 +153,8 @@ naturalmente depois.
 
 ## Como testar
 
-`npm run dev`, duas abas no mesmo mundo:
+`npm run dev`, duas abas no mesmo mundo (o roteiro do item **chamar** está no
+[doc dele](chamar-e-ir-ate.md)):
 
 1. Botão direito **no seu boneco** → menu com o seu nome e o selo **você**.
 2. Botão direito **no boneco do outro** → menu com o nome dele.
@@ -164,11 +174,16 @@ está confirmado é `npm run typecheck` (server + client) e `npm run build` do
 client limpos, que é o que valida a API do Pixi v8 usada aqui pela primeira vez
 (`FederatedPointerEvent`, `Rectangle`, `eventFeatures`).
 
+Com a chegada do item **chamar**, a pendência "o menu não tem itens" deixou de
+existir; a do balão de cochicho fora da `hitArea` continua aberta.
+
 ## Relacionado
 
 - [Menu de configurações](configuracoes-no-jogo.md) — o outro painel novo da
   sessão, e de onde veio a receita de fechar em Escape/clique fora
+- [Chamar pelo menu de contexto](chamar-e-ir-ate.md) — o primeiro (e por
+  enquanto único) item
 - [Booble](booble.md) e [Chamado de quem está ausente](chamado-ausente.md) — as
-  ações que hoje vivem na lista do HUD, e as candidatas naturais a virar item
+  ações que ainda vivem na lista do HUD, e as candidatas naturais a virar item
   aqui
 - README, seção [Controles](../../README.md#controles)

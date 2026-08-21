@@ -30,6 +30,13 @@ export interface WorldApi {
   /** Chama quem está ausente. O servidor pode recusar em silêncio (cooldown). */
   nudge(targetId: string): boolean;
   /**
+   * Acende (`on: true`) ou apaga o chamado desta pessoa — o "pin" do menu de
+   * contexto. O servidor pode recusar em silêncio (alvo ausente, cooldown).
+   */
+  call(targetId: string, on: boolean): boolean;
+  /** Responde ao chamado de alguém: `accepted` = "ir até". */
+  callAnswer(fromId: string, accepted: boolean): boolean;
+  /**
    * Entra na booble desta pessoa, criando uma se ela não tiver. O servidor pode
    * recusar em silêncio (longe, ausente, outra zona, booble cheia).
    */
@@ -54,6 +61,9 @@ export function createWorldApi(getSocket: () => AppSocket | null): WorldApi {
     setAway: (away) => fire(getSocket(), (s) => s.emit('away', away)),
     chatSend: (text) => fire(getSocket(), (s) => s.emit('chat:send', text)),
     nudge: (targetId) => fire(getSocket(), (s) => s.emit('presence:nudge', targetId)),
+    call: (targetId, on) => fire(getSocket(), (s) => s.emit('presence:call', targetId, on)),
+    callAnswer: (fromId, accepted) =>
+      fire(getSocket(), (s) => s.emit('presence:callAnswer', fromId, accepted)),
     boobleJoin: (targetId) => fire(getSocket(), (s) => s.emit('booble:join', targetId)),
     boobleLeave: () => fire(getSocket(), (s) => s.emit('booble:leave')),
     share: (sharing) => fire(getSocket(), (s) => s.emit('share', sharing)),

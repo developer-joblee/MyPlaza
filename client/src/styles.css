@@ -834,10 +834,8 @@ button {
 
 /* --------------------------------------------------------- Screen share */
 
+/* posicionada pela `.top-right-stack` (ver `GameView`), não por si mesma */
 .screens {
-  position: absolute;
-  top: 16px;
-  right: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -947,9 +945,9 @@ button {
 
 /* ---------------------------------------------------------------- zoom */
 
+/* `position: static` cancela o `absolute` do `.panel`: quem posiciona é a coluna */
 .zoom-controls {
-  top: 16px;
-  right: 16px;
+  position: static;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -2404,4 +2402,90 @@ button {
   margin: 8px 0 0;
   color: var(--text-dim);
   font-size: 11.5px;
+}
+
+/* ------------------------------------------------- canto superior direito */
+
+/*
+ * A coluna do canto superior direito: zoom, alerta de chamado e prévias de tela.
+ * Existe porque as duas primeiras eram ancoradas no MESMO ponto (`top:16
+ * right:16`) e se sobrepunham quando alguém compartilhava a tela.
+ *
+ * Sem `z-index` de propósito: a tela ampliada (`.screen-focus`, `fixed` com
+ * `z-index: 20`) é filha desta subárvore, e um contexto de empilhamento aqui a
+ * prenderia abaixo de coisas que hoje ela cobre.
+ */
+.top-right-stack {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/*
+ * A pilha de chamados. Reusa `.notice*` inteiro (forma, cor, animação e o
+ * `prefers-reduced-motion`) — o que muda em relação à `.notice-stack` é só a
+ * âncora: chamado pede decisão, e decisão não fica no caminho do olho, em cima
+ * do avatar.
+ */
+.call-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+/* --------------------------------------------------- item do menu do avatar */
+
+/*
+ * Ação dentro do menu de contexto. Largura toda de propósito: num menu o alvo do
+ * clique é a linha, não a palavra.
+ */
+.avatar-menu-item {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+
+.avatar-menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/*
+ * Pressionado = há um alerta seu na tela da outra pessoa agora. Mint, a mesma
+ * cor que o resto do app usa para "faça isto / está ativo", para o estado ser
+ * legível sem ler o rótulo.
+ */
+.avatar-menu-item[aria-pressed='true'] {
+  background: rgba(61, 220, 132, 0.2);
+  border-color: rgba(61, 220, 132, 0.55);
+  color: #b9f5d0;
+}
+
+.avatar-menu-item[aria-pressed='true']:hover {
+  background: rgba(61, 220, 132, 0.32);
+}
+
+/* desabilitado tem motivo no `title` (ausente, ou cooldown correndo) */
+.avatar-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

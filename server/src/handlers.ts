@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import {
   AVATAR_COLORS,
+  CALL_COOLDOWN_MS,
   CHAT_MAX_LENGTH,
   DEFAULT_CHARACTER,
   DEFAULT_SCENARIO,
@@ -78,6 +79,13 @@ export interface SocketData {
    * a cada chamado — então não guarda mais que os alvos da última janela.
    */
   nudgedAt?: Map<string, number>;
+  /**
+   * Mesma ideia do `nudgedAt`, para o chamado pelo menu de contexto
+   * (`CALL_COOLDOWN_MS`). É um mapa **separado** de propósito: chamar quem está
+   * ausente e chamar quem está presente são dois canais com regras diferentes, e
+   * compartilhar a janela faria um limitar o outro sem nenhuma razão.
+   */
+  calledAt?: Map<string, number>;
   /** mesma corrente, para o compartilhamento de tela */
   shareRecord?: Promise<string | null>;
   /**
@@ -535,6 +543,75 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
     // o Socket.IO já mantém cada socket numa sala com o próprio id: é entrega
     // ponto a ponto, sem passar pelo mundo
     io.to(targetId).emit('presence:nudged', socket.id, from.name);
+  });
+
+  /**
+   * "Pin": chama alguém que está **presente**, pelo menu de contexto do avatar.
+   *
+   * É o interruptor de um alerta na tela do alvo — `on: true` acende (com som),
+   * `on: false` apaga porque quem chamou desistiu. As recusas são em silêncio,
+   * pela mesma razão do "toc-toc": um "não deu" viraria sonda de presença.
+   *
+   * A guarda de ausência é **invertida** em relação ao `presence:nudge`: quem
+   * está ausente não é chamado por aqui, porque o alerta pede que a pessoa
+   * *venha até você* e quem está no celular já tem o canal próprio (com o
+   * "toc-toc" e o botão "Voltar"). Uma pessoa, dois estados, dois canais. Ela
+   * vale só para acender — ver o comentário no corpo.
+   *
+   * O servidor **não guarda** quem está chamando quem: o alerta vive no cliente
+   * do alvo e o "pressionado" no cliente de quem chamou, e os dois se resolvem
+   * pelo roster — quem sai do mundo faz os dois morrerem sozinhos. Um registro
+   * aqui precisaria de limpeza no `disconnect` e não compraria nada.
+   */
+  socket.on('presence:call', (rawTargetId, rawOn) => {
+    const { scenarioId, worldKey } = socket.data;
+    if (!scenarioId || !worldKey) return;
+    const targetId = String(rawTargetId ?? '');
+    if (!targetId || targetId === socket.id) return;
+
+    const world = getWorld(worldKey, scenarioId);
+    const from = world.getPlayer(socket.id);
+    const target = world.getPlayer(targetId);
+    if (!from || !target) return;
+
+    const on = Boolean(rawOn);
+    // a guarda de ausência vale só para ACENDER: apagar é limpeza, e recusar
+    // limpeza só pode deixar lixo na tela. Sem esta distinção, o alvo que ficasse
+    // ausente com um chamado no ar prenderia o alerta — o cancelamento de quem
+    // chamou nunca chegaria, e o botão dele despressionaria mentindo.
+    if (on && target.away) return;
+    if (on) {
+      const now = Date.now();
+      const called = (socket.data.calledAt ??= new Map());
+      // poda antes de consultar, como no "toc-toc": o mapa nunca passa dos
+      // alvos da janela atual
+      for (const [id, at] of called) if (now - at >= CALL_COOLDOWN_MS) called.delete(id);
+      if (called.has(targetId)) return;
+      called.set(targetId, now);
+    }
+    // apagar não passa pelo cooldown: desistir tem de ser sempre imediato,
+    // senão o botão de quem chamou fica preso pressionado
+    io.to(targetId).emit('presence:called', socket.id, from.name, on);
+  });
+
+  /**
+   * O alvo respondeu: `accepted` = vem até aqui, `false` = fechou o alerta.
+   *
+   * Relay puro, com a única validação que faz sentido sem registro de chamados:
+   * os dois no mesmo mundo. Sem isto o item do menu ficaria pressionado
+   * apontando para um alerta que já saiu da tela da outra pessoa.
+   */
+  socket.on('presence:callAnswer', (rawFromId, rawAccepted) => {
+    const { scenarioId, worldKey } = socket.data;
+    if (!scenarioId || !worldKey) return;
+    const fromId = String(rawFromId ?? '');
+    if (!fromId || fromId === socket.id) return;
+
+    const world = getWorld(worldKey, scenarioId);
+    const me = world.getPlayer(socket.id);
+    if (!me || !world.hasPlayer(fromId)) return;
+
+    io.to(fromId).emit('presence:callAnswered', socket.id, me.name, Boolean(rawAccepted));
   });
 
   /**

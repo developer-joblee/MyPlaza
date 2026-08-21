@@ -48,15 +48,29 @@ export class LocalPlayer {
     this.avatar.setSitting(facing);
   }
 
-  /** Move com colisão por eixo separado, ou trata a cadeira se estiver sentado. */
-  update(dt: number, keyboard: Keyboard, tilemap: TilemapBase): LocalUpdate {
+  /**
+   * Move com colisão por eixo separado, ou trata a cadeira se estiver sentado.
+   *
+   * `autoAxis` é a direção da auto-caminhada do "ir até" (`AutoWalk`), e vale
+   * **só quando o teclado está parado**: qualquer tecla ganha, que é como o
+   * cancelamento acontece sem uma segunda regra em outro arquivo. Ele entra
+   * também na condição de levantar da cadeira — sem isso o avatar deslizaria
+   * pelo chão na pose de sentado.
+   */
+  update(
+    dt: number,
+    keyboard: Keyboard,
+    tilemap: TilemapBase,
+    autoAxis: { x: number; y: number } | null = null,
+  ): LocalUpdate {
     const interact = keyboard.consumeInteract();
+    const moving = keyboard.moving || autoAxis !== null;
     let sittingChanged = false;
 
     if (this.sitting) {
       // qualquer tecla de movimento também levanta: é o reflexo natural de
       // quem quer sair da cadeira, e evita a sensação de avatar travado
-      if (interact || keyboard.moving) {
+      if (interact || moving) {
         this.standUp(tilemap);
         sittingChanged = true;
       } else {
@@ -73,7 +87,9 @@ export class LocalPlayer {
       return { moved: true, sittingChanged: true, nearbyChair: null };
     }
 
-    const { x: ax, y: ay } = keyboard.axis;
+    const teclado = keyboard.axis;
+    const { x: ax, y: ay } =
+      teclado.x !== 0 || teclado.y !== 0 ? teclado : (autoAxis ?? teclado);
     this.avatar.setMotion(ax, ay, ax !== 0 || ay !== 0);
     this.avatar.update(dt);
     if (ax === 0 && ay === 0) {
