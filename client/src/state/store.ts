@@ -5,7 +5,12 @@ import {
   DEFAULT_SCENARIO,
   type CharacterId,
   type ChatMessage,
+  type JoinDeniedReason,
+  type LobbyState,
+  type PendingInvite,
   type ScenarioId,
+  type WorldDetail,
+  type WorldSummary,
 } from '@together/shared';
 // import type: apagado na compilação, então não puxa o SDK para o chunk principal
 import type { RemoteVideoTrack } from 'livekit-client';
@@ -33,12 +38,38 @@ export type VoiceStatus =
   | 'error';
 
 interface AppState {
-  phase: 'join' | 'playing';
+  /**
+   * `boot` existe porque restaurar a sessão do Supabase é assíncrono: sem ele a
+   * tela de login apareceria por um instante para quem já está logado.
+   */
+  phase: 'boot' | 'login' | 'lobby' | 'join' | 'playing';
   selfName: string;
   selfColor: number;
   selfScenario: ScenarioId;
   selfCharacter: CharacterId;
   selfId: string | null;
+  /** e-mail da conta logada; null = anônimo (servidor sem Supabase) */
+  authEmail: string | null;
+
+  /** mundos e convites do lobby */
+  worlds: WorldSummary[];
+  pendingInvites: PendingInvite[];
+  /**
+   * O ID desta pessoa, como o servidor o conhece. Vem no `lobby:list` — é o que
+   * ela copia e passa a quem administra um mundo para ganhar acesso. Vazio até
+   * o lobby responder.
+   */
+  myId: string;
+  /** painel do mundo aberto para gerenciar; null = nenhum */
+  worldDetail: WorldDetail | null;
+  /**
+   * Mundo escolhido no lobby. É o que vai no `join` — sem ele, com login
+   * configurado, o servidor recusa com `no-world`.
+   */
+  selfWorldId: string | null;
+  selfWorldName: string | null;
+  /** por que a última tentativa de entrar foi recusada */
+  joinDenied: JoinDeniedReason | null;
   connected: boolean;
   roster: RosterEntry[];
   chat: ChatMessage[];
@@ -72,6 +103,20 @@ interface AppState {
   zoomPct: number;
 
   join: (name: string, color: number, scenario: ScenarioId, character: CharacterId) => void;
+  /** terminou o boot: vai para o login, o lobby, ou direto para a entrada */
+  setPhase: (phase: 'login' | 'lobby' | 'join') => void;
+  setLobby: (state: LobbyState, detail?: WorldDetail) => void;
+  /** fecha o painel de gerenciamento */
+  closeWorldDetail: () => void;
+  /** escolheu um mundo no lobby: guarda id, nome e o cenário DELE */
+  chooseWorld: (world: WorldSummary) => void;
+  /** volta para o lobby (botão de voltar na tela de entrada) */
+  backToLobby: () => void;
+  /** logou/deslogou; sem e-mail volta para a tela de login */
+  setAuthEmail: (email: string | null) => void;
+
+  /** o servidor recusou a entrada: volta para a tela de entrada com o motivo */
+  denyJoin: (reason: JoinDeniedReason) => void;
   /** volta para a tela inicial zerando o estado da sessão */
   leave: () => void;
   setScenario: (id: ScenarioId) => void;
@@ -106,12 +151,20 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  phase: 'join',
+  phase: 'boot',
   selfName: '',
   selfColor: AVATAR_COLORS[0],
   selfScenario: DEFAULT_SCENARIO,
   selfCharacter: DEFAULT_CHARACTER,
   selfId: null,
+  authEmail: null,
+  worlds: [],
+  pendingInvites: [],
+  myId: '',
+  worldDetail: null,
+  selfWorldId: null,
+  selfWorldName: null,
+  joinDenied: null,
   connected: false,
   roster: [],
   chat: [],
@@ -144,21 +197,63 @@ export const useStore = create<AppState>((set) => ({
   join: (name, color, scenario, character) =>
     set({
       phase: 'playing',
+      joinDenied: null,
       selfName: name,
       selfColor: color,
       selfScenario: scenario,
       selfCharacter: character,
     }),
 
+  setPhase: (phase) => set({ phase }),
+  setLobby: (lobby, detail) =>
+    set((state) => ({
+      worlds: lobby.worlds,
+      pendingInvites: lobby.invites,
+      myId: lobby.myId,
+      // `detail` ausente numa resposta não fecha o painel aberto: operações que
+      // não são de gerenciamento (aceitar convite, criar mundo) não devem
+      // derrubar a tela de quem está no meio de administrar outro mundo
+      worldDetail: detail ?? state.worldDetail,
+    })),
+  closeWorldDetail: () => set({ worldDetail: null }),
+  chooseWorld: (world) =>
+    set({
+      phase: 'join',
+      joinDenied: null,
+      selfWorldId: world.id,
+      selfWorldName: world.name,
+      // o cenário é do MUNDO, não uma escolha da tela de entrada
+      selfScenario: world.scenarioId,
+    }),
+  backToLobby: () => set({ phase: 'lobby', joinDenied: null }),
+  setAuthEmail: (email) =>
+    set((state) => ({
+      authEmail: email,
+      // deslogar tem de tirar a pessoa do mundo, não só esquecer o e-mail
+      phase: email ? (state.phase === 'login' ? 'lobby' : state.phase) : 'login',
+      ...(email
+        ? {}
+        : {
+            worlds: [],
+            pendingInvites: [],
+            worldDetail: null,
+            selfWorldId: null,
+            selfWorldName: null,
+          }),
+    })),
+  denyJoin: (reason) => set({ phase: 'join', joinDenied: reason }),
+
   /**
    * Zera tudo que pertence à sessão. Sair troca `phase`, o que desmonta o
    * GameView e dispara a limpeza dele (socket, sala de voz, app do Pixi).
    * Nome/cor/cenário/personagem ficam para a tela de entrada vir preenchida, e
    * `noiseFilter` fica porque é preferência do usuário, não estado de sessão.
+   * A conta (`authEmail`) também fica: sair do mundo não é sair da conta.
    */
   leave: () =>
-    set({
-      phase: 'join',
+    set((state) => ({
+      // quem tem conta volta para a lista de mundos; anônimo, para a entrada
+      phase: state.authEmail ? 'lobby' : 'join',
       selfId: null,
       connected: false,
       roster: [],
@@ -181,7 +276,7 @@ export const useStore = create<AppState>((set) => ({
       nearbyIds: [],
       focusedScreenId: null,
       zoomPct: 100,
-    }),
+    })),
   setScenario: (id) => set({ selfScenario: id }),
   setSelf: (id, connected) => set({ selfId: id, connected }),
   setRoster: (roster) => set({ roster }),

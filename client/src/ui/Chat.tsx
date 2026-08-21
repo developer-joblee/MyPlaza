@@ -24,8 +24,9 @@ export function Chat() {
     e.preventDefault();
     const trimmed = text.trim();
     if (!trimmed) return;
-    runtime.socket?.emit('chat:send', trimmed);
-    setText('');
+    // só limpa o campo se a mensagem foi de verdade. Antes o `?.emit` sumia com
+    // ela em silêncio quando o socket estava caído, e o texto ia junto.
+    if (runtime.api?.chatSend(trimmed)) setText('');
   };
 
   return (

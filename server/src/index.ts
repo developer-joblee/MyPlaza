@@ -9,6 +9,7 @@ import {
   type ServerToClientEvents,
 } from '@together/shared';
 import { registerHandlers, type SocketData } from './handlers';
+import { registerLobbyHandlers } from './lobby';
 
 const PORT = Number(process.env.PORT) || SERVER_PORT;
 
@@ -76,6 +77,9 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string,
 
 io.on('connection', (socket) => {
   registerHandlers(io, socket);
+  // o lobby usa o mesmo socket que o mundo usaria, mas é outra fase da vida
+  // dele: aqui ninguém entrou em lugar nenhum ainda
+  registerLobbyHandlers(io, socket);
 });
 
 httpServer.listen(PORT, () => {

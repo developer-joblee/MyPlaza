@@ -11,6 +11,7 @@ import {
   type ScenarioId,
 } from '@together/shared';
 import type { AppSocket } from '../net/socket';
+import { createWorldApi } from '../net/worldApi';
 import { setAway } from '../presence';
 import { useStore } from '../state/store';
 import { Keyboard } from './input';
@@ -52,6 +53,9 @@ export class Game {
   /** idem para a dica de sentar */
   private lastSitPrompt: boolean | undefined = undefined;
   private unbinders: Array<() => void> = [];
+
+  /** Ver a nota em `VoiceRoom`: getter, porque o campo inicializa antes do socket. */
+  private readonly api = createWorldApi(() => this.socket);
 
   private constructor(
     app: Application,
@@ -181,6 +185,15 @@ export class Game {
         if (p.id === this.socket.id) {
           this.local.setPosition(p.x, p.y);
           this.cameraSnapped = false;
+          // o servidor pode ter restaurado a pessoa sentada (posição salva no
+          // banco); sem isto ela apareceria de pé em cima da própria cadeira
+          if (p.sitting) {
+            const facing = this.tilemap.sitFacingAtTile(
+              Math.floor(p.x / TILE_SIZE),
+              Math.floor(p.y / TILE_SIZE),
+            );
+            if (facing) this.local.resumeSitting(facing);
+          }
         } else {
           this.addRemote(p);
         }
@@ -263,11 +276,11 @@ export class Game {
       if ((moved || x !== this.lastSent.x || y !== this.lastSent.y) && this.socket.connected) {
         if (x !== this.lastSent.x || y !== this.lastSent.y) {
           this.lastSent = { x, y };
-          this.socket.emit('move', x, y);
+          this.api.move(x, y);
         }
       }
       if (sittingChanged && this.socket.connected) {
-        this.socket.emit('sit', this.local.sitting !== null);
+        this.api.sit(this.local.sitting !== null);
       }
     }
 

@@ -21,10 +21,11 @@ import {
   VOICE_TICK_MS,
 } from '@together/shared';
 import type { AppSocket } from '../net/socket';
+import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { volumeForDistance } from './proximity';
-import { requestVoiceToken } from './token';
+import { requestVoiceToken } from '../net/voiceApi';
 
 const VIDEO_RADIUS = PROXIMITY_RADIUS + PROXIMITY_HYSTERESIS;
 /**
@@ -86,6 +87,13 @@ export class VoiceRoom {
    * numa sala que já não existe.
    */
   private gen = 0;
+
+  /**
+   * A api recebe um GETTER do socket, não o socket: o inicializador de campo
+   * roda antes de `this.socket` existir (parâmetro de construtor), e a closure
+   * só é lida no momento do envio, quando já existe.
+   */
+  private readonly api = createWorldApi(() => this.socket);
 
   constructor(
     private socket: AppSocket,
@@ -249,7 +257,7 @@ export class VoiceRoom {
     // startScreenShare() retornava cedo para sempre e o usuário não conseguia
     // mais compartilhar até recarregar a página
     this.screenSharing = false;
-    store.setSharing(false);
+    this.reportSharing(false);
     if (!room) return;
     room.removeAllListeners();
     try {
@@ -257,6 +265,23 @@ export class VoiceRoom {
     } catch {
       // já caiu; nada a fazer
     }
+  }
+
+  /**
+   * Único ponto que mexe no `sharing`: além do store, avisa o servidor — que é
+   * quem registra o histórico de compartilhamento (`screen_shares`). A mídia vai
+   * direto para o LiveKit e nunca passa pelo servidor, então sem este aviso ele
+   * não teria como saber.
+   *
+   * Deduplica porque QUATRO caminhos desligam o compartilhamento (parar pelo
+   * botão, "parar de compartilhar" da barra do navegador, teardown da sala e
+   * destroy) e os quatro podem cair aqui em sequência.
+   */
+  private reportSharing(sharing: boolean): void {
+    const store = useStore.getState();
+    if (store.sharing === sharing) return;
+    store.setSharing(sharing);
+    this.api.share(sharing);
   }
 
   destroy(): void {
@@ -269,7 +294,7 @@ export class VoiceRoom {
     delete (window as unknown as Record<string, unknown>).__togetherVoice;
     const store = useStore.getState();
     store.setVoiceStatus('idle');
-    store.setSharing(false);
+    this.reportSharing(false);
     // síncrono por contrato (o cleanup do React não espera): dispara e esquece
     void this.teardownRoom();
   }
@@ -458,7 +483,7 @@ export class VoiceRoom {
     // cobre o "parar de compartilhar" da barra do próprio navegador
     if (pub.source === Track.Source.ScreenShare) {
       this.screenSharing = false;
-      useStore.getState().setSharing(false);
+      this.reportSharing(false);
     }
   };
 
@@ -702,14 +727,14 @@ export class VoiceRoom {
     }
     if (this.destroyed) return false;
     this.screenSharing = true;
-    useStore.getState().setSharing(true);
+    this.reportSharing(true);
     return true;
   }
 
   stopScreenShare(): void {
     const room = this.room;
     this.screenSharing = false;
-    useStore.getState().setSharing(false);
+    this.reportSharing(false);
     if (room) void room.localParticipant.setScreenShareEnabled(false);
   }
 

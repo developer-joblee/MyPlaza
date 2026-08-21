@@ -69,3 +69,32 @@ export const DEFAULT_CHARACTER: CharacterId = 'adam';
 export function isCharacterId(value: unknown): value is CharacterId {
   return CHARACTERS.some((c) => c.id === value);
 }
+
+/**
+ * Intervalo mínimo entre gravações da posição no banco (ms).
+ *
+ * O cliente manda posição a TICK_RATE (15/s); gravar tudo seria ~15 escritas
+ * por pessoa por segundo, sem ganho — o que importa é onde a pessoa está se a
+ * conexão cair. 3s limita o prejuízo a ~3s de caminhada (≈510px) e mantém a
+ * escrita em 1 upsert a cada 45 mensagens de movimento. A saída (`disconnect`)
+ * grava a posição final de imediato, então o corte só aparece se o processo
+ * morrer de vez.
+ */
+export const POSITION_SAVE_MS = 3000;
+
+/**
+ * O ID de uma pessoa é o uuid do perfil dela (`profiles.id`) — é o que se passa
+ * a quem administra um mundo para ganhar acesso (`lobby:addMember`).
+ *
+ * Mora aqui, e não em cada lado, porque os dois validam: o cliente para não
+ * habilitar o botão com texto colado torto, e o servidor porque **esconder o
+ * botão não é validação**. Sem a checagem no servidor, texto qualquer chegaria
+ * ao banco e voltaria como erro de sintaxe de uuid — que a tela mostraria como
+ * "erro" em vez de "esse ID não existe".
+ */
+export function isProfileId(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value.trim().toLowerCase())
+  );
+}

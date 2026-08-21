@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Game } from '../game/Game';
 import { bindStoreToSocket } from '../net/bindStore';
 import { createSocket } from '../net/socket';
+import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { listMics, loadMicPreference, probeMic } from '../voice/mic';
@@ -21,9 +22,14 @@ export function GameView() {
     const container = containerRef.current;
     if (!container) return;
 
-    const { selfName, selfColor, selfScenario, selfCharacter } = useStore.getState();
+    const { selfName, selfColor, selfScenario, selfCharacter, selfWorldId } =
+      useStore.getState();
     const socket = createSocket();
     runtime.socket = socket;
+    // a fronteira de requisição de quem está dentro de um mundo; o Chat e o
+    // `presence.ts` chegam nela por aqui
+    const api = createWorldApi(() => runtime.socket);
+    runtime.api = api;
     const unbindStore = bindStoreToSocket(socket);
 
     let cancelled = false;
@@ -74,11 +80,11 @@ export function GameView() {
       // handlers explícitos e removíveis: a ordem importa (o token exige que o
       // join já tenha rodado) e o handler antigo nunca era removido no cleanup
       onConnect = () => {
-        socket.emit('join', selfName, selfColor, selfScenario, selfCharacter);
+        api.join(selfName, selfColor, selfScenario, selfCharacter, selfWorldId ?? undefined);
         // a reconexão cria um player novo no servidor, sempre presente. Se o
         // usuário está ausente, reafirma — senão ele volta a aparecer
         // disponível para os outros enquanto continua mudo de fato.
-        if (useStore.getState().away) socket.emit('away', true);
+        if (useStore.getState().away) api.setAway(true);
         // socket novo = chance nova: zera o backoff antes de tentar
         voice?.onSocketReconnected();
         void voice?.onSocketConnected();
@@ -98,6 +104,7 @@ export function GameView() {
       unbindStore();
       socket.disconnect();
       runtime.socket = null;
+      runtime.api = null;
       runtime.game = null;
       runtime.voice = null;
     };

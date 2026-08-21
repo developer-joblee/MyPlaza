@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@livekit/krisp-noise-filter": "^0.4.4",
+    "@supabase/supabase-js": "^2.112.3",
     "@together/shared": "*",
     "livekit-client": "^2.22.0",
     "pixi.js": "^8.6.6",
