@@ -13,8 +13,8 @@ Chegue **ao lado** de alguém (até 2 tiles) e clique em **booble** na linha del
 na lista. A partir daí:
 
 - **dentro da booble, 100%** — vocês se ouvem cheio;
-- **fora, 10%** — o resto da sala vira ruído de fundo, **nos dois sentidos**:
-  você ouve a sala a 10% e a sala ouve vocês a 10%.
+- **fora, 7%** — o resto da sala vira ruído de fundo, **nos dois sentidos**:
+  você ouve a sala a 7% e a sala ouve vocês a 7%.
 
 Ninguém aprova nada: quem chega perto vê **entrar** na linha de quem já tem uma
 booble e entra na hora.
@@ -22,6 +22,11 @@ booble e entra na hora.
 **Um círculo violeta no chão** envolve o grupo, e ele é dinâmico: cresce quando
 alguém entra e encolhe quando alguém sai. As boobles dos outros também aparecem,
 mais fracas — é o que explica por que aquelas duas pessoas estão mais baixas.
+
+Ao lado da cabeça de cada membro aparece um **balãozinho de cochicho**: três
+pontinhos violeta em onda, bem pequenos. Ele não diz nada que o círculo já não
+diga sobre *quem está com quem* — ele diz que **tem conversa acontecendo ali**,
+que é a pergunta de quem olha o grupo de longe.
 
 Sai-se pelo **Sair** no aviso do topo, ou **dando dois passos para o lado**: a
 partir de 3 tiles do grupo você é removido. É de propósito — a booble é um
@@ -36,7 +41,7 @@ Duas metades, e a divisão é o desenho:
   id da booble. Tudo em `server/src/world.ts`.
 - **O cliente é dono do VOLUME.** Cada um decide o que assina e com que ganho
   toca, exatamente como já era na proximidade e nas zonas. É o que torna a
-  assimetria grátis: "dentro 100%, fora 10%" não exige nada de quem publica.
+  assimetria grátis: "dentro 100%, fora 7%" não exige nada de quem publica.
 
 A booble **é** o conjunto de players com o mesmo `boobleId` (`PlayerState`). Não
 existe entidade nem lista paralela no servidor.
@@ -68,7 +73,7 @@ Fonte única em `client/src/voice/proximity.ts`:
 audioVolumeFor(self, peer)
   mesma booble                         -> 1                  (ignora zona e distância)
   base = mesma zona ? (na sala ? 1 : volumeForDistance(d)) : 0
-  eu ou ele numa booble                -> base * 0.1
+  eu ou ele numa booble                -> base * 0.07
   nenhum dos dois numa booble          -> base                (o comportamento de antes)
 ```
 
@@ -88,7 +93,7 @@ impõe, o cliente decide o que mostrar:
 
 | Constante | Valor | Para que |
 |---|---|---|
-| `BOOBLE_OUTSIDE_VOLUME` | `0.1` | quanto se ouve através da borda |
+| `BOOBLE_OUTSIDE_VOLUME` | `0.07` | quanto se ouve através da borda |
 | `BOOBLE_JOIN_RADIUS` | `TILE_SIZE * 2` (64px) | para **entrar** |
 | `BOOBLE_EXIT_RADIUS` | `TILE_SIZE * 3` (96px) | para **permanecer** |
 | `BOOBLE_MAX_MEMBERS` | `8` | teto de gente |
@@ -115,7 +120,9 @@ maior, você entraria e seria expulso no mesmo instante.
 | `client/src/game/Game.ts` | `setPlayerBooble`, o `booble` por peer em `getAudioInfo`, o desenho dos círculos e o `boobleReachIds` |
 | `client/src/voice/proximity.ts` | **`audioVolumeFor`** — a regra inteira, e os tipos do contrato de áudio |
 | `client/src/voice/VoiceRoom.ts` | tick: volume, prioridade de subscrição, badge, anel, vídeo |
-| `client/src/game/BoobleRings.ts` | o círculo dinâmico no chão em volta do grupo |
+| `client/src/game/BoobleRings.ts` | o círculo dinâmico no chão em volta do grupo (e o `VIOLET` compartilhado) |
+| `client/src/game/BoobleWhisper.ts` | o balãozinho de cochicho, por pessoa |
+| `client/src/game/Avatar.ts` | `setBooble` — liga/desliga o balão; `whispering` no `debugFrame` |
 | `client/src/ui/Hud.tsx` | selo `booble` e o botão `booble`/`entrar` na linha |
 | `client/src/ui/Notices.tsx` | o aviso violeta com os nomes e o **Sair** |
 | `client/src/ui/util.ts` | `joinNames` — a lista de nomes, agora compartilhada com o "toc-toc" |
@@ -123,7 +130,7 @@ maior, você entraria e seria expulso no mesmo instante.
 
 ## Decisões e por quê
 
-- **10%, e não 0.** Zero já existe e chama-se sala fechada (`audioZones`). O
+- **7%, e não 0.** Zero já existe e chama-se sala fechada (`audioZones`). O
   ponto da booble é que a sala **continua audível**: você percebe que alguém
   falou com você, ouve que a reunião acabou, e sai da booble se quiser. Uma
   booble que isola não é uma booble, é uma sala — e uma sala não se cria com um
@@ -141,7 +148,7 @@ maior, você entraria e seria expulso no mesmo instante.
   na sala.
 - **A booble quebra por distância.** A alternativa era um canal que te acompanha
   pelo mapa (walkie-talkie). Foi descartada porque a booble ficaria pendurada:
-  ninguém desliga o que não vê, e você acabaria com metade do escritório a 10%
+  ninguém desliga o que não vê, e você acabaria com metade do escritório a 7%
   por causa de uma conversa de dois minutos de ontem. Quebrar por distância faz o
   estado morrer sozinho, e o custo é ter de reabrir com um clique.
 - **2 tiles para entrar, 3 para permanecer — escala de cochicho.** A primeira
@@ -186,11 +193,11 @@ maior, você entraria e seria expulso no mesmo instante.
   chamável pelo "toc-toc" (que exige `target.away`). Voltar **não** recria a
   booble: adivinhar com quem a pessoa ainda quer falar meia hora depois é chute.
 - **Dissolve com um membro só.** Uma booble de uma pessoa não prioriza nada — ela
-  apenas baixa a sala inteira a 10% para quem sobrou, que é o oposto do que a
+  apenas baixa a sala inteira a 7% para quem sobrou, que é o oposto do que a
   feature promete.
 - **Teto de 8.** Uma booble do tamanho da sala não prioriza ninguém: ela só deixa
-  a sala 10% mais baixa para os que sobraram fora. Conversa paralela de nove
-  pessoas é uma reunião, e para isso o mapa já tem sala fechada.
+  a sala a 7% para os que sobraram fora. Conversa paralela de nove pessoas é uma
+  reunião, e para isso o mapa já tem sala fechada.
 - **Membros da booble entram na frente na fila de subscrição.** A sala conecta com
   `autoSubscribe: false` e há teto de `MAX_AUDIO_SUBSCRIPTIONS` (16). Sem
   priorizar, um membro que atravessou a porta cairia fora do filtro de zona e
@@ -239,6 +246,29 @@ maior, você entraria e seria expulso no mesmo instante.
   perspectiva, e um círculo redondo lê como bolha flutuando em vez de marca no
   chão. E a camada não pode ser dentro do `Avatar`, que é por pessoa — um desenho
   de grupo precisa das posições de todos, e quem as tem é o `Game`.
+- **O balão de cochicho é por pessoa, mesmo havendo um desenho de grupo.** Ele
+  parece contradizer a decisão acima (que rejeitou uma pastilha por cabeça), e
+  não contradiz: as duas respondem a perguntas diferentes. O círculo responde
+  *quem está com quem* — uma relação, que uma etiqueta por cabeça comunica mal.
+  O balão responde *está acontecendo coisa ali?*, e essa nenhum desenho parado
+  responde: um decalque imóvel no chão lê como marcação de cenário. O teste que
+  separa os dois é o conteúdo: a pastilha antiga tinha a palavra "booble" (era
+  filiação, e redundante); o balão não tem texto e não diz de qual booble a
+  pessoa é.
+- **O balão anima sempre, não só quando a pessoa fala.** Amarrar ao `speaking`
+  seria mais literal e está errado: o balão apareceria e sumiria a cada frase, o
+  que lê como glitch, e duplicaria o anel verde que já existe para exatamente
+  isso. "Tem uma conversa rolando aqui" é uma propriedade do grupo enquanto ele
+  existe, não de quem está com o microfone agora.
+- **As fases começam espalhadas.** Todo mundo cochichando no mesmo compasso lê
+  como animação de carregamento, não como gente conversando. A fase inicial sai
+  de um contador vezes a razão áurea (`BoobleWhisper.phaseSeed`), e não de
+  `Math.random`, para o resultado ser reproduzível entre execuções.
+- **Ao lado da cabeça, e não acima do nome.** Acima do nome é onde mora a
+  pastilha de ausente, a ~70px do centro do avatar — longe do grupo e perto do
+  nome de quem está atrás. Do lado da cabeça o balão fica na faixa da telinha do
+  `AwayIndicator`, que já se provou funcionar em todos os personagens. Não há
+  colisão entre os dois: ficar ausente **sai** da booble.
 - **As boobles dos outros também aparecem, mais fracas.** É o que explica por que
   aquelas duas pessoas ficaram mais baixas; esconder produziria "meu áudio mudou
   e não sei por quê". A sua é mais forte para não haver dúvida sobre qual é.
@@ -247,7 +277,7 @@ maior, você entraria e seria expulso no mesmo instante.
 - **A tela compartilhada acompanha a booble.** Membro passa pelo mesmo portão que
   passa no áudio: "estamos juntos" tem de valer para a tela também, senão quem
   atravessa a porta perde o que o outro está mostrando. Quem está **fora**
-  continua na regra de antes — não existe "ver a tela a 10%".
+  continua na regra de antes — não existe "ver a tela a 7%".
 - **Nada é persistido.** A booble morre com a conexão, como o `away`. Quem cai e
   volta é um `socket.id` novo, logo alguém sem booble — o que é o certo, porque a
   booble pressupõe estar perto de alguém **agora**.
@@ -263,18 +293,29 @@ maior, você entraria e seria expulso no mesmo instante.
 - **A prioridade na fila de subscrição é obrigatória, não otimização.** Tirar os
   membros da frente do `slice(0, MAX_AUDIO_SUBSCRIPTIONS)` deixa membro sem
   stream, e "sem stream" é silêncio, não volume baixo.
-- **`BOOBLE_OUTSIDE_VOLUME` é ganho linear**, não perceptual: 0,1 de amplitude
-  soa perto de −20 dB. Pior, ele **multiplica a rampa** — alguém no limite do
-  raio audível, ouvido através de uma booble, sai em 0,001 (inaudível). Isso é
-  aceitável (a pessoa já estava quase inaudível), mas é a explicação para "não
-  ouço nada de quem está longe estando numa booble".
+- **`BOOBLE_OUTSIDE_VOLUME` é ganho linear**, não perceptual: 0,07 de amplitude
+  soa perto de −23 dB. Pior, ele **multiplica a rampa** — alguém no limite do
+  raio audível, ouvido através de uma booble, sai perto de 0,0007 (inaudível).
+  Isso é aceitável (a pessoa já estava quase inaudível), mas é a explicação para
+  "não ouço nada de quem está longe estando numa booble".
 - **`BOOBLE_JOIN_RADIUS` tem de ser `<=` `BOOBLE_EXIT_RADIUS`.** Inverter isso
   faz a pessoa entrar e ser expulsa no mesmo instante, com dois broadcasts, e o
   sintoma na tela é um botão que "não funciona".
-- **O `Avatar` não sabe da booble.** Se você for adicionar algum efeito visual
-  por pessoa, ele não existe ali — o desenho da booble é de grupo e vive em
-  `BoobleRings`, alimentado pelo `Game`. Por isso `debugFrame()` não tem `booble`;
-  quem expõe é `__togetherAvatars()`, a partir do mapa do `Game`.
+- **A booble é desenhada em DOIS lugares, e de propósito.** O círculo de grupo
+  vive em `BoobleRings` (camada abaixo dos avatares, alimentada pelo `Game`, que
+  tem as posições); o balão de cochicho vive dentro do `Avatar`, porque é por
+  pessoa e precisa acompanhar quem anda e ser ocultado na mesma ordem em y que o
+  resto do avatar. Efeito de grupo novo → `BoobleRings`; efeito por pessoa →
+  `Avatar.setBooble`.
+- **O `Avatar` sabe que está numa booble, mas não em QUAL.** `debugFrame()` expõe
+  `whispering` (booleano, do próprio avatar) e o `booble` com o id sai do mapa do
+  `Game` em `__togetherAvatars()`. Os dois vêm de fontes diferentes **de
+  propósito**: é a comparação entre eles que pega um avatar que ficou sem
+  `setBooble` — e um avatar sem balão no meio de um grupo é invisível a olho nu.
+- **Quem entra numa booble por dois caminhos precisa dos dois ligados.**
+  `Game.setPlayerBooble` cobre a mudança ao vivo e `Game.addRemote` cobre quem já
+  estava numa quando abrimos a aba. Esquecer o segundo dá o bug clássico "só
+  aparece para quem estava online".
 - **O círculo é redesenhado a cada frame** (`Graphics.clear()` + uma elipse por
   booble). É de propósito: as posições dos remotos são interpoladas, então um
   desenho por evento ficaria colado no lugar antigo. O custo é zero quando não há
@@ -282,7 +323,8 @@ maior, você entraria e seria expulso no mesmo instante.
 - **A precedência dos micro-badges na lista é `ausente > booble > voz`** e eles
   são exclusivos por construção, porque só um pode carregar o `margin-left:auto`.
 - **`--violet` está em dois lugares**: `styles.css` e `game/BoobleRings.ts` (Pixi
-  não lê CSS). Mudou um, muda o outro.
+  não lê CSS). Mudou um, muda o outro. O `BoobleWhisper` **importa** o de
+  `BoobleRings` em vez de repetir o literal — não crie um terceiro.
 - **Zerar em `store.leave()`.** `selfBooble` e `boobleReachIds` entraram na lista
   de campos de sessão; esquecer isso deixa o aviso pendurado ao voltar ao lobby.
 - **Mudança em `shared/`** — rode `npm run typecheck` (server + client).
@@ -315,26 +357,33 @@ regressão de quem não está em booble nenhuma.
 
 1. Os três juntos e falando: todos se ouvem normal (regressão).
 2. Ana **encosta** no Bruno (até 2 tiles — o botão só aparece aí) e clica em
-   `booble`. Nas três abas: círculo violeta no chão em volta dos dois, selo na
-   lista, e aviso violeta com **Sair** para Ana e Bruno. Na aba da Cida o círculo
-   aparece **mais fraco** (não é a booble dela).
+   `booble`. Nas três abas: círculo violeta no chão em volta dos dois, **balão de
+   cochicho ao lado da cabeça dos dois** (e de mais ninguém), selo na lista, e
+   aviso violeta com **Sair** para Ana e Bruno. Na aba da Cida o círculo aparece
+   **mais fraco** (não é a booble dela) — o balão, não: ele é igual para todos.
+   Os pontinhos da Ana e do Bruno **não** podem estar em uníssono.
 3. **A prova**, em `__togetherVoice()`:
-   - na aba da Ana: `participants[Bruno].volume === 1` e `[Cida].volume ≈ 0.1`;
-   - na aba da Cida: `[Ana].volume ≈ 0.1` **e** `[Bruno].volume ≈ 0.1` (simetria);
+   - na aba da Ana: `participants[Bruno].volume === 1` e `[Cida].volume ≈ 0.07`;
+   - na aba da Cida: `[Ana].volume ≈ 0.07` **e** `[Bruno].volume ≈ 0.07` (simetria);
    - `elVolume` e `tocando` confirmam que o som chega — "assinado" não basta;
    - `minhaBooble` no topo e `booble` por participante.
+   - em `__togetherAvatars()`: `whispering === true` exatamente para quem tem
+     `booble !== null`, nas três abas. É o que pega o balão faltando em alguém.
 4. Cida chega perto e clica em `entrar` na linha da Ana: os três a 100%, e o
    **círculo cresce** para envolver os três. Ela sai: o círculo encolhe.
-5. Cida clica em **Sair**: volta a ouvir os dois a 10%.
+5. Cida clica em **Sair**: volta a ouvir os dois a 7%.
 6. Bruno entra na sala de reunião: Ana continua ouvindo Bruno a 100%; Cida (sem
    booble, fora da sala) para de ouvi-lo, como hoje.
 7. Bruno dá **três passos** para o lado (não precisa ir longe): círculo, selo e
    aviso somem nas três abas e os volumes voltam ao normal. Com dois passos (menos
    de 3 tiles) ele **continua** dentro — é a folga de histerese.
 8. Bruno fica **ausente** dentro da booble: sai dela, e Ana pode `chamar`.
-9. Zoom mínimo e máximo: o círculo acompanha a câmera e continua sob os pés.
-10. **Entrar depois**: 4ª aba com a booble já formada — o círculo tem de aparecer
-    de saída (vem do `world:snapshot` → `addRemote` → mapa de boobles do `Game`).
+9. Zoom mínimo e máximo: o círculo acompanha a câmera e continua sob os pés, e o
+   balão continua **legível** — a 0.5x ele tem ~9×5px, que é o zoom em que ele
+   corre risco de virar borrão.
+10. **Entrar depois**: 4ª aba com a booble já formada — o círculo **e os balões**
+    têm de aparecer de saída (o círculo vem do `world:snapshot` → `addRemote` →
+    mapa de boobles do `Game`; o balão vem do `setBooble` dentro do `addRemote`).
 11. **Sem LiveKit**: com as `LIVEKIT_*` vazias, o botão `booble` ainda tem de
     aparecer e a booble ainda tem de se formar (só não há áudio para priorizar).
 
@@ -345,7 +394,18 @@ O caminho principal foi **confirmado no navegador** pelo usuário em 2026-08-21
 raio de 3 tiles). Ficaram os cantos: duas boobles próximas se sobrepondo, a
 booble de outra pessoa vista de fora, o "+N" do aviso, zoom, e o ambiente **sem
 LiveKit** (que é onde o `boobleReachIds` foi corrigido por leitura de código, não
-por observação). Ver `PENDENTES.md`.
+por observação).
+
+Duas entregas posteriores do mesmo dia **não foram vistas na tela**:
+
+- **`BOOBLE_OUTSIDE_VOLUME` a 0,07.** A confirmação de ouvido acima foi feita com
+  `0.1`; falta ouvir se a 0,07 a sala **continua perceptível** de dentro da
+  booble (7% que na prática virou 0 quebra a promessa da feature).
+- **O balão de cochicho.** Só `tsc`, `vite build` e a conferência da geometria e
+  da onda por cálculo. Os dois riscos reais são a posição fixa (`CX`/`BOTTOM`)
+  em personagens de altura diferente e o tamanho no zoom mínimo.
+
+Ver `PENDENTES.md`.
 
 ## Relacionado
 

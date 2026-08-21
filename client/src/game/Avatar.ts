@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js';
 import { PROXIMITY_RADIUS, TILE_SIZE } from '@together/shared';
 import { AwayIndicator } from './AwayIndicator';
+import { BoobleWhisper } from './BoobleWhisper';
 import type { CharacterFrames, Facing, SitFacing } from './sprites';
 
 const NAME_STYLE = new TextStyle({
@@ -31,12 +32,15 @@ export class Avatar {
   private label: Text;
   /** criado só na primeira ausência — ver setAway */
   private awayIndicator: AwayIndicator | null = null;
+  /** criado só na primeira booble — ver setBooble */
+  private whisper: BoobleWhisper | null = null;
 
   private facing: Facing = 'down';
   private moving = false;
   /** null = de pé; senão, para que lado está sentado */
   private sitting: SitFacing | null = null;
   private away = false;
+  private inBooble = false;
   /** empurra o avatar para a frente na ordenação por y (ver setSitting) */
   private zBias = 0;
   private frameTimer = 0;
@@ -150,19 +154,36 @@ export class Avatar {
     this.awayIndicator?.setVisible(away);
   }
 
-  /*
-   * A booble NÃO desenha nada no avatar de propósito.
+  /**
+   * Numa booble: liga o balãozinho de cochicho ao lado da cabeça.
    *
-   * A primeira versão tinha uma pastilha "booble" aqui, no molde da de ausente.
-   * Ela foi trocada por um círculo no chão em volta do GRUPO
-   * (`game/BoobleRings.ts`), porque a informação que importa numa booble é
-   * "quem está com quem", e isso é uma relação — uma pastilha por cabeça obriga
-   * quem olha a ler três etiquetas e concluir o grupo por conta própria. O
-   * círculo cresce quando alguém entra, então também mostra o tamanho.
+   * Cuidado com o que este método NÃO é. Ele não é a pastilha "booble" que a
+   * primeira versão da feature tinha aqui e que foi removida de propósito: uma
+   * etiqueta por cabeça obriga quem olha a ler três rótulos e deduzir o grupo,
+   * e *quem está com quem* é uma relação — quem responde isso é o círculo no
+   * chão (`game/BoobleRings.ts`), desenhado pelo `Game`, que é quem tem as
+   * posições de todo mundo. O balão responde outra coisa, que nenhum desenho
+   * parado responde: **tem conversa acontecendo ali**. Por isso ele não tem
+   * texto e não diz de qual booble a pessoa é.
    *
-   * Por isso o avatar não sabe da booble: quem sabe é o `Game`, que tem as
-   * posições de todo mundo — que é o que um desenho de grupo precisa.
+   * Quem chama é o `Game`, a partir de `setPlayerBooble` e do snapshot —
+   * nunca a UI direto (ver `client/src/booble.ts`).
    */
+  setBooble(inBooble: boolean): void {
+    if (this.inBooble === inBooble) return;
+    this.inBooble = inBooble;
+    /**
+     * Criado na primeira booble, e não no construtor, pela mesma razão do
+     * `AwayIndicator`: a maioria dos avatares nunca entra numa, e o balão custa
+     * cinco `Graphics` cada. Depois de criado ele só é escondido — entrar e
+     * sair de booble é barato, e é o que acontece o tempo todo.
+     */
+    if (inBooble && !this.whisper) {
+      this.whisper = new BoobleWhisper();
+      this.view.addChild(this.whisper.view);
+    }
+    this.whisper?.setVisible(inBooble);
+  }
 
   /** Avança a animação. Chamar a cada frame do ticker. */
   update(dt: number): void {
@@ -187,6 +208,7 @@ export class Avatar {
     }
     this.sprite.texture = set[this.frameIndex % set.length];
     this.awayIndicator?.update(dt);
+    this.whisper?.update(dt);
   }
 
   /**
@@ -212,6 +234,13 @@ export class Avatar {
     facing: Facing;
     sitting: SitFacing | null;
     away: boolean;
+    /**
+     * O balão de cochicho está ligado. Sai daqui, e não do mapa de boobles do
+     * `Game`, de propósito: é justamente a divergência entre os dois que este
+     * campo existe para pegar (um avatar que ficou sem receber `setBooble` é
+     * invisível a olho nu no meio de um grupo).
+     */
+    whispering: boolean;
     frameX: number;
     frameY: number;
   } {
@@ -220,6 +249,7 @@ export class Avatar {
       facing: this.facing,
       sitting: this.sitting,
       away: this.away,
+      whispering: this.inBooble,
       frameX: this.sprite.texture.frame.x,
       frameY: this.sprite.texture.frame.y,
     };

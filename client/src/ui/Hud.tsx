@@ -126,7 +126,7 @@ export function Hud() {
               */
               <span
                 className="booble"
-                title="Na sua booble: vocês se ouvem a 100% e o resto da sala fica a 10%"
+                title="Na sua booble: vocês se ouvem a 100% e o resto da sala fica a 7%"
               >
                 booble
               </span>
@@ -146,7 +146,7 @@ export function Hud() {
                     p.boobleId !== null
                       ? `Entrar na booble de ${p.name}` +
                         (selfBooble !== null ? ' (você sai da sua)' : '')
-                      : `Abrir uma booble com ${p.name}: vocês se ouvem a 100% e o resto da sala a 10%`
+                      : `Abrir uma booble com ${p.name}: vocês se ouvem a 100% e o resto da sala a 7%`
                   }
                 >
                   {p.boobleId !== null ? 'entrar' : 'booble'}

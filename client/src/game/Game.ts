@@ -127,8 +127,10 @@ export class Game {
       {
         id: this.socket.id ?? '',
         self: true,
-        // a booble sai daqui e não do Avatar: o desenho dela é de grupo, então o
-        // avatar não a conhece (ver o comentário em `Avatar`)
+        // o ID da booble sai daqui, e não do Avatar: o avatar sabe que está numa
+        // (é o que o `whispering` do `debugFrame` diz), mas não em qual — quem
+        // desenha o grupo é o `Game`. Comparar os dois é o que pega um avatar
+        // que ficou sem `setBooble`.
         booble: this.selfBooble,
         ...this.local.avatar.debugFrame(),
       },
@@ -280,6 +282,7 @@ export class Game {
     remote.setSitting(p.sitting);
     remote.avatar.setAway(p.away);
     this.boobles.set(p.id, p.boobleId);
+    remote.avatar.setBooble(p.boobleId !== null);
     this.remotes.set(p.id, remote);
     this.playersLayer.addChild(remote.avatar.view);
   }
@@ -396,8 +399,18 @@ export class Game {
   setPlayerBooble(id: string, boobleId: string | null): void {
     if (id === this.socket.id) this.selfBooble = boobleId;
     else this.boobles.set(id, boobleId);
-    // nada de desenho aqui: o círculo é redesenhado a cada frame a partir das
-    // posições (que se movem), então basta o estado estar certo
+    /**
+     * O CÍRCULO no chão não é desenhado aqui: ele é redesenhado a cada frame a
+     * partir das posições (que se movem), então para ele basta o estado acima
+     * estar certo.
+     *
+     * O BALÃO de cochicho é ligado aqui porque ele vive dentro do avatar, que é
+     * quem já acompanha a pessoa. Um remoto que ainda não chegou (o
+     * `player:booble` pode preceder o `player:joined`) cai no `?.` e é coberto
+     * pelo `addRemote`, que lê o `boobleId` do próprio snapshot.
+     */
+    const avatar = id === this.socket.id ? this.local.avatar : this.remotes.get(id)?.avatar;
+    avatar?.setBooble(boobleId !== null);
   }
 
   /** Só avisa o store quando a dica muda, para não re-renderizar a cada frame. */

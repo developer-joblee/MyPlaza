@@ -198,7 +198,7 @@ export class World {
    * Tira alguém da booble em que está.
    *
    * **Dissolve a booble se sobrar uma pessoa só**: uma booble de um não prioriza
-   * nada — ela apenas baixaria a sala inteira a 10% para quem ficou, que é o
+   * nada — ela apenas baixaria a sala inteira a 7% para quem ficou, que é o
    * oposto do que a feature promete. Por isso pode devolver dois players.
    */
   leaveBooble(id: string): PlayerState[] {

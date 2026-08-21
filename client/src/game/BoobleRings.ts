@@ -23,8 +23,14 @@ import { TILE_SIZE } from '@together/shared';
  * não-comerciais e todo asset exige crédito no README).
  */
 
-/** Violeta da booble — o MESMO valor de `--violet` no `styles.css`. */
-const VIOLET = 0x8e7dbe;
+/**
+ * Violeta da booble — o MESMO valor de `--violet` no `styles.css`.
+ *
+ * Exportado porque o `BoobleWhisper` usa a mesma cor: um segundo literal seria
+ * um terceiro lugar a manter em sincronia (o Pixi não lê CSS, então o do CSS já
+ * é inevitável).
+ */
+export const VIOLET = 0x8e7dbe;
 
 /** Achatamento da elipse: a mesma proporção do anel de "falando" (13×6). */
 const FLATTEN = 0.46;

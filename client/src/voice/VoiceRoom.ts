@@ -591,7 +591,7 @@ export class VoiceRoom {
       /**
        * O badge "voz" no HUD tem de refletir a mesma regra, senão mente — e
        * "audível" é volume maior que zero, não um raio repetido à mão. Quem se
-       * ouve a 10% através de uma booble continua sendo alguém que você ouve.
+       * ouve a 7% através de uma booble continua sendo alguém que você ouve.
        * Este é também o predicado que o HUD usa para saber com quem dá para
        * ABRIR uma booble, e é por isso que ele precisa ser exatamente este.
        *
@@ -619,7 +619,7 @@ export class VoiceRoom {
        * booble passa pelo mesmo motivo que passa no áudio — "estamos juntos"
        * tem de valer para a tela também, senão quem atravessa a porta perde o
        * que o outro está mostrando. Quem está FORA continua na regra de antes:
-       * não existe "ver a tela a 10%".
+       * não existe "ver a tela a 7%".
        */
       if (
         mesmaBooble(info.booble) ||

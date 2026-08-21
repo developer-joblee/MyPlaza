@@ -52,7 +52,7 @@ export const NUDGE_MAX_NAMES = 2;
 // ------------------------------------------------------------------- booble
 //
 // Uma "booble" é um grupo ad-hoc que PRIORIZA o áudio de quem está dentro, sem
-// isolar ninguém: dentro se ouve 100%, e a sala vira ruído de fundo a 10% — nos
+// isolar ninguém: dentro se ouve 100%, e a sala vira ruído de fundo a 7% — nos
 // dois sentidos. É o que dispensa "chamar no particular" para trocar duas
 // frases dentro de uma sala grande. Ver `docs/features/booble.md`.
 //
@@ -69,11 +69,12 @@ export const NUDGE_MAX_NAMES = 2;
  * competir com a conversa que você escolheu.
  *
  * Atenção: é ganho **linear** de `HTMLAudioElement.volume`, não perceptual —
- * 0,1 de amplitude soa perto de −20 dB, mais baixo do que "10%" sugere ao
- * ouvido. É literalmente o que foi pedido, e este é o único botão a girar se na
- * prática ficar inaudível demais.
+ * 0,07 de amplitude soa perto de −23 dB, mais baixo do que "7%" sugere ao
+ * ouvido. Começou em 0,1 e foi baixado para 0,07 a pedido: a sala continuava
+ * competindo demais com a conversa da booble. Este é o único botão a girar se
+ * na prática ficar inaudível demais.
  */
-export const BOOBLE_OUTSIDE_VOLUME = 0.1;
+export const BOOBLE_OUTSIDE_VOLUME = 0.07;
 
 /**
  * Distância máxima para ENTRAR numa booble: **2 tiles**.
@@ -94,7 +95,7 @@ export const BOOBLE_JOIN_RADIUS = TILE_SIZE * 2;
  *
  * Um tile a mais que a entrada, e não mais que isso. Sair da booble tem de ser
  * dar dois passos para o lado — se sair exigisse atravessar a sala, o cochicho
- * ficaria pendurado atrás de você e metade do escritório soaria a 10% por causa
+ * ficaria pendurado atrás de você e metade do escritório soaria a 7% por causa
  * de uma conversa que já acabou.
  *
  * O tile de folga é histerese, e é obrigatório: com um raio só, quem para
@@ -111,7 +112,7 @@ export const BOOBLE_EXIT_RADIUS = TILE_SIZE * 3;
 
 /**
  * Teto de gente numa booble. Existe porque uma booble do tamanho da sala não
- * prioriza nada — ela só deixa a sala 10% mais baixa para quem sobrou fora, o
+ * prioriza nada — ela só deixa a sala a 7% para quem sobrou fora, o
  * que é o oposto do que a feature promete. Conversa paralela de nove pessoas é
  * uma reunião, e para isso o mapa já tem sala fechada.
  */

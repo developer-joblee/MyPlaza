@@ -234,7 +234,7 @@ sessão), mas nunca foi observado com queda real.
 # Booble (conversa paralela) — 2026-08-21
 
 Feature nova: [`docs/features/booble.md`](docs/features/booble.md). Grupo ad-hoc
-que prioriza áudio: dentro 100%, fora 10% nos dois sentidos. A filiação é do
+que prioriza áudio: dentro 100%, fora 7% nos dois sentidos. A filiação é do
 servidor (raio, zona, teto); o volume é de cada cliente.
 
 **Revisado no mesmo dia, depois do primeiro olhar do usuário:** os raios eram
@@ -282,7 +282,7 @@ E, sobre os raios novos (segunda rodada, 8/8):
 
 `audioVolumeFor` é função pura, então foi chamada direto. Cobre a **regressão**
 (sem booble em jogo, tudo idêntico a antes: rampa, zona diferente = 0, sala =
-plano), a booble atravessando zona e distância, os 10% nos **dois** sentidos,
+plano), a booble atravessando zona e distância, os 7% nos **dois** sentidos,
 booble alheia contando como "fora", `0.1 × 0 = 0` (a sala fechada não é furada) e
 a **simetria exata** em cinco distâncias.
 
@@ -299,9 +299,10 @@ conferido item por item:
 - ✅ **o círculo no chão**, que era o maior risco desta entrega: a geometria
   (`PAD`, `MIN_RADIUS`, `FLATTEN`) e a camada entre o mapa e os avatares. Nada
   disso se verifica por `tsc`;
-- ✅ a atenuação sendo audível na prática — ou seja, `BOOBLE_OUTSIDE_VOLUME = 0.1`
+- ✅ a atenuação sendo audível na prática — ou seja, `BOOBLE_OUTSIDE_VOLUME`
   não ficou inaudível ao ponto de a feature parecer quebrada, que era a dúvida
-  registrada aqui;
+  registrada aqui. **Atenção: isso foi verificado com `0.1`**; o valor hoje é
+  `0.07` (ver o item 0 abaixo);
 - ✅ sair da booble no raio novo (3 tiles) sendo prático.
 
 ### Regressão
@@ -315,6 +316,48 @@ continua como está.
 ## Falta verificar (em ordem de importância)
 
 O caminho principal está confirmado. O que sobra são os cantos.
+
+### 0. `BOOBLE_OUTSIDE_VOLUME` a 0,07 continua audível (2026-08-21)
+
+O valor foi baixado de `0.1` para `0.07` a pedido do usuário. A verificação de
+ouvido acima foi feita com `0.1`, então ela **não** cobre o valor atual. O ganho
+é linear: 0,07 soa perto de −23 dB, ~3 dB abaixo do que já era baixo. Como ele
+ainda multiplica a rampa de distância, quem está no limite do raio audível sai
+praticamente inaudível através de uma booble — o que já era verdade antes, só
+que agora um pouco mais cedo.
+
+O que confirmar em duas abas: estando numa booble, a sala **continua perceptível**
+(é a promessa da feature — 7% não pode ter virado 0 na prática). Se tiver, o botão
+a girar é este único número em `shared/src/constants.ts`.
+
+### 0.5. O balão de cochicho (2026-08-21) — nada disto foi visto na tela
+
+Indicador novo por pessoa: três pontinhos violeta em onda dentro de um balãozinho
+ao lado da cabeça de quem está numa booble (`client/src/game/BoobleWhisper.ts`).
+`tsc` e `vite build` passam, e a geometria e a onda foram conferidas por
+**cálculo** (os pontos ficam dentro do corpo do balão, a onda corre da esquerda
+para a direita em 1,15s, as fases iniciais saem espalhadas). Nada disso é ver.
+
+O que falta olhar, em ordem:
+
+- **a posição do balão em cada personagem.** Ele usa coordenadas FIXAS
+  (`CX = 15`, `BOTTOM = -26`), copiando a decisão da telinha do `AwayIndicator`,
+  em vez de sair do `label.y` como a pastilha de ausente. Se algum boneco tiver a
+  cabeça em outra altura, o balão encosta nela ou flutua solto. **Testar com mais
+  de um personagem.**
+- **o tamanho no zoom mínimo (0.5x).** O balão tem 18×11px de mundo e os pontos
+  1,5px de raio. A 0.5x isso é ~9×5px com pontos de menos de 1px — pode virar
+  borrão ou sumir. Era para ser "bem pequeno", mas invisível não serve.
+- **legibilidade em grupo cheio.** Com 8 membros são 8 balões animando ao mesmo
+  tempo perto uns dos outros. As fases estão espalhadas de propósito, mas se lê
+  como poluição ou não, só olhando.
+- **o balão sobre fundo claro e sobre fundo escuro** — o corpo é o mesmo
+  `INK 0x181a22` a 85% do `AwayIndicator`, que já se provou, mas o contorno
+  violeta a 55% é mais fraco que o âmbar a 55%.
+- **`addRemote`**: abrir uma 4ª aba com a booble já formada e conferir que os
+  balões aparecem de saída (é o caminho que o `setPlayerBooble` sozinho **não**
+  cobre).
+- **`whispering` batendo com `booble`** em `__togetherAvatars()` nas três abas.
 
 ### 1. Os detalhes visuais que o caminho principal não separa
 

@@ -128,7 +128,7 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Parar de ouvir todos | Botão de fone na barra inferior (muta seu microfone junto) |
 | Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular, com um feed rolando ao lado da cabeça e a pastilha **ausente** acima do nome. Andar volta ao normal, e suas preferências de microfone e fone são preservadas — ver [Modo ausente (celular)](docs/features/modo-ausente.md) |
 | Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
-| Conversa paralela (**booble**) | Chegue **ao lado** de alguém (2 tiles) e clique em **booble** na lista. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 10% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
+| Conversa paralela (**booble**) | Chegue **ao lado** de alguém (2 tiles) e clique em **booble** na lista. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 7% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra, e um balãozinho de cochicho ao lado de cada cabeça mostra que a conversa está rolando. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
 | Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Chat | Painel no canto inferior direito (global) |
@@ -145,7 +145,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 |---|---|---|
 | Voz por proximidade | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `voice/proximity.ts` |
 | Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
-| Booble (conversa paralela: dentro 100%, fora 10%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `server/src/world.ts` |
+| Booble (conversa paralela: dentro 100%, fora 7%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `client/src/game/BoobleWhisper.ts`, `server/src/world.ts` |
 | Soundboard gamificado (sons próprios, liberados por tempo na plataforma) | [Soundboard gamificado](docs/features/soundboard.md) | `client/src/soundboard/`, `server/src/soundboard.ts`, `shared/src/levels.ts` |
 | Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
 | Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
@@ -327,7 +327,7 @@ três coisas ao mesmo tempo — o volume, o badge `voz` do HUD e o anel de "fala
 —, então os três não podem discordar. Se você for mexer em audibilidade, é ali.
 
 A **[booble](docs/features/booble.md)** é a terceira camada: um grupo ad-hoc que
-*prioriza* em vez de isolar (dentro 100%, fora 10%, nos dois sentidos) e que
+*prioriza* em vez de isolar (dentro 100%, fora 7%, nos dois sentidos) e que
 **atravessa** a parede de uma zona depois de formado — mas só se forma entre
 pessoas na mesma zona, justamente para não furar o parágrafo acima. Os raios dela
 são de cochicho (2 tiles para entrar, 3 para permanecer), bem menores que os
