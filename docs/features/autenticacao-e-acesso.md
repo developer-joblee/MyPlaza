@@ -4,7 +4,9 @@
 2026-08-20. Sem envio de e-mail (por decisão, até haver domínio): sem confirmação
 de cadastro e sem recuperação de senha. O acesso a um mundo é concedido pelo
 **ID** da conta.
-**Última atualização:** 2026-08-20
+**Última atualização:** 2026-08-21 — o token de um socket vivo passou a ser
+renovável (`auth:token`); antes ele congelava no handshake e uma sessão de mais de
+uma hora recebia "sua sessão expirou" sem motivo.
 
 ## O que faz
 
@@ -103,6 +105,63 @@ O `auth` do Socket.IO é passado como **função**, não objeto: ele é reavalia
 cada tentativa de conexão, então a reconexão pega o token que o SDK renovou. Com
 um objeto fixo, uma sessão longa reconectaria com token vencido.
 
+### O token de um socket que não cai (`auth:token`)
+
+A função `auth` acima resolve a **reconexão**, e só ela. O que ela não resolve — e
+foi um bug real — é a conexão que **fica de pé**: o Socket.IO só reavalia aquela
+função em tentativa de conexão, e `socket.handshake.auth` é fotografado no
+momento do handshake, imutável dali em diante. O access token do Supabase vence
+em ~1h e o SDK do navegador o renova em background, então, passada a primeira
+hora de aba aberta, o servidor seguia validando a **cópia velha**.
+
+O sintoma: toda operação por ack de dentro do jogo (soundboard, volume por
+pessoa) passava a responder `invalid-token`, e a tela dizia *"Sua sessão expirou.
+Entre de novo."* com a sessão perfeitamente viva. Sem a conexão cair não havia
+saída — reabrir o painel repetia a mensagem, o que é exatamente o "aparece a todo
+momento e não tem motivo" que levou à investigação.
+
+A correção tem dois lados:
+
+- **Cliente:** `onAccessTokenChange` (em `auth/supabase.ts`) escuta o
+  `onAuthStateChange` do SDK e avisa quando o token **muda de valor** — filtrar
+  pelo valor, e não pelo nome do evento, cobre `TOKEN_REFRESHED`, `SIGNED_IN` e
+  `USER_UPDATED` com uma regra só, sem depender da lista de nomes de uma versão
+  do SDK. `net/authToken.ts` emite `auth:token` (é `net/`, porque emite).
+- **Servidor:** `socketAuth.ts` guarda em `socket.data.accessToken` — **só o que
+  verifica**, e nunca o token de outra conta. Todo consumidor lê por
+  `socketToken(socket)`, que devolve o empurrado e cai no handshake. Ler
+  `socket.handshake.auth.token` direto é o bug de volta.
+
+O evento é **sem ack**, e perder ele não perde nada: com o socket caído o cliente
+não envia (`fire()` devolve `false`) e a reconexão leva o token novo no handshake,
+que é o caminho que sempre funcionou. Também não é canal de login — quem
+autentica a conexão continua sendo o handshake.
+
+### "Não deu para verificar" ≠ "sessão expirou"
+
+`verifyAccessToken` devolvia `AuthUser | null`, e `null` significava quatro
+coisas: token torto, token vencido, token revogado e **o Supabase não
+respondeu** — incluindo o timeout de 2,5s do `guard`. Os quatro chegavam à tela
+como `invalid-token`, ou seja, mandando a pessoa deslogar por causa de um soluço
+de rede. Era a segunda fonte da mensagem fantasma, e a que explicava as
+ocorrências antes de completar uma hora.
+
+Hoje ela devolve `VerifyResult`: `invalid` (401/403 — decisão do Supabase) ou
+`unavailable` (timeout, exceção, projeto errado). **As duas recusam** — a função
+continua fail-closed —, mas `unavailable` vira `error` no protocolo, e o texto na
+tela passa a ser "não deu para falar com o servidor" em vez de "entre de novo". É
+a mesma correção que o `whoAmI` do lobby já tinha recebido, agora aplicada na
+raiz.
+
+### Um `whoAmI` só para dentro do mundo
+
+`soundboard.ts` e `audioPrefs.ts` tinham a mesma verificação duplicada — o
+comentário do segundo dizia, literalmente, "cópia do `whoAmI` do soundboard".
+Agora os dois chamam `whoIsSocket` (`socketAuth.ts`). O lobby mantém o seu, e a
+diferença é real: lá o perfil é **criado** se não existir, porque a pessoa ainda
+não entrou em mundo nenhum; aqui `socket.data.profileId` já existe (só é escrito
+no `join`, depois do portão inteiro), e criar perfil seria errado.
+
 **O portão**, em `server/src/handlers.ts`, na ordem — e qualquer passo que
 devolva `null` recusa:
 
@@ -144,16 +203,18 @@ o local ficaria "cheio" sem ninguém dentro.
 | `shared/src/constants.ts` | `isProfileId()` — validação do ID nos dois lados |
 | `server/src/db.ts` | `addMemberToWorld()`; `inviteToWorld`/`acceptInvite` dormentes |
 | `client/src/net/socket.ts` | token no handshake, em forma de função |
+| `client/src/net/authToken.ts` | `bindAccessToken()` — empurra o token renovado para o socket vivo |
+| `server/src/socketAuth.ts` | `socketToken()`, `whoIsSocket()` e o handler de `auth:token` |
 | `client/src/net/bindStore.ts` | escuta `join:denied` |
 | `client/src/ui/JoinScreen.tsx` | motivo da recusa em português, e "sair da conta" |
-| `server/src/auth.ts` | `verifyAccessToken()` — fail-closed |
+| `server/src/auth.ts` | `verifyAccessToken()` — fail-closed, e `invalid` × `unavailable` |
 | `server/src/supabase.ts` | conexão, timeout e dedupe (usado por `auth.ts` e `db.ts`) |
 | `server/src/db.ts` | `findOrCreateProfile`, `findMembership`, `acceptInvite`, `isPlaceMember`, `resolvePlace` |
 | `server/src/handlers.ts` | o portão, e todo broadcast passando a usar `worldKey` |
 | `server/src/world.ts` | `getWorld(key, scenarioId)`, `scenarioWorldKey()`, `world.size` |
 | `server/src/voice.ts` | `roomNameFor(worldKey)` — isolamento da voz |
 | `shared/src/types.ts` | `JoinDeniedReason` |
-| `shared/src/events.ts` | `join` sem identidade; evento `join:denied` |
+| `shared/src/events.ts` | `join` sem identidade; eventos `join:denied` e `auth:token` |
 | `db/migrations/0004_access.sql` | `places.capacity`, índice de convite por e-mail, `v_place_occupancy` |
 | `db/migrations/0007_profile_id_default.sql` | `profiles.id` ganha `default gen_random_uuid()` — sem isso ninguém entra |
 | `db/migrations/0008_grants.sql` | `grant` nas tabelas para o `service_role` — sem isso, `42501` em tudo |
@@ -237,6 +298,22 @@ nenhuma política de escrita. A `service_role` continua só no servidor.
   novo leva `no-invite` e parece que o app está quebrado.
 - **`auth` do socket tem de ser função.** Trocar por objeto faz a reconexão
   levar token vencido e recusar com `invalid-token` no meio da sessão.
+- **`socket.handshake.auth` não muda depois da conexão.** É a armadilha que
+  gerou o bug: a função `auth` cobre a reconexão e **nada** cobre o socket que
+  fica de pé. Quem quer o token de um socket vivo chama `socketToken(socket)`.
+  Um `socket.handshake.auth.token` novo em qualquer handler do servidor é o bug
+  de volta, e ele só aparece **uma hora depois** — nunca em teste curto. O grep
+  que guarda isso: `grep -rn "handshake.auth" server/src` só deve achar
+  `socketAuth.ts`.
+- **`auth:token` não autentica ninguém.** Ele só atualiza o token de uma conexão
+  que o handshake já autenticou, e o servidor guarda apenas o que verifica —
+  nunca o token de outra conta. Aceitar sem verificar transformaria um evento de
+  manutenção em porta de entrada.
+- **`unavailable` não pode virar `invalid-token`.** Se alguém colapsar o
+  `VerifyResult` de volta em `AuthUser | null` "para simplificar", um timeout de
+  2,5s volta a dizer *"Sua sessão expirou. Entre de novo."* — é a terceira vez
+  que esta mesma confusão aparece neste repo (antes no `ensureProfile` do lobby e
+  no `profiles.id` sem default da `0007`).
 - **Mudar `roomNameFor` muda a sala de voz de todo mundo.** Quem está numa sala
   antiga não ouve quem entra depois do deploy. É restart, não migração.
 - **Trocar `SUPABASE_ORG_SLUG` troca a empresa e, com ela, os locais** — logo,
@@ -357,6 +434,20 @@ nenhuma política de escrita. A `service_role` continua só no servidor.
    duas pessoas, uma em cada, **não** podem se ver nem se ouvir.
 13. Sessão: derrube a sessão no dashboard do Supabase e recarregue — tem que
    voltar para a tela de login.
+14. **Sessão longa (é o bug que motivou a mudança).** Entre num mundo, abra o
+   painel do soundboard (tem que listar), e **deixe a aba aberta por mais de uma
+   hora** sem recarregar e sem deixar a conexão cair. Reabra o painel: tem que
+   listar de novo, **sem** "Sua sessão expirou". Os dois sliders de volume por
+   pessoa (menu de contexto do avatar) também têm que gravar. Antes, a partir da
+   marca de 1h, os dois caminhos recusavam para sempre.
+   Atalho para não esperar uma hora: no dashboard do Supabase, **Authentication →
+   Sessions → JWT expiry** para 60s, e repita o teste em dois minutos. Devolva o
+   valor depois.
+15. **Falha de infraestrutura não é sessão vencida.** Com o servidor no ar, mate
+   o acesso ao Supabase (aponte `SUPABASE_URL` para uma porta fechada e
+   reinicie) e tente subir um som: a mensagem tem que ser *"Não deu para falar
+   com o servidor"*, **não** *"Sua sessão expirou"*. No log do servidor, `[db]
+   verifyAccessToken: timeout`.
 
 ## Não verificado
 
@@ -378,7 +469,18 @@ sucesso, `ensureProfile` criando perfil, `lobby:list` inteiro, e o portão do
 - **`myId` na tela e o botão de copiar.** `navigator.clipboard` falha em HTTP fora
   de localhost; o `catch` existe e não rodou.
 - **`capacity`, local restrito e isolamento entre empresas** (passos 10 a 12).
-- **Renovação de token em sessão longa (>1h)** e **sessão revogada em outra aba**.
+- **Renovação de token em sessão longa (>1h): o servidor está provado, o
+  navegador não.** O lado servidor foi exercitado ponta a ponta apontando
+  `SUPABASE_URL` para um endpoint HTTP local que responde como o GoTrue — o bug
+  reproduzido (handshake vencido recusando em série) e a correção provada
+  (`auth:token` pela rede, num socket.io real, fazendo a operação voltar a
+  funcionar). O que **falta** é o gatilho no navegador: o SDK disparando
+  `onAuthStateChange` na renovação. Se ele não disparar, o bug volta inteiro.
+  Passo 14 de "Como testar" — com o `JWT expiry` em 60s, são dois minutos.
+- **`unavailable` chegando à tela** como "não deu para falar com o servidor". O
+  ramo do servidor está provado (timeout de 2,5s ⇒ `error`, não
+  `invalid-token`); o texto na tela, não. Passo 15.
+- **Sessão revogada em outra aba.**
 - **`no-invite` é um nome que mente** — não existe mais convite, e o código de
   recusa continua com esse nome.
 

@@ -23,6 +23,7 @@ import {
 import { getWorld, scenarioWorldKey, type ResumePosition } from './world';
 import { mintVoiceToken, roomNameFor, voiceConfigured } from './voice';
 import { authRequired, verifyAccessToken } from './auth';
+import { socketToken } from './socketAuth';
 import { hydratePeerAudio } from './audioPrefs';
 import { dbConfigured } from './supabase';
 import {
@@ -56,6 +57,15 @@ export interface SocketData {
   worldKey?: string;
   /** id da conta no Supabase Auth, verificado no join */
   authUserId?: string;
+  /**
+   * O access token mais novo que o cliente nos deu (`auth:token`).
+   *
+   * Existe porque `socket.handshake.auth` é **imutável** depois da conexão: o
+   * token do handshake vence em ~1h e o socket não cai, então sem isto o
+   * servidor validava para sempre uma cópia velha e recusava tudo com
+   * `invalid-token`. Nunca leia o handshake direto — use `socketToken()`.
+   */
+  accessToken?: string;
   /** o `join` é assíncrono agora (espera o banco); trava contra join duplo */
   joining?: boolean;
   /** identidade estável entre reconexões; ausente = sessão sem persistência */
@@ -177,10 +187,14 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
 
       if (authRequired) {
         // 1. quem é você — a identidade sai do token, nunca do payload
-        const token = String(socket.handshake.auth?.token ?? '');
+        const token = socketToken(socket);
         if (!token) return deny('auth-required');
-        const authUser = await verifyAccessToken(token);
-        if (!authUser) return deny('invalid-token');
+        const verified = await verifyAccessToken(token);
+        // "não deu para verificar" (Supabase fora do ar, timeout) recusa igual,
+        // mas NÃO é sessão vencida: dizer `invalid-token` aqui mandava a pessoa
+        // deslogar por causa de um soluço de rede
+        if (!verified.ok) return deny(verified.reason === 'invalid' ? 'invalid-token' : 'error');
+        const authUser = verified.user;
 
         // 2. o perfil desta conta
         const profile = await findOrCreateProfile(authUser.id, name, safeColor, character);

@@ -12,6 +12,7 @@ import { registerHandlers, type SocketData } from './handlers';
 import { registerLobbyHandlers } from './lobby';
 import { registerSoundboardHandlers } from './soundboard';
 import { registerAudioPrefHandlers } from './audioPrefs';
+import { registerSocketAuthHandlers } from './socketAuth';
 
 const PORT = Number(process.env.PORT) || SERVER_PORT;
 
@@ -78,6 +79,13 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string,
 });
 
 io.on('connection', (socket) => {
+  /**
+   * Primeiro: o token renovado. É transversal (lobby, mundo, soundboard e
+   * volume por pessoa leem o mesmo `socketToken`) e não depende de o `join` ter
+   * acontecido — precisa estar escutando antes de qualquer outra coisa, porque
+   * uma renovação do SDK do Supabase pode chegar a qualquer momento.
+   */
+  registerSocketAuthHandlers(io, socket);
   registerHandlers(io, socket);
   // o lobby usa o mesmo socket que o mundo usaria, mas é outra fase da vida
   // dele: aqui ninguém entrou em lugar nenhum ainda

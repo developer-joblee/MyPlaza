@@ -264,6 +264,13 @@ voz já usa.
 
 ## Armadilhas
 
+- **"Sua sessão expirou" aqui quase nunca é sessão expirada.** O painel mostra
+  essa frase quando o servidor responde `invalid-token`, e a causa real já foi
+  duas coisas diferentes: o token congelado no handshake do socket (aba aberta há
+  mais de 1h) e uma falha de infraestrutura disfarçada. As duas foram corrigidas
+  na raiz — ver
+  [Autenticação e controle de acesso](autenticacao-e-acesso.md) — mas se a
+  mensagem voltar, o suspeito é o token do socket, não a conta de quem reclamou.
 - **A `0010` é obrigatória junto com este código.** Sem ela o painel abre vazio e
   todo upload falha **em silêncio** (`db.ts` é fail-soft) — o motivo aparece só
   como `[db] insertUserSound` no log do servidor.

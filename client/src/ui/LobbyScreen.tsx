@@ -9,6 +9,7 @@ import {
   type WorldPatch,
   type WorldSummary,
 } from '@together/shared';
+import { bindAccessToken } from '../net/authToken';
 import { createLobbyApi } from '../net/lobbyApi';
 import { createSocket, type AppSocket } from '../net/socket';
 import { useStore } from '../state/store';
@@ -65,6 +66,9 @@ export function LobbyScreen() {
   useEffect(() => {
     const socket = createSocket();
     socketRef.current = socket;
+    // o token do handshake vence em ~1h, e o lobby pode ficar aberto mais que
+    // isso: sem isto, o clique seguinte levaria "sua sessão expirou"
+    const unbindToken = bindAccessToken(() => socketRef.current);
     const onConnect = () => {
       void api.list().then((res) => {
         setLoading(false);
@@ -78,6 +82,7 @@ export function LobbyScreen() {
     });
     socket.connect();
     return () => {
+      unbindToken();
       socket.off('connect', onConnect);
       socket.removeAllListeners('connect_error');
       socket.disconnect();

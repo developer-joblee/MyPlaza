@@ -1,7 +1,7 @@
 # Camada de requisição (client → servidor)
 
 **Status:** em uso
-**Última atualização:** 2026-08-20
+**Última atualização:** 2026-08-21
 
 ## O que faz
 
@@ -16,6 +16,7 @@ e a camada deixa de valer.
 ```
 client/src/net/
   socket.ts      cria o socket, com o token no handshake
+  authToken.ts   empurra o token renovado para o socket JÁ conectado
   bindStore.ts   escutas -> store (do servidor para cá; não é requisição)
   request.ts     a primitiva: connected + disconnect + prazo + once()
   lobbyApi.ts    as 12 operações do lobby (com ack)
@@ -55,6 +56,7 @@ serializa por chave: enquanto uma chamada está em vôo, a mesma chave devolve
 | `client/src/net/lobbyApi.ts` | `createLobbyApi(getSocket)` — 12 métodos `async` |
 | `client/src/net/worldApi.ts` | `createWorldApi(getSocket)` — 6 métodos `boolean` |
 | `client/src/net/voiceApi.ts` | `requestVoiceToken()` (era `voice/token.ts`) |
+| `client/src/net/authToken.ts` | `bindAccessToken(getSocket)` — o `auth:token` |
 | `shared/src/types.ts` | `LobbyErrorReason` com `socket-down` e `timeout` |
 | `client/src/runtime.ts` | `runtime.api`, para `Chat` e `presence` alcançarem |
 
@@ -84,6 +86,14 @@ convidar em dois mundos ao mesmo tempo continua permitido.
 mantém sozinha — uma regra com exceção alguém "conserta" depois. Foi por isso
 também que `voice/token.ts` virou `net/voiceApi.ts`: ele usava a primitiva
 corretamente, mas era o único `emit` fora de `net/`.
+
+**`authToken.ts` está aqui só porque emite.** Ele não é uma requisição: é uma
+assinatura do SDK do Supabase que, quando o token muda, dispara um evento sem
+ack. Ficaria mais natural em `auth/`, e está em `net/` porque a regra "`emit` não
+sai desta pasta" não tem exceção — a alternativa era um `socket.emit` num módulo
+de autenticação, que é exatamente o buraco que esta camada existe para fechar. É
+`fire()`, não `request()`: sem ack, e perder o envio não perde nada (a reconexão
+leva o token novo no handshake).
 
 **As escutas ficaram fora.** `bindStore.ts` e `Game.bindSocket()` continuam
 assinando eventos direto. Escuta é assinatura, não requisição: não tem prazo,

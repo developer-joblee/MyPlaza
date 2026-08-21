@@ -5,6 +5,119 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Token de socket vivo (`auth:token`) — 2026-08-21
+
+Correção de bug, não feature nova: *"Sua sessão expirou. Entre de novo."*
+aparecendo na barra do soundboard sem motivo. Duas causas, as duas corrigidas na
+raiz — ver
+[`autenticacao-e-acesso.md`](docs/features/autenticacao-e-acesso.md), seções "O
+token de um socket que não cai" e "Não deu para verificar ≠ sessão expirou".
+
+1. **Token congelado no handshake.** `socket.handshake.auth` é imutável depois da
+   conexão; o access token do Supabase vence em ~1h e o SDK o renova em
+   background. Passada a primeira hora de aba aberta, o servidor validava a cópia
+   velha e **toda** operação de soundboard e de volume por pessoa recusava com
+   `invalid-token`, para sempre, sem a conexão precisar cair.
+2. **`verifyAccessToken` colapsava tudo em `null`.** Timeout de 2,5s do `guard`,
+   Supabase fora do ar e token de fato vencido davam a mesma resposta, e a tela
+   dizia "entre de novo" para uma falha de rede.
+
+Toca `shared/` (evento `auth:token`), `server/` (arquivo novo `socketAuth.ts`,
+mais `auth.ts`, `handlers.ts`, `lobby.ts`, `soundboard.ts`, `audioPrefs.ts`,
+`index.ts`) e `client/` (arquivo novo `net/authToken.ts`, mais
+`auth/supabase.ts`, `ui/GameView.tsx`, `ui/LobbyScreen.tsx`). Sem migração.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build -w client` OK.
+- ✅ **`socketToken`, 12/12** (script `tsx` na raiz, apagado depois): precedência
+  do token empurrado sobre o do handshake, cada um sozinho, nenhum dos dois,
+  `handshake.auth` ausente, token não-string e token nulo. Mais `authRequired`
+  falso sem env, `verifyAccessToken('')` = `invalid`, sem cliente =
+  `unavailable`, e `whoIsSocket` = `not-configured`.
+- ✅ **Um defeito latente achado pelo teste**: `socket.data.accessToken ??
+  handshake` deixaria um `accessToken` **vazio** apagar o único token válido. O
+  handler nunca guarda vazio hoje, então era armadilha para depois; virou `||`,
+  com a razão escrita no código.
+- ✅ **Regressão contra o servidor headless (:3099, sem Supabase e sem LiveKit),
+  10/10:** nove payloads de lixo em `auth:token` (string, vazio, `null`,
+  `undefined`, número, objeto, array, booleano, 5000 caracteres) não derrubam o
+  socket antes nem depois do `join`; `join`/`move`/`chat` seguem funcionando; as
+  quatro operações do bug respondem `not-configured`; um segundo socket entra e
+  vê o primeiro; e `voice:token` continua recusando sem LiveKit.
+- ✅ **O bug reproduzido e a correção provada, 18/18** — e é o teste que importa.
+  Sem credencial nenhuma: `SUPABASE_URL` aponta para um **endpoint HTTP local**
+  que responde como o GoTrue (`GET /auth/v1/user`, 200 com o usuário ou 401 para
+  token vencido), e o código do servidor é o de verdade. O que ficou provado, em
+  ordem:
+  1. **o bug** — socket com o token vencido no handshake recusa a operação com
+     `invalid-token`, e recusa **de novo** na chamada seguinte (não sara sozinho:
+     era exatamente o "aparece a todo momento");
+  2. **a correção** — depois do `auth:token` com o token renovado, `socketToken`
+     passa a devolvê-lo e a operação responde `{ ok: true }`, e continua
+     respondendo;
+  3. **a causa 2** — Supabase que demora mais que o `DB_TIMEOUT_MS` de 2,5s dá
+     `unavailable` no `verifyAccessToken` e `error` no `whoIsSocket` — **não**
+     `invalid-token`, que é o que punha "sua sessão expirou" na tela;
+  4. **o handler não é porta de entrada** — token que não verifica, token de
+     **outra conta** e seis payloads de lixo não trocam o token guardado, e a
+     operação segue recusada; token válido de outra conta no handshake dá
+     `invalid-token` pela checagem de identidade;
+  5. **antes do `join`** — socket sem `profileId` dá `auth-required` (não
+     `invalid-token`), e o token válido é aceito para uso posterior;
+  6. **não custa round-trip novo** — reenviar o mesmo token não chama o Supabase
+     (o guard de igualdade funciona).
+- ✅ **O ciclo inteiro sobre um socket.io real, 6/6.** Servidor socket.io de
+  verdade em processo, cliente `socket.io-client` de verdade, Supabase falso:
+  conecta com o token vencido no handshake → operação recusada; o cliente emite
+  `auth:token` **pela rede** no socket já conectado → o servidor guarda e a
+  operação passa a funcionar, com o socket seguindo conectado. Mais a reconexão
+  com token novo no handshake, que é o caminho que já existia.
+
+## Não verificado
+
+### 1. A metade do navegador (é o que resta)
+
+O servidor está provado ponta a ponta; o que **não** foi observado é o gatilho no
+navegador: o SDK do Supabase disparando `onAuthStateChange` na renovação, o
+`onAccessTokenChange` repassando e o `bindAccessToken` emitindo. São três linhas
+de assinatura, mas dependem de comportamento do SDK e de Supabase real — não há
+como exercitá-las em Node (o módulo lê `import.meta.env`, que é do Vite).
+
+Se esse gatilho não disparar como se espera, **o bug volta inteiro** e com o
+mesmo sintoma. A prova é o passo 14 de "Como testar" do doc de autenticação, com
+o atalho do **JWT expiry em 60s** no dashboard — dois minutos de teste em vez de
+uma hora.
+
+Vale registrar o desenho que reduziria essa dependência a zero, e que **não** foi
+feito: recuperar-se sozinho de um `invalid-token` (pedir o token atual ao SDK,
+empurrar e repetir a chamada uma vez). Faria o sistema convergir mesmo que o
+evento nunca chegue. Ficou de fora por ser escopo além da correção pedida.
+
+### 2. As duas telas ligando e desligando a assinatura
+
+`GameView` e `LobbyScreen` chamam `bindAccessToken` e devolvem o `unbind` no
+cleanup. Só passou por `tsc`: uma assinatura que sobrevivesse ao unmount
+emitiria num socket morto (inócuo — `fire()` devolve `false`), e uma que não
+fosse criada faria o bug voltar em silêncio.
+
+### 3. O round-trip por gravação continua lá
+
+O item 7 da entrega de volume por pessoa (abaixo) segue valendo: `whoIsSocket`
+chama `verifyAccessToken` em **cada** gravação. O que mudou é que agora existe
+**um** lugar para pôr o memo de ~60s, em vez de dois — mas ele **não** foi feito,
+de propósito: memo enfraquece a revogação imediata, que é uma propriedade que o
+doc de autenticação promete, e isso é decisão de produto, não de refactor.
+
+### 4. Duas abas da mesma conta
+
+O Supabase compartilha a sessão pelo `localStorage`, então as duas abas veem a
+mesma renovação e cada socket empurra o seu token. Não foi observado; a suspeita
+de defeito é baixa, porque os sockets são independentes e o servidor trata cada
+um pelo seu `socket.data`.
+
+---
+
 # Volume por pessoa (voz e soundboard) — 2026-08-21
 
 Feature nova: [`volume-por-pessoa.md`](docs/features/volume-por-pessoa.md). Dois
@@ -139,7 +252,9 @@ pessoas, são vários round-trips. A guarda `if (!profileId)` já cobre o caso q
 comentário justifica; o re-verify é só para respeitar revogação. Um memo de ~60s
 por socket, em `auth.ts` e reusado pelo soundboard, resolveria — não foi feito
 para não mexer numa feature existente nesta entrega. **Custo conhecido, não
-medido.**
+medido.** (Atualização de 2026-08-21: o `whoAmI` agora é um só, em
+`socketAuth.ts`, então o memo teria **um** lugar. Continua não feito — ver o item
+3 da entrega do `auth:token`, no topo deste arquivo.)
 
 ### 8. Não há limite de frequência em `audio:setPeer`
 

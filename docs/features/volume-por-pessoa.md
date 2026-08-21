@@ -188,6 +188,11 @@ ele faria o slider responder em degraus e ler como travado.
 
 ## Armadilhas
 
+- **"Sua sessão expirou" ao arrastar o slider quase nunca é sessão expirada.**
+  `audio:setPeer` responde `invalid-token` e a tela diz isso, mas a causa real já
+  foi o token congelado no handshake do socket (aba aberta há mais de 1h) e uma
+  falha de infraestrutura disfarçada. Corrigidas na raiz — ver
+  [Autenticação e controle de acesso](autenticacao-e-acesso.md).
 - **A `0014` é obrigatória junto com este código.** Sem ela os sliders funcionam
   **na sessão** e o valor não sobrevive ao F5 — em silêncio, porque o `db.ts` é
   fail-soft (o motivo aparece como `[db] savePeerAudioPref` no log).

@@ -112,6 +112,26 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   /**
+   * O access token renovado pelo SDK do Supabase, para um socket que **já está
+   * conectado**.
+   *
+   * Existe porque `socket.handshake.auth` é fotografado na conexão e nunca
+   * muda: a função `auth` do cliente é reavaliada a cada tentativa de conexão,
+   * e um socket que não cai não tem tentativa nenhuma. O token vence em ~1h e o
+   * SDK o renova em background — sem este evento, o servidor seguia validando a
+   * cópia velha e recusava toda operação por ack com `invalid-token`, o que a
+   * tela mostra como "sua sessão expirou" numa sessão viva.
+   *
+   * **Sem ack**, e perder o evento não perde nada: com o socket caído o cliente
+   * não envia (`fire()` devolve `false`), e a reconexão leva o token novo no
+   * handshake. O servidor guarda só o que verifica, e nunca aceita o token de
+   * outra conta — um socket não troca de identidade no meio da vida.
+   *
+   * Não é canal de login: quem autentica a conexão continua sendo o handshake.
+   */
+  'auth:token': (token: string) => void;
+
+  /**
    * Entra no mundo. `character` é opcional: cliente antigo cai no padrão.
    *
    * A IDENTIDADE não vem por aqui. Quando há banco, ela sai do token de acesso

@@ -9,7 +9,8 @@ import {
   type PeerAudioResult,
   type ServerToClientEvents,
 } from '@together/shared';
-import { authRequired, verifyAccessToken } from './auth';
+import { authRequired } from './auth';
+import { whoIsSocket, type SocketWho } from './socketAuth';
 import { loadPeerAudioPrefs, savePeerAudioPref } from './db';
 import type { SocketData } from './handlers';
 import type { World } from './world';
@@ -99,25 +100,11 @@ export function registerAudioPrefHandlers(io: IoServer, socket: IoSocket): void 
   const fail = (reason: PeerAudioErrorReason): PeerAudioResult => ({ ok: false, reason });
 
   /**
-   * Quem está pedindo. Cópia do `whoAmI` do soundboard, e pelo mesmo motivo: o
-   * token é verificado de novo em vez de confiar só no `socket.data`, porque
-   * `profileId` só é escrito no `join` e um pedido antes dele não teria passado
-   * por autenticação nenhuma.
+   * Quem está pedindo. Era uma **cópia** declarada do `whoAmI` do soundboard —
+   * duas verificações de identidade lado a lado, esperando divergir. Agora as
+   * duas chamam `whoIsSocket` (`socketAuth.ts`).
    */
-  async function whoAmI(): Promise<
-    { ok: true; profileId: string } | { ok: false; reason: PeerAudioErrorReason }
-  > {
-    if (!authRequired) return { ok: false, reason: 'not-configured' };
-    const profileId = socket.data.profileId;
-    if (!profileId) return { ok: false, reason: 'auth-required' };
-    const token = String(socket.handshake.auth?.token ?? '');
-    if (!token) return { ok: false, reason: 'auth-required' };
-    const authUser = await verifyAccessToken(token);
-    if (!authUser || authUser.id !== socket.data.authUserId) {
-      return { ok: false, reason: 'invalid-token' };
-    }
-    return { ok: true, profileId };
-  }
+  const whoAmI = (): Promise<SocketWho> => whoIsSocket(socket);
 
   const validVolume = (v: unknown): v is number =>
     typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= PEER_VOLUME_MAX;

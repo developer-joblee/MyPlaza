@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Game } from '../game/Game';
+import { bindAccessToken } from '../net/authToken';
 import { bindStoreToSocket } from '../net/bindStore';
 import { createSocket } from '../net/socket';
 import { createAudioApi } from '../net/audioApi';
@@ -43,6 +44,12 @@ export function GameView() {
     runtime.audioApi = createAudioApi(() => runtime.socket);
     const soundPlayer = createSoundPlayer();
     const unbindStore = bindStoreToSocket(socket);
+    /**
+     * Empurra o token renovado para um socket que não caiu. Sem isto, passada a
+     * validade do token (~1h de aba aberta), soundboard e volume por pessoa
+     * respondiam `invalid-token` — "sua sessão expirou" numa sessão viva.
+     */
+    const unbindToken = bindAccessToken(() => runtime.socket);
 
     let cancelled = false;
     let game: Game | null = null;
@@ -117,6 +124,7 @@ export function GameView() {
       voice?.destroy(); // invalida awaits em vôo e solta o microfone
       soundPlayer.destroy(); // corta som em vôo e fecha o AudioContext
       game?.destroy();
+      unbindToken();
       unbindStore();
       socket.disconnect();
       runtime.socket = null;
