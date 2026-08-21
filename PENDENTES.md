@@ -5,6 +5,94 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Prévia de tela no topo-centro — 2026-08-21
+
+Mudança de layout numa feature que já existia e **ganhou doc nesta entrega**:
+[`compartilhamento-de-tela.md`](docs/features/compartilhamento-de-tela.md). As
+prévias de tela saíram da coluna `.top-right-stack` (canto superior direito) e
+foram para uma coluna nova, `.top-center-stack`, junto com a pilha de avisos —
+prévias em cima, avisos abaixo. Múltiplas telas ficam **lado a lado**.
+
+Entrega **só de client**, e **só de layout**: nada em `shared/`, nada em
+`server/`, nada no protocolo do Socket.IO, e `ScreenShareView.tsx` **não mudou
+uma linha** — a tela ampliada, o fullscreen, o `Esc` e o filtro do tile são os
+mesmos. Dois arquivos: `client/src/ui/GameView.tsx` e `client/src/styles.css`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build -w client` OK.
+- ✅ Por leitura de código: a restrição de `z-index` acompanhou o componente. A
+  `.screen-focus` (`fixed; z-index: 20`) é filha da coluna nova, então é a
+  `.top-center-stack` que não pode ganhar `z-index` — e a `.top-right-stack`
+  deixou de ter esse motivo (o comentário dela foi corrigido para não mentir).
+- ✅ **Um defeito real, achado e corrigido antes de ir para a tela** (por revisão
+  do CSS, não por teste): a coluna nasceu centralizada com `left: 50%` +
+  `transform: translateX(-50%)`, copiado da `.notice-stack`. Mas `transform` cria
+  contexto de empilhamento **e** bloco contentor para descendente
+  `position: fixed` — e a `.screen-focus` (`fixed; inset: 0`) passou a ser filha
+  da coluna. O `inset: 0` mediria a coluna de 240px em vez da viewport: a tela
+  "ampliada" viraria uma janelinha no topo, presa abaixo da barra de mídia. É
+  exatamente a armadilha que o comentário do `z-index` descreve, por outra porta.
+  Agora a coluna centraliza com `left: 0; right: 0` + `align-items: center`, e a
+  razão está escrita no CSS e no doc. **Corrigido por raciocínio — não foi visto
+  na tela**, e é o item 1 abaixo.
+- ✅ Por leitura de código: com a coluna ocupando a largura toda, o
+  `pointer-events: none` **subiu** para ela (senão engoliria o clique no mapa), e
+  quem religa são `.screen-tile`, `.notice` e `.screen-focus`. O `auto` da
+  `.screen-focus` é o que mantém os botões `⛶` e `✕ Sair` vivos.
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada foi aberto num navegador — e a entrega é 100% visual
+
+Precisa das `LIVEKIT_*` (sem elas não há tela nenhuma para ver) e de duas abas.
+`tsc` e o build não provam **nada** do que importa aqui. Roteiro completo em
+"Como testar" do doc; o que mais provavelmente falha:
+
+- **a tela ampliada continuar cobrindo a janela inteira.** É o defeito do
+  `transform` (corrigido acima) e a armadilha do `z-index`, e as duas quebram
+  **em silêncio**. Este é o teste mais importante da entrega: abrir uma tela
+  ampliada e confirmar que ela cobre a viewport toda, com os botões `⛶` e
+  `✕ Sair` clicáveis e a barra de mídia por cima. Nada disso foi observado;
+- **os `pointer-events`.** Três sintomas possíveis, todos silenciosos: "cliquei
+  na prévia e não ampliou" (faltou `auto` no tile), "cliquei no mapa na faixa de
+  cima e o avatar não andou" (faltou `none` na coluna ou na `.screens`) e "os
+  botões da tela ampliada não respondem" (faltou `auto` na `.screen-focus`);
+- **a prévia e o aviso da booble juntos**: o "Na booble · Sair" tem de aparecer
+  **abaixo** da prévia, sem sobrepor, e o Sair tem de funcionar.
+
+### 2. O `:has()` da colisão com a pastilha de compartilhamento
+
+`.game-view:has(.sharing-badge) .top-center-stack { padding-top: 20px }` é o
+**primeiro `:has()` do arquivo**, e existe porque a `.sharing-badge`
+(`fixed; top: 0; left: 50%; z-index: 31`, ~27px) cobriria a borda de cima da
+primeira prévia. Ver isso exige o caso duplo: **você** compartilhando **e** outra
+pessoa também. Nunca foi visto. Onde o `:has()` não existir, o resultado é a
+sobreposição de antes — não um layout quebrado.
+
+### 3. Três ou mais telas simultâneas
+
+`.screens` é `row` com `flex-wrap` e a coluna tem `max-width: calc(100vw - 32px)`.
+Três tiles de 240px são 750px, então em janela estreita a terceira desce — e aí a
+coluna cresce para baixo sobre o mapa, sem `max-height` nem rolagem. Exige três
+pessoas compartilhando ao mesmo tempo; não foi reproduzido.
+
+### 4. O que a mudança NÃO consertou
+
+A prévia continua sendo só das telas **dos outros**: `remoteScreens` não inclui a
+sua. Quem compartilha não se vê — é o comportamento de antes, e não foi tocado.
+
+### 5. Defeito PREEXISTENTE: o `F` no chat entra em fullscreen
+
+`ScreenFocus` registra o `keydown` na `window` **sem checar o alvo**, então com
+uma tela ampliada aberta digitar **f** no input do chat dispara fullscreen
+nativo. O `Escape` tem guard (`!document.fullscreenElement`), o `f` não. **Não é
+desta entrega** e não foi tocado para não misturar as coisas — a correção seria
+ignorar a tecla quando o alvo é `input`/`textarea` (ou quando o elemento está
+dentro de um `[data-capture-keys]`, que é o idioma da casa).
+
+---
+
 # Token de socket vivo (`auth:token`) — 2026-08-21
 
 Correção de bug, não feature nova: *"Sua sessão expirou. Entre de novo."*
@@ -527,19 +615,18 @@ Os scripts de teste rodaram da raiz e **não** ficaram no repo.
   pressionado mint, o desabilitado por ausência e por cooldown, e o `setTimeout`
   que reabilita o item quando o cooldown vence.
 
-### 2. A coluna nova do canto superior direito mexeu em layout que já existia
+### 2. A coluna nova do canto superior direito mexeu em layout que já existia — PARCIALMENTE SUPERSEDIDO em 2026-08-21
 
 `.top-right-stack` tirou o `position/top/right` do `.zoom-controls` e do
 `.screens`, que antes eram ancorados **os dois** no mesmo ponto e se sobrepunham
 quando alguém compartilhava tela. Isso é correção, mas não foi vista:
 
 - o zoom continua onde estava? (é o primeiro item da coluna, então deveria);
-- as prévias de tela descem quando há alerta, sem ficar por baixo dele?
-- a **tela ampliada** (`.screen-focus`, `fixed; inset: 0; z-index: 20`) agora é
-  filha da coluna. Ela continua cobrindo a janela **porque a coluna não tem
-  `z-index`** — se alguém adicionar um ali, a tela ampliada fica presa no
-  contexto de empilhamento novo. O raciocínio está no comentário do CSS e do
-  `GameView`, mas ninguém abriu uma tela ampliada depois da mudança.
+- ~~as prévias de tela descem quando há alerta, sem ficar por baixo dele?~~ e
+  ~~a **tela ampliada** … agora é filha da coluna~~ — **as prévias saíram desta
+  coluna**: foram para a `.top-center-stack` (ver a entrega "Prévia de tela no
+  topo-centro", no topo deste arquivo). A armadilha do `z-index` foi com elas, e
+  as duas perguntas continuam abertas, só que sobre a coluna nova.
 
 ### 3. O `knock.ts` foi refatorado e o toc-toc não foi ouvido depois
 
@@ -981,8 +1068,10 @@ Três pontos merecem atenção na primeira execução:
 Todo o `SoundboardPanel` é lógica de client não exercitada: a grade com slots
 bloqueado/vazio/cheio, o `<input type=file>` escondido, a medição de duração com
 `decodeAudioData`, as mensagens de recusa, o slot que acende enquanto o som toca,
-a lista "Quem tocou som" e os dois mutes. O botão novo na barra inferior também
+o volume dos sons e o mute global. O botão novo na barra inferior também
 não foi visto — em particular o estado **desabilitado** em modo anônimo.
+(A lista "Quem tocou som" e o mute por emissor que este item citava foram
+**removidos** em 2026-08-21 — o slider de sons do menu do boneco faz o papel.)
 
 ### 3. Nenhum som foi ouvido
 
@@ -1097,11 +1186,13 @@ tocando ao mesmo tempo isso é trabalho de banco que a voz e o chat não fazem.
 Dá para cachear a autorização por `soundId` no socket; não foi feito para não
 cachear decisão de acesso antes de ver o custo real.
 
-### 12. `soundSenders` guarda `socket.id`
+### 12. ~~`soundSenders` guarda `socket.id`~~ — resolvido por remoção
 
-Como os `nudges`, é identificador de exibição: quem cai e volta é uma pessoa
-"nova" na lista, e o mute dela se perde. É o comportamento desejado (o mute é de
-sessão), mas nunca foi observado com queda real.
+A lista "quem tocou som" e o mute por emissor saíram em 2026-08-21: quem silencia
+uma pessoa agora é o slider de sons do menu de contexto do boneco, que é chaveado
+por perfil no banco. Não há mais `soundSenders` nem `mutedSenders`.
+**Não verificado:** que o painel do soundboard continua íntegro sem a seção (só
+`typecheck`; ninguém abriu num navegador).
 
 ---
 

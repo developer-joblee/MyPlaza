@@ -50,8 +50,11 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
    * store, pela mesma razão do chamado acima: o evento tem efeito de áudio, e o
    * dono desse efeito é aquele módulo.
    */
-  socket.on('soundboard:played', (fromId, fromName, soundId, url) =>
-    receiveSound(fromId, fromName, soundId, url),
+  // `fromName` continua no payload (o servidor manda), mas o cliente já não
+  // precisa dele: quem ajusta som por pessoa faz isso no menu do boneco, pelo
+  // nome que o roster já tem.
+  socket.on('soundboard:played', (fromId, _fromName, soundId, url) =>
+    receiveSound(fromId, soundId, url),
   );
   /**
    * A booble de alguém mudou. Vai por `booble.ts` (e não direto no store)

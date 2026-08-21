@@ -185,32 +185,11 @@ interface AppState {
    */
   soundboardVolume: number;
   /**
-   * Pessoas cujos sons eu silenciei nesta sessão, por `socket.id`.
-   *
-   * Efêmero de propósito: `socket.id` morre com a conexão, e "silenciar o Bruno
-   * para sempre" é decisão social, não configuração — se ele voltar, você
-   * escolhe de novo. Persistir por perfil pediria uma tela para desfazer, que é
-   * moderação, e essa ficou fora do escopo.
-   */
-  mutedSenders: string[];
-  /**
-   * Quem tocou som perto de mim nesta sessão, do mais recente para o mais
-   * antigo (por `socket.id`, com o nome para exibir).
-   *
-   * Existe para dar **onde clicar** em "silenciar essa pessoa": sem uma lista, o
-   * único lugar natural seria a linha do roster, e lá os badges (ausente >
-   * booble > voz) são exclusivos por construção — um botão a mais quebraria essa
-   * precedência para um caso que quase nunca acontece. A lista é registrada
-   * ANTES das guardas de mute, senão silenciar alguém apagaria o botão de
-   * dessilenciar.
-   */
-  soundSenders: { id: string; name: string }[];
-  /**
    * O quanto EU ouço cada pessoa — voz e sons de soundboard, separados —, por
    * `socket.id`. Ausente = cheio (`PEER_VOLUME_DEFAULT`).
    *
-   * Ao contrário de `mutedSenders`, isto **não** é de sessão: o valor vive no
-   * banco por perfil e o servidor rehidrata este mapa no `join`, traduzindo
+   * Não é estado de sessão: o valor vive no banco por perfil e o servidor
+   * rehidrata este mapa no `join`, traduzindo
    * perfil → `socket.id`. Quem cai e volta é um socket novo, e é o servidor que
    * repõe a chave — é por isso que a entrada de quem sai é descartada aqui em
    * vez de guardada "para quando ela voltar".
@@ -308,8 +287,6 @@ interface AppState {
   setSoundboard: (state: SoundboardState | null) => void;
   setSoundboardMuted: (muted: boolean) => void;
   setSoundboardVolume: (volume: number) => void;
-  toggleSenderMuted: (id: string) => void;
-  noteSoundSender: (id: string, name: string) => void;
   /** o slider mexeu — ver `client/src/peerAudio.ts` */
   setPeerAudio: (id: string, prefs: PeerAudioPrefs) => void;
   /** hidratação do servidor: merge, nunca substituição (o mapa é parcial) */
@@ -390,8 +367,6 @@ export const useStore = create<AppState>((set) => ({
     }
   })(),
   soundboardVolume: SOUND_VOLUME_DEFAULT,
-  mutedSenders: [],
-  soundSenders: [],
   peerAudio: {},
   noiseFilter: (() => {
     try {
@@ -523,8 +498,6 @@ export const useStore = create<AppState>((set) => ({
        * servidor no join — guardar o mapa antigo seria guardar chaves mortas.
        */
       peerAudio: {},
-      mutedSenders: [],
-      soundSenders: [],
       noiseFilterActive: false,
       sharing: false,
       remoteScreens: [],
@@ -595,17 +568,6 @@ export const useStore = create<AppState>((set) => ({
     }
     set({ soundboardMuted: muted });
   },
-  /** Teto de 8: é lista de "quem tocou agora", não histórico da sessão. */
-  noteSoundSender: (id, name) =>
-    set((s) => ({
-      soundSenders: [{ id, name }, ...s.soundSenders.filter((x) => x.id !== id)].slice(0, 8),
-    })),
-  toggleSenderMuted: (id) =>
-    set((s) => ({
-      mutedSenders: s.mutedSenders.includes(id)
-        ? s.mutedSenders.filter((x) => x !== id)
-        : [...s.mutedSenders, id],
-    })),
   setPeerAudio: (id, prefs) => set((s) => ({ peerAudio: { ...s.peerAudio, [id]: prefs } })),
   /**
    * Merge, e não substituição: o mapa que o servidor manda é PARCIAL — no join

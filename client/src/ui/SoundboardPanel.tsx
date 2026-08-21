@@ -13,7 +13,7 @@ import { applyVolume, persistVolume, playSound, refreshSoundboard } from '../sou
 import { UndecodableAudioError, decodeAudio, needsClip, prepareSound } from '../soundboard/trim';
 import { ClipPicker } from './ClipPicker';
 import { useStore } from '../state/store';
-import { CloseIcon, MuteSenderIcon, SoundboardIcon } from './icons';
+import { CloseIcon, SoundboardIcon } from './icons';
 import { formatDuration } from './util';
 
 /**
@@ -46,9 +46,6 @@ export function SoundboardPanel({ onClose }: { onClose: () => void }) {
   const muted = useStore((s) => s.soundboardMuted);
   const setMuted = useStore((s) => s.setSoundboardMuted);
   const volume = useStore((s) => s.soundboardVolume);
-  const senders = useStore((s) => s.soundSenders);
-  const mutedSenders = useStore((s) => s.mutedSenders);
-  const toggleSender = useStore((s) => s.toggleSenderMuted);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -411,31 +408,6 @@ export function SoundboardPanel({ onClose }: { onClose: () => void }) {
         <p className="soundboard-hint">
           {`Arquivo de áudio (mp3, ogg, m4a). Se passar de ${SOUND_MAX_MS / 1000}s, você escolhe o trecho.`}
         </p>
-      )}
-
-      {!pending && senders.length > 0 && (
-        <>
-          <span className="join-label">Quem tocou som</span>
-          <div className="soundboard-senders">
-            {senders.map((sender) => {
-              const off = mutedSenders.includes(sender.id);
-              return (
-                <button
-                  key={sender.id}
-                  type="button"
-                  className={`sender-row${off ? ' muted' : ''}`}
-                  onClick={() => toggleSender(sender.id)}
-                  aria-pressed={off}
-                  title={off ? `Ouvir os sons de ${sender.name}` : `Silenciar os sons de ${sender.name}`}
-                >
-                  <MuteSenderIcon off={off} />
-                  <span className="sender-name">{sender.name}</span>
-                  <span className="sender-state">{off ? 'silenciada' : 'silenciar'}</span>
-                </button>
-              );
-            })}
-          </div>
-        </>
       )}
 
       <input

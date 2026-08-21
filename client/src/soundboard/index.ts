@@ -45,19 +45,13 @@ export function playSound(soundId: string): boolean {
  * primeira na primeira alteração (foi o que aconteceu quando ela estava copiada
  * em dois pontos do `VoiceRoom`), e a divergência aqui é audível.
  *
- * As três guardas antes disso são de estado local, e existem porque o servidor
- * não conhece nenhuma delas: ele não sabe que eu fiquei surdo, que fiquei
- * ausente, nem quem eu silenciei.
+ * As guardas antes disso são de estado local, e existem porque o servidor não
+ * conhece nenhuma delas: ele não sabe que eu cortei os sons dos outros, que eu
+ * fiquei surdo, nem que fiquei ausente.
  */
-export function receiveSound(fromId: string, fromName: string, soundId: string, url: string): void {
+export function receiveSound(fromId: string, soundId: string, url: string): void {
   const store = useStore.getState();
-  /**
-   * Registra quem tocou ANTES das guardas: é o que dá à tela um lugar onde
-   * clicar para silenciar (e para dessilenciar). Se isto viesse depois do filtro
-   * de mute, silenciar alguém apagaria o próprio botão de desfazer.
-   */
-  store.noteSoundSender(fromId, fromName);
-  if (store.soundboardMuted || store.mutedSenders.includes(fromId)) return;
+  if (store.soundboardMuted) return;
   /**
    * Surdo e ausente não ouvem som de soundboard — ao contrário do "toc-toc",
    * que atravessa de propósito. A diferença é o que cada um significa: o

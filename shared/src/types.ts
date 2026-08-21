@@ -359,7 +359,7 @@ export interface PeerAudioPrefs {
  *
  * O servidor guarda por perfil (é o que faz o ajuste sobreviver ao F5) e
  * **traduz** para socket ao enviar, porque é assim que o cliente chaveia tudo:
- * roster, distâncias, participantes do LiveKit, `mutedSenders`. Traduzir num
+ * roster, distâncias, participantes do LiveKit, falas. Traduzir num
  * lugar só evita que o `profileId` de terceiros entre no protocolo por uma razão
  * que não pede isso.
  *

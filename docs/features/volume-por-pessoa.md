@@ -15,17 +15,19 @@ Os dois eixos são independentes de propósito: "a voz dela estoura no meu fone"
 não é "os sons de soundboard dela me interrompem". E é uma preferência de quem
 **ouve**: ninguém é notificado, e ninguém tem como descobrir que foi baixado.
 
-Não substitui nada que já existia: o **volume do soundboard** do painel de sons
-continua sendo o mestre de todos os sons, e o **silenciar** de uma pessoa naquele
-painel continua sendo o atalho rápido de sessão.
+O **volume do soundboard** do painel de sons continua sendo o mestre de todos os
+sons. Já o **silenciar uma pessoa** que existia naquele painel (a lista "quem
+tocou som") **saiu**: o slider de sons daqui, com 0 no fim do curso, faz o mesmo
+e é durável — ver [soundboard](soundboard.md).
 
 ## Como funciona
 
 ### A chave é um perfil no banco e um `socket.id` na tela
 
 Todo o cliente é chaveado por **`socket.id`**: o roster, o mapa de distâncias, os
-participantes do LiveKit, o `mutedSenders`. E `socket.id` **morre a cada
-reconexão** — é exatamente o argumento que faz o `mutedSenders` ser efêmero.
+participantes do LiveKit. E `socket.id` **morre a cada reconexão** — foi
+exatamente esse o argumento que fazia o antigo mute por emissor do soundboard ser
+efêmero, e um dos motivos de ele ter sido substituído por esta feature.
 
 Uma preferência durável precisa de identidade durável, que é o `profiles.id`.
 Então **o servidor traduz**: ele guarda `peer_audio_prefs(profile_id,
@@ -128,8 +130,8 @@ ele faria o slider responder em degraus e ler como travado.
   esqueceria que a zerou e o sintoma seria "não ouço o Bruno" — indistinguível de
   voz quebrada, sem nada na tela apontando a causa. Com o anel aceso e o badge
   presente, ver que ele fala e não sair som **é** o diagnóstico. É o mesmo
-  raciocínio que faz `receiveSound` registrar quem tocou **antes** da guarda de
-  mute: silenciar alguém não pode apagar o rastro de que ele existe.
+  princípio de sempre: silenciar alguém não pode apagar o rastro de que ele
+  existe.
   Consequência técnica: `reconcileSpeaking` continua chamando `audioVolumeFor`, e
   essa omissão é **deliberada** — não "conserte" por simetria.
 - **A 0% a pessoa continua assinada no LiveKit, com volume 0.** Desassinar
@@ -163,11 +165,13 @@ ele faria o slider responder em degraus e ler como travado.
   querer adicionar — poder ler as linhas em que você é o alvo — transformaria a
   tabela num relatório de quem te silenciou. Não adicione, e não crie índice nem
   consulta por `target_profile_id`.
-- **`mutedSenders` continua existindo.** Agora há duas formas de silenciar os sons
-  de alguém, e a divisão é clara: o **mute** é rápido, de sessão, um clique, e mora
-  na lista "quem tocou som"; o **slider** é durável e graduado, e mora no boneco.
-  É o mesmo par slider+botão que o volume global já usa. Migrar o mute para o
-  banco seria moderação, que já foi recusada.
+- **O mute por emissor do soundboard (`mutedSenders`) foi removido, e este slider
+  ficou como única forma de silenciar uma pessoa.** Por um tempo os dois
+  coexistiram, com a divisão "mute rápido de sessão na lista *quem tocou som*,
+  slider durável no boneco". Não se sustentou: eram duas respostas para "quanto eu
+  ouço essa pessoa", e a da lista era a pior — sumia quando a pessoa parava de
+  tocar, e vivia num painel que é sobre os **meus** sons. O 0 do slider cobre o
+  caso, e é durável.
 - **Nenhum terceiro estágio de gain no `SoundPlayer`.** O fator por emissor é
   propriedade do **evento** (como a distância), então ele multiplica no gain de
   cada som. Consequência, que é o oposto do mestre: mexer no slider de sons de

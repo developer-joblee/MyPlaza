@@ -108,10 +108,10 @@ voz já usa.
 | `client/src/soundboard/SoundPlayer.ts` | WebAudio: download, decode, cache, teto de simultâneos |
 | `client/src/soundboard/index.ts` | dono dos efeitos: `playSound`, `receiveSound`, `refreshSoundboard` |
 | `client/src/net/soundboardApi.ts` | a fronteira de requisição do soundboard |
-| `client/src/ui/SoundboardPanel.tsx` | a grade, o upload, o progresso e os dois mutes |
+| `client/src/ui/SoundboardPanel.tsx` | a grade, o upload, o progresso, o volume e o mute global |
 | `client/src/ui/MediaControls.tsx` | o botão da barra (desabilitado sem conta) |
-| `client/src/ui/icons.tsx` | `SoundboardIcon`, `MuteSenderIcon` |
-| `client/src/state/store.ts` | `soundboard`, `soundboardMuted`, `mutedSenders`, `soundSenders` |
+| `client/src/ui/icons.tsx` | `SoundboardIcon` |
+| `client/src/state/store.ts` | `soundboard`, `soundboardMuted`, `soundboardVolume` |
 
 ## Decisões e por quê
 
@@ -207,20 +207,18 @@ voz já usa.
 - **Surdo e ausente NÃO ouvem soundboard** — ao contrário do "toc-toc", que
   atravessa de propósito. O chamado é a campainha da porta, dirigida a você; o
   soundboard é a conversa da sala, e quem cortou a sala cortou isso também.
-- **Silenciar uma pessoa e BAIXAR uma pessoa são controles diferentes, e os dois
-  ficam.** Desde o [volume por pessoa](volume-por-pessoa.md) há duas formas de
-  reduzir os sons de alguém, e a divisão é a mesma do par slider+botão do volume
-  global: o **mute** é rápido, de sessão, um clique, e mora na lista "quem tocou
-  som" deste painel; o **slider** é durável e graduado, e mora no boneco (botão
-  direito). Um emissor com o slider em 0 **continua** entrando em `soundSenders`,
-  pela mesma razão que o mute já entrava: silenciar alguém não pode apagar o
-  rastro de que ele existe.
-- **Silenciar uma pessoa mora no painel, não na linha do roster.** A linha tem
-  uma cadeia de badges **exclusivos** (ausente > booble > voz, um só carrega o
-  `margin-left:auto`); um botão a mais ali quebraria essa precedência por um caso
-  raro. Em troca, o store guarda `soundSenders` (quem tocou som, teto de 8) para
-  o painel ter em quem clicar — registrado **antes** das guardas de mute, senão
-  silenciar alguém apagaria o botão de desfazer.
+- **Silenciar UMA pessoa saiu deste painel; quem faz isso é o slider do boneco.**
+  Houve aqui uma lista "quem tocou som" (`soundSenders`) com um mute por emissor,
+  de sessão, um clique. Ela existia porque não havia outro lugar para clicar. Com
+  o [volume por pessoa](volume-por-pessoa.md) no menu de contexto do boneco passou
+  a haver: o slider é durável, graduado, e o 0 dele é o mute. Manter os dois era
+  duas verdades sobre "quanto eu ouço essa pessoa" — e a lista era a pior, porque
+  sumia quando a pessoa parava de tocar. Restou aqui só o que é **global**: o
+  slider de volume dos sons e o botão de ouvir/não ouvir os outros. Por isso o
+  `receiveSound` tem uma guarda a menos e o payload de `soundboard:played`
+  carrega um `fromName` que o cliente não usa mais (o campo ficou: tirá-lo
+  quebraria cliente antigo com servidor novo, já que os argumentos são
+  posicionais).
 - **O volume vive no banco; o mute rápido, no navegador.** Parecem a mesma coisa e
   não são. Microfone escolhido, cancelamento de ruído e "não quero ouvir agora"
   são propriedades do **dispositivo** — o microfone do laptop não é o da mesa. Já
@@ -247,10 +245,11 @@ voz já usa.
   antes de converter, porque `Number(null)`, `Number('')` e `Number(false)` valem
   todos **0** — um valor ausente silenciaria a pessoa. Foi um teste que pegou a
   divergência entre o comentário e o código.
-- **`soundboardMuted` é preferência; `mutedSenders` é sessão.** O primeiro fica
-  no `localStorage` e sobrevive a sair do mundo (quem desligou tinha um motivo
-  que não muda ao trocar de mapa). O segundo morre com a conexão, porque a chave
-  é `socket.id` — e "silenciar o Bruno para sempre" é moderação, que ficou fora.
+- **`soundboardMuted` é preferência, e por isso fica no `localStorage`.**
+  Sobrevive a sair do mundo: quem desligou "ouvir sons de outras pessoas" tinha
+  um motivo que não muda ao trocar de mapa. (O antigo `mutedSenders`, mute por
+  emissor, era o oposto — de sessão, chaveado por `socket.id` — e saiu junto com
+  a lista "quem tocou som".)
 - **`distancePx` promovida ao `shared`.** `Math.hypot` estava copiado três vezes
   no `Game`, uma no `World`, e o servidor precisava de uma quinta. É o mesmo
   movimento que `audioZoneAt` já sofreu: servidor e cliente não podem discordar
@@ -339,7 +338,9 @@ Com Supabase, `npm run dev` e duas abas (aplique a `0010` antes):
 5. Entre na sala de reunião do Estúdio com a aba 1 e toque: a aba 2, fora da
    sala, não ouve. Abra uma booble entre as duas e repita: ouve, mesmo longe.
 6. Desligue "Ouvir sons de outras pessoas" na aba 2 e confirme o silêncio; ligue
-   e silencie **só a pessoa** na lista "Quem tocou som".
+   de novo e confirme que volta a ouvir. Para silenciar **só uma pessoa**, botão
+   direito no boneco dela e slider de sons em 0 — ver
+   [volume por pessoa](volume-por-pessoa.md).
 6b. Baixe o **Volume dos sons** na aba 2 **durante** um som tocando: tem de cair
     na hora, sem clique. Recarregue a página e confirme que o valor voltou como
     estava — é o que prova que a coluna gravou

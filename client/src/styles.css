@@ -817,15 +817,28 @@ button {
 
 /* --------------------------------------------------------- Screen share */
 
-/* posicionada pela `.top-right-stack` (ver `GameView`), não por si mesma */
+/*
+ * Posicionada pela `.top-center-stack` (ver `GameView`), não por si mesma.
+ *
+ * Linha, não coluna: no topo-centro, empilhar duas telas para baixo cobriria o
+ * mapa justamente na faixa em que o avatar costuma estar. `wrap` existe para
+ * janela estreita, onde a terceira tela desce em vez de furar a viewport.
+ *
+ * `pointer-events: none` aqui e `auto` no tile: são 240px parados no meio do
+ * topo, e sem isso o espaço ENTRE as telas engoliria o clique que deveria
+ * chegar ao canvas do Pixi. É o mesmo par que a `.notice-stack` já usa.
+ */
 .screens {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
-  align-items: flex-end;
+  pointer-events: none;
 }
 
 .screen-tile {
+  pointer-events: auto;
   width: 240px;
   border-radius: 12px;
   overflow: hidden;
@@ -862,6 +875,8 @@ button {
   inset: 0;
   background: #05060a;
   z-index: 20;
+  /* a `.top-center-stack`, que a contém, é `pointer-events: none` */
+  pointer-events: auto;
 }
 
 /*
@@ -976,16 +991,20 @@ button {
 
 /* --------------------------------------------------------------- avisos */
 
+/*
+ * Sem âncora própria: quem posiciona é a `.top-center-stack` (ver `GameView`) —
+ * o mesmo desenho da `.zoom-controls` dentro da `.top-right-stack`. Ela tinha
+ * `absolute; top:16px; left:50%` e ficava no mesmo ponto das prévias de tela;
+ * agora as duas dividem uma coluna e não podem se sobrepor.
+ *
+ * `pointer-events: none` fica: os buracos entre as pastilhas deixam o clique
+ * passar para o canvas, e cada `.notice` religa em si mesma.
+ */
 .notice-stack {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  max-width: calc(100vw - 32px);
   pointer-events: none;
 }
 
@@ -1978,62 +1997,6 @@ button {
   height: 13px;
 }
 
-.soundboard-senders {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 0 12px;
-}
-
-.sender-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-
-.sender-row:hover {
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.sender-row.muted {
-  color: var(--text-dim);
-}
-
-.sender-row svg {
-  flex: none;
-  width: 15px;
-  height: 15px;
-}
-
-.sender-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sender-state {
-  margin-left: auto;
-  flex: none;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: lowercase;
-  color: var(--text-dim);
-}
-
-.sender-row.muted .sender-state {
-  color: var(--amber);
-}
-
 .soundboard-error {
   margin: 0 0 10px;
   color: var(--coral);
@@ -2459,16 +2422,61 @@ button {
   font-size: 11.5px;
 }
 
+/* ---------------------------------------------------------- topo-centro */
+
+/*
+ * A coluna do topo-centro: prévias de tela compartilhada e, abaixo delas, a
+ * pilha de avisos (`.notice-stack`). Antes as duas eram ancoradas por conta
+ * própria — a prévia no canto superior DIREITO e o aviso aqui —, e a prévia
+ * ficava num canto que ninguém olha.
+ *
+ * Sem `z-index` E SEM `transform`, os dois de propósito: a tela ampliada
+ * (`.screen-focus`, `fixed; inset: 0; z-index: 20`) é filha desta subárvore, e
+ * qualquer um dos dois a prenderia aqui dentro. O `z-index` criaria um contexto
+ * de empilhamento (ela deixaria de cobrir a barra de mídia, que é 40); o
+ * `transform` é pior, porque cria contexto de empilhamento **e** bloco contentor
+ * para descendente `fixed` — o `inset: 0` passaria a medir esta coluna de 240px
+ * em vez da viewport, e a tela "ampliada" viraria uma janelinha no topo.
+ *
+ * É por isso que o centro é `left: 0; right: 0` + `align-items: center` e não o
+ * `left: 50%` + `translateX(-50%)` que a `.notice-stack` usava quando era ela
+ * mesma que se ancorava. O `padding` lateral faz o papel do `max-width` antigo.
+ *
+ * Com a coluna ocupando a largura toda, `pointer-events: none` aqui é
+ * obrigatório (senão ela engoliria o clique no mapa) — e por isso a
+ * `.screen-focus` religa o ponteiro em si mesma.
+ */
+.top-center-stack {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+/*
+ * A pastilha "VOCÊ ESTÁ COMPARTILHANDO" (`.sharing-badge`) pende de `top: 0` no
+ * mesmo centro, com `z-index: 31`: sem este respiro ela cobriria a borda de cima
+ * da primeira prévia quando você compartilha E outra pessoa também. Único
+ * `:has()` do arquivo; onde ele não existir, o resultado é a sobreposição de
+ * antes — não um layout quebrado.
+ */
+.game-view:has(.sharing-badge) .top-center-stack {
+  padding-top: 20px;
+}
+
 /* ------------------------------------------------- canto superior direito */
 
 /*
- * A coluna do canto superior direito: zoom, alerta de chamado e prévias de tela.
- * Existe porque as duas primeiras eram ancoradas no MESMO ponto (`top:16
- * right:16`) e se sobrepunham quando alguém compartilhava a tela.
- *
- * Sem `z-index` de propósito: a tela ampliada (`.screen-focus`, `fixed` com
- * `z-index: 20`) é filha desta subárvore, e um contexto de empilhamento aqui a
- * prenderia abaixo de coisas que hoje ela cobre.
+ * A coluna do canto superior direito: zoom e alerta de chamado. Existe porque os
+ * dois eram ancorados no MESMO ponto (`top:16 right:16`) e se sobrepunham. As
+ * prévias de tela também moravam aqui e foram para o topo-centro; a restrição de
+ * `z-index` foi com elas (ver `.top-center-stack`).
  */
 .top-right-stack {
   position: absolute;

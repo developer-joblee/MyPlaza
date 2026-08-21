@@ -131,7 +131,7 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular, com um feed rolando ao lado da cabeça e a pastilha **ausente** acima do nome. Andar volta ao normal, e suas preferências de microfone e fone são preservadas — ver [Modo ausente (celular)](docs/features/modo-ausente.md) |
 | Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
 | Conversa paralela (**booble**) | **Botão direito** no boneco de alguém → **booble** (ou **entrar na booble**, se ela já tiver uma), **de qualquer distância**: se estiver longe, seu avatar vai até lá caminhando e a booble abre na chegada — andar, clicar no chão ou o **Cancelar** do aviso desistem. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 7% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra, e um balãozinho de cochicho ao lado de cada cabeça mostra que a conversa está rolando. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
-| Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
+| Compartilhar tela | Botão de tela na barra inferior. Quem está perto (ou na sua **booble**) vê uma **prévia no topo-centro da tela**; clicar nela amplia para a janela inteira, com `⛶`/`F` para fullscreen e `Esc` para voltar — ver [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Chat | Painel no canto inferior direito (global) |
 | Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa: **booble**, **chamar** e o **volume dela**. É o lugar das ações *sobre uma pessoa* — na lista do canto superior esquerdo ficam os selos de status — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
@@ -154,7 +154,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
 | Booble (conversa paralela: dentro 100%, fora 7%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `client/src/game/BoobleWhisper.ts`, `client/src/game/AutoWalk.ts`, `client/src/ui/AvatarContextMenu.tsx`, `server/src/world.ts` |
 | Soundboard gamificado (sons próprios, liberados por tempo na plataforma) | [Soundboard gamificado](docs/features/soundboard.md) | `client/src/soundboard/`, `server/src/soundboard.ts`, `shared/src/levels.ts` |
-| Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
+| Compartilhamento de tela (prévia no topo-centro, clique amplia) | [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md) | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts`, `client/src/ui/GameView.tsx` |
 | Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
 | Modo ausente (celular) | [Modo ausente (celular)](docs/features/modo-ausente.md) | `client/src/presence.ts`, `client/src/game/AwayIndicator.ts`, `client/src/ui/MediaControls.tsx` |
 | Chamado de quem está ausente ("toc-toc") | [Chamado de quem está ausente](docs/features/chamado-ausente.md) | `client/src/presence.ts`, `client/src/ui/knock.ts`, `server/src/handlers.ts` |
@@ -174,10 +174,11 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As catorze com doc (persistência, autenticação, lobby, camada
-> de requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble,
-> soundboard, menu de configurações, menu de contexto, chamar pelo menu de
-> contexto, microfone mudo ao entrar e volume por pessoa) já seguem a convenção.
+> resumo e o link. As dezesseis com doc (persistência, autenticação, lobby,
+> camada de requisição, chamado de ausente, modo ausente, vínculo com o mundo,
+> booble, soundboard, menu de configurações, menu de contexto, chamar pelo menu
+> de contexto, microfone mudo ao entrar, volume por pessoa, cenários e mapas e
+> compartilhamento de tela) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 
@@ -264,9 +265,10 @@ db/       schema do Supabase em SQL, aplicado à mão por enquanto
   volume que você escolheu para aquela pessoa, e vezes o volume global do
   soundboard. Quantos sons cada pessoa tem é liberado pelo tempo acumulado na
   plataforma. Ver [Soundboard gamificado](docs/features/soundboard.md).
-- **Tela compartilhada**: publicada como `ScreenShare` no LiveKit; o consumo usa
-  `track.attach()` (obrigatório com `adaptiveStream`, senão o servidor para de
-  encaminhar e a tela fica preta). Some quando o peer sai do alcance.
+- **Tela compartilhada**: publicada como `ScreenShare` no LiveKit, com portão de
+  proximidade **binário** (não existe "ver a tela a 7%"). Quem recebe vê uma
+  prévia no topo-centro e amplia com um clique. Ver
+  [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md).
 - **Fronteira de requisição**: `client/src/net/` é o único lugar que fala com o
   servidor. Componente, objeto de jogo e store **não** chamam `socket.emit` —
   usam `net/lobbyApi.ts` (operações do lobby), `net/worldApi.ts` (estando

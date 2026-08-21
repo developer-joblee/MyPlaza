@@ -196,12 +196,3 @@ export function SoundboardIcon({ off }: IconProps) {
   );
 }
 
-/** Alto-falante pequeno, para o botão de silenciar UMA pessoa na lista do HUD. */
-export function MuteSenderIcon({ off }: IconProps) {
-  return (
-    <svg {...base}>
-      <path d="M11 5 6.5 9H3v6h3.5L11 19z" />
-      {off ? <Slash /> : <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />}
-    </svg>
-  );
-}
