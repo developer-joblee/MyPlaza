@@ -99,13 +99,22 @@ export class LocalPlayer {
     const r = AVATAR_RADIUS - 2; // um pouco menor para não travar em quinas
     let moved = sittingChanged;
 
+    /**
+     * Preso DENTRO de um sólido (um móvel do editor colocado em cima de você na
+     * corrida da latência — o servidor recusa colocar sobre alguém, mas você
+     * pode ter andado para lá no meio do caminho): toda direção colidiria e o
+     * avatar ficaria travado para sempre. A saída é a regra clássica de
+     * unstuck: quem já está colidindo pode andar livre até ficar livre.
+     */
+    const stuck = tilemap.collidesCircle(this.x, this.y, r);
+
     const nx = this.x + ax * MOVE_SPEED * dt;
-    if (ax !== 0 && !tilemap.collidesCircle(nx, this.y, r)) {
+    if (ax !== 0 && (stuck || !tilemap.collidesCircle(nx, this.y, r))) {
       this.x = nx;
       moved = true;
     }
     const ny = this.y + ay * MOVE_SPEED * dt;
-    if (ay !== 0 && !tilemap.collidesCircle(this.x, ny, r)) {
+    if (ay !== 0 && (stuck || !tilemap.collidesCircle(this.x, ny, r))) {
       this.y = ny;
       moved = true;
     }

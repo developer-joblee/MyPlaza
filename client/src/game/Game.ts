@@ -1,13 +1,16 @@
 import { Application, Container, type FederatedPointerEvent } from 'pixi.js';
 import {
   BOOBLE_JOIN_RADIUS,
-  DEFAULT_CHARACTER,
   TICK_RATE,
   TILE_SIZE,
+  DEFAULT_APPEARANCE,
   audioZoneAt,
   distancePx,
   parseMap,
-  type CharacterId,
+  furnitureDef,
+  type Appearance,
+  type EmoteId,
+  type PlacedFurniture,
   type PlayerState,
   type ScenarioId,
 } from '@together/shared';
@@ -19,11 +22,14 @@ import { useStore } from '../state/store';
 import { AutoWalk } from './AutoWalk';
 import { Keyboard } from './input';
 import type { TilemapBase } from './TilemapBase';
-import { ModernTilemap, loadModernTextures, type ModernTextures } from './ModernTilemap';
+import { ModernTilemap, loadTileArt, type TileArt } from './ModernTilemap';
+import { FurnitureLayer } from './FurnitureLayer';
+import { createFurnitureApi } from '../net/furnitureApi';
 import type { Avatar } from './Avatar';
 import { LocalPlayer } from './LocalPlayer';
 import { RemotePlayer } from './RemotePlayer';
-import { loadAllCharacterFrames, type CharacterFrames } from './sprites';
+import { framesForAppearance, loadCuratedLayers, type CharacterFrames } from './sprites';
+import { emoteFrames, loadEmoteFrames } from './emotes';
 import { BoobleRings, type RingMember } from './BoobleRings';
 import type { AudioInfo, PeerAudio } from '../voice/proximity';
 
@@ -69,17 +75,27 @@ export class Game {
 
   /** Ver a nota em `VoiceRoom`: getter, porque o campo inicializa antes do socket. */
   private readonly api = createWorldApi(() => this.socket);
+  private readonly furnitureApi = createFurnitureApi(() => this.socket);
+  private furnitureLayer: FurnitureLayer;
+  /** a foto atual da camada dinâmica (vem 100% dos broadcasts) */
+  private furnitureItems: PlacedFurniture[] = [];
+  /** móvel "na mão" para mover (modo edição); null = nada pego */
+  private furnitureCarry: PlacedFurniture | null = null;
+  /** variante (tecla R) do item da paleta; o do carry vive no próprio item */
+  private furniturePickRotation = 0;
+  /** tiles cobertos por móvel dinâmico SÓLIDO — consultado pelo isSolidAt */
+  private furnitureSolid = new Set<string>();
+  /** último tile sob o ponteiro no modo edição, para o clique usar */
+  private pointerTile: { x: number; y: number } | null = null;
 
   private constructor(
     app: Application,
     private socket: AppSocket,
-    /** frames de todos os personagens; cada player usa o que escolheu */
-    private characters: Map<CharacterId, CharacterFrames>,
-    tiles: ModernTextures,
+    tiles: TileArt,
     selfName: string,
     selfColor: number,
     scenarioId: ScenarioId,
-    selfCharacter: CharacterId,
+    selfAppearance: Appearance,
   ) {
     this.app = app;
     this.scenarioId = scenarioId;
@@ -89,8 +105,12 @@ export class Game {
      * pack; se um dia entrar um estilo novo, o `theme` volta e o despacho volta
      * com ele — mas manter a bifurcação com um único caso era código morto.
      */
-    this.tilemap = new ModernTilemap(parseMap(scenarioId), tiles);
-    this.local = new LocalPlayer(this.framesFor(selfCharacter), selfName, selfColor);
+    const map = parseMap(scenarioId);
+    this.tilemap = new ModernTilemap(map, tiles, scenarioId);
+    this.furnitureLayer = new FurnitureLayer(tiles, map, this.playersLayer);
+    // móveis do editor colidem como os do mapa; o set é reconstruído nos eventos
+    this.tilemap.setDynamicSolid((x, y) => this.furnitureSolid.has(`${x},${y}`));
+    this.local = new LocalPlayer(this.framesFor(selfAppearance), selfName, selfColor);
 
     this.playersLayer.sortableChildren = true;
     // o círculo da booble entra entre o mapa e os avatares: é marca no chão,
@@ -106,7 +126,21 @@ export class Game {
     this.app.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     this.app.canvas.addEventListener('contextmenu', this.onContextMenu);
     this.app.canvas.addEventListener('pointerdown', this.onCanvasPointerDown);
+    // DOM, e não eventFeatures.move do Pixi: religar o move reativaria teste de
+    // acerto por frame no app inteiro para servir só o ghost do editor
+    this.app.canvas.addEventListener('pointermove', this.onCanvasPointerMove);
+    window.addEventListener('keydown', this.onKeyDown);
     this.bindSocket();
+    // fechar o modo de edição (pela paleta) larga o que estiver na mão e some
+    // com o ghost — sem isto ele ficaria parado na tela até o próximo mousemove
+    this.unbinders.push(
+      useStore.subscribe((s) => {
+        if (!s.furnitureEditing) {
+          this.furnitureCarry = null;
+          this.furnitureLayer.hideGhost();
+        }
+      }),
+    );
     this.app.ticker.add(this.tick);
 
     (window as unknown as Record<string, unknown>).__togetherPos = () => this.selfPosition;
@@ -179,8 +213,110 @@ export class Game {
    * microfone no caminho não é desistir.
    */
   private onCanvasPointerDown = (e: PointerEvent) => {
+    const { furnitureEditing, furniturePick, setFurniturePick } = useStore.getState();
+    if (furnitureEditing && this.pointerTile) {
+      const { x, y } = this.pointerTile;
+      if (e.button === 0) {
+        if (furniturePick) {
+          // colocar: o sprite nasce do broadcast; o ack só explica recusas
+          void this.furnitureApi
+            .place(furniturePick, x, y, this.furniturePickRotation)
+            .then((res) => {
+              if (!res.ok) console.warn('[furniture] place recusado:', res.reason);
+            });
+        } else if (this.furnitureCarry) {
+          const carry = this.furnitureCarry;
+          this.furnitureCarry = null;
+          this.furnitureLayer.hideGhost();
+          void this.furnitureApi.move(carry.id, x, y, carry.rotation).then((res) => {
+            if (!res.ok) console.warn('[furniture] move recusado:', res.reason);
+          });
+        } else {
+          // pegar o móvel sob o cursor para mover
+          const item = this.furnitureLayer.itemAt(this.furnitureItems, x, y);
+          if (item) this.furnitureCarry = item;
+        }
+        return; // clique de edição não cancela booble nem nada do jogo
+      }
+      if (e.button === 2) {
+        if (this.furnitureCarry || furniturePick) {
+          // direito com algo na mão = larga, sem remover nada
+          this.furnitureCarry = null;
+          setFurniturePick(null);
+          this.furnitureLayer.hideGhost();
+          return;
+        }
+        const item = this.furnitureLayer.itemAt(this.furnitureItems, x, y);
+        if (item) {
+          void this.furnitureApi.remove(item.id).then((res) => {
+            if (!res.ok) console.warn('[furniture] remove recusado:', res.reason);
+          });
+        }
+        return;
+      }
+    }
     if (e.button === 0) cancelPendingBooble();
   };
+
+  /** Só faz trabalho no modo de edição: ghost seguindo o ponteiro, por tile. */
+  private onCanvasPointerMove = (e: PointerEvent) => {
+    const { furnitureEditing, furniturePick } = useStore.getState();
+    if (!furnitureEditing) return;
+    if (e.buttons === 0 && !furniturePick && !this.furnitureCarry) {
+      this.furnitureLayer.hideGhost();
+    }
+    const rect = this.app.canvas.getBoundingClientRect();
+    const world = this.world.toLocal({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    const tileX = Math.floor(world.x / TILE_SIZE);
+    const tileY = Math.floor(world.y / TILE_SIZE);
+    this.pointerTile = { x: tileX, y: tileY };
+    const showing = furniturePick ?? this.furnitureCarry?.furnitureId ?? null;
+    if (!showing) {
+      this.furnitureLayer.hideGhost();
+      return;
+    }
+    const valid = this.furnitureLayer.footprintFree(
+      showing,
+      tileX,
+      tileY,
+      this.furnitureItems,
+      this.furnitureCarry?.id,
+    );
+    const rotation = this.furnitureCarry?.rotation ?? this.furniturePickRotation;
+    this.furnitureLayer.showGhost(showing, rotation, tileX, tileY, valid);
+  };
+
+  /**
+   * `R` alterna a variante de arte do que está na mão (paleta ou móvel pego).
+   * Listener próprio, fora do `Keyboard` de movimento: é tecla de MODO, só
+   * existe editando, e não pode disparar com o foco num campo de texto.
+   */
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (e.key !== 'r' && e.key !== 'R') return;
+    if ((e.target as HTMLElement | null)?.closest?.('[data-capture-keys]')) return;
+    const { furnitureEditing, furniturePick } = useStore.getState();
+    if (!furnitureEditing) return;
+    // módulo 8: é o teto que o servidor aceita; o frame já dá a volta sozinho
+    if (this.furnitureCarry) {
+      this.furnitureCarry.rotation = (this.furnitureCarry.rotation + 1) % 8;
+    } else if (furniturePick) {
+      this.furniturePickRotation = (this.furniturePickRotation + 1) % 8;
+    }
+  };
+
+  /** Recalcula os tiles sólidos da camada dinâmica (chamado nos 3 eventos). */
+  private rebuildFurnitureSolid(): void {
+    this.furnitureSolid.clear();
+    for (const item of this.furnitureItems) {
+      const def = furnitureDef(item.furnitureId);
+      if (!def.solid) continue;
+      for (let dy = 0; dy < def.h; dy++) {
+        for (let dx = 0; dx < def.w; dx++) {
+          this.furnitureSolid.add(`${item.tileX + dx},${item.tileY + dy}`);
+        }
+      }
+    }
+  }
 
   /**
    * Clique direito num avatar. `id` nulo é o player local: o id dele é o
@@ -197,11 +333,14 @@ export class Game {
   }
 
   /**
-   * Frames do personagem pedido, caindo no padrão se o id não existir. O
-   * servidor já valida, então isto só cobre um cliente mais novo que o servidor.
+   * Frames da aparência pedida. Síncrono: as camadas curadas já foram
+   * pré-carregadas no `create`, e a composição (canvas 2D) + o recorte são
+   * cacheados por combinação em `sprites.ts`. O servidor valida a aparência —
+   * o `??` cobre só o dev com servidor de versão antiga (que manda `character`
+   * em vez de `appearance`): melhor um boneco padrão que um mundo sem gente.
    */
-  private framesFor(id: CharacterId): CharacterFrames {
-    return this.characters.get(id) ?? this.characters.get(DEFAULT_CHARACTER)!;
+  private framesFor(appearance: Appearance | undefined): CharacterFrames {
+    return framesForAppearance(appearance ?? DEFAULT_APPEARANCE);
   }
 
   static async create(
@@ -210,14 +349,15 @@ export class Game {
     selfName: string,
     selfColor: number,
     scenarioId: ScenarioId,
-    selfCharacter: CharacterId,
+    selfAppearance: Appearance,
   ): Promise<Game> {
     const app = new Application();
-    const [characters, tiles] = await Promise.all([
-      // todos de uma vez: sai mais previsível que carregar sob demanda quando
-      // alguém entra com um boneco ainda desconhecido
-      loadAllCharacterFrames(),
-      loadModernTextures(),
+    const [, , tiles] = await Promise.all([
+      // todas as camadas de uma vez: compor a aparência de quem entra é
+      // síncrono, então não pode esperar rede no addRemote
+      loadCuratedLayers(),
+      loadEmoteFrames(),
+      loadTileArt(),
       app.init({
         resizeTo: container,
         backgroundColor: 0x1f2129,
@@ -242,12 +382,11 @@ export class Game {
     return new Game(
       app,
       socket,
-      characters,
       tiles,
       selfName,
       selfColor,
       scenarioId,
-      selfCharacter,
+      selfAppearance,
     );
   }
 
@@ -300,6 +439,32 @@ export class Game {
       this.remotes.get(id)?.avatar.setAway(away);
       useStore.getState().setPlayerAway(id, away);
     };
+    // o emissor também recebe (o servidor manda ao mundo inteiro): o próprio
+    // balão nasce daqui, nunca do clique — caminho único de render
+    const onFurnitureSnapshot = (items: PlacedFurniture[], canEdit: boolean) => {
+      this.furnitureItems = items;
+      this.furnitureCarry = null;
+      this.furnitureLayer.replaceAll(items);
+      this.rebuildFurnitureSolid();
+      useStore.getState().setFurnitureCanEdit(canEdit);
+    };
+    const onFurnitureChanged = (item: PlacedFurniture) => {
+      this.furnitureItems = [...this.furnitureItems.filter((f) => f.id !== item.id), item];
+      this.furnitureLayer.set(item);
+      this.rebuildFurnitureSolid();
+    };
+    const onFurnitureRemoved = (id: string) => {
+      this.furnitureItems = this.furnitureItems.filter((f) => f.id !== id);
+      if (this.furnitureCarry?.id === id) this.furnitureCarry = null;
+      this.furnitureLayer.remove(id);
+      this.rebuildFurnitureSolid();
+    };
+    const onEmoted = (id: string, emoteId: EmoteId) => {
+      const frames = emoteFrames(emoteId);
+      if (!frames) return; // preload não rodou / id de servidor mais novo
+      const avatar = id === this.socket.id ? this.local.avatar : this.remotes.get(id)?.avatar;
+      avatar?.showEmote(frames);
+    };
 
     this.socket.on('world:snapshot', onSnapshot);
     this.socket.on('player:joined', onJoined);
@@ -307,18 +472,26 @@ export class Game {
     this.socket.on('player:moved', onMoved);
     this.socket.on('player:sat', onSat);
     this.socket.on('player:away', onAway);
+    this.socket.on('player:emoted', onEmoted);
+    this.socket.on('furniture:snapshot', onFurnitureSnapshot);
+    this.socket.on('furniture:changed', onFurnitureChanged);
+    this.socket.on('furniture:removed', onFurnitureRemoved);
     this.unbinders.push(() => {
+      this.socket.off('furniture:snapshot', onFurnitureSnapshot);
+      this.socket.off('furniture:changed', onFurnitureChanged);
+      this.socket.off('furniture:removed', onFurnitureRemoved);
       this.socket.off('world:snapshot', onSnapshot);
       this.socket.off('player:joined', onJoined);
       this.socket.off('player:left', onLeft);
       this.socket.off('player:moved', onMoved);
       this.socket.off('player:sat', onSat);
       this.socket.off('player:away', onAway);
+      this.socket.off('player:emoted', onEmoted);
     });
   }
 
   private addRemote(p: PlayerState): void {
-    const remote = new RemotePlayer(this.framesFor(p.character), p.name, p.color, p.x, p.y);
+    const remote = new RemotePlayer(this.framesFor(p.appearance), p.name, p.color, p.x, p.y);
     // quem já estava sentado, ausente ou numa booble quando entramos precisa
     // aparecer assim — é o caminho de quem abre a aba com o mundo em andamento
     remote.setSitting(p.sitting);
@@ -672,6 +845,8 @@ export class Game {
     this.app.canvas.removeEventListener('wheel', this.onWheel);
     this.app.canvas.removeEventListener('contextmenu', this.onContextMenu);
     this.app.canvas.removeEventListener('pointerdown', this.onCanvasPointerDown);
+    this.app.canvas.removeEventListener('pointermove', this.onCanvasPointerMove);
+    window.removeEventListener('keydown', this.onKeyDown);
     // o menu aponta para um avatar que está deixando de existir
     useStore.getState().closeContextMenu();
     this.keyboard.detach();

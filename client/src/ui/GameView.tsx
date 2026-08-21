@@ -12,12 +12,19 @@ import type { VoiceRoom } from '../voice/VoiceRoom';
 import { AvatarContextMenu } from './AvatarContextMenu';
 import { CallAlerts } from './CallAlerts';
 import { Chat } from './Chat';
+import { FurniturePalette } from './FurniturePalette';
 import { Hud } from './Hud';
 import { MediaControls } from './MediaControls';
 import { Notices } from './Notices';
 import { ScreenShareView } from './ScreenShareView';
 import { SharingIndicator } from './SharingIndicator';
 import { ZoomControls } from './ZoomControls';
+
+/** A paleta só existe no DOM enquanto o modo de edição está ligado. */
+function FurnitureEditGate() {
+  const editing = useStore((s) => s.furnitureEditing);
+  return editing ? <FurniturePalette /> : null;
+}
 
 export function GameView() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,7 +33,7 @@ export function GameView() {
     const container = containerRef.current;
     if (!container) return;
 
-    const { selfName, selfColor, selfScenario, selfCharacter, selfWorldId } =
+    const { selfName, selfColor, selfScenario, selfAppearance, selfWorldId } =
       useStore.getState();
     const socket = createSocket();
     runtime.socket = socket;
@@ -72,7 +79,7 @@ export function GameView() {
         selfName,
         selfColor,
         selfScenario,
-        selfCharacter,
+        selfAppearance,
       );
       if (cancelled) {
         game.destroy();
@@ -91,7 +98,7 @@ export function GameView() {
       // handlers explícitos e removíveis: a ordem importa (o token exige que o
       // join já tenha rodado) e o handler antigo nunca era removido no cleanup
       onConnect = () => {
-        api.join(selfName, selfColor, selfScenario, selfCharacter, selfWorldId ?? undefined);
+        api.join(selfName, selfColor, selfScenario, selfAppearance, selfWorldId ?? undefined);
         // a reconexão cria um player novo no servidor, sempre presente. Se o
         // usuário está ausente, reafirma — senão ele volta a aparecer
         // disponível para os outros enquanto continua mudo de fato.
@@ -131,6 +138,7 @@ export function GameView() {
       <Chat />
       <Notices />
       <MediaControls />
+      <FurnitureEditGate />
       {/*
         Uma coluna só para o canto superior direito. Antes o zoom e as prévias de
         tela eram ancorados os DOIS em `top:16 right:16` e se sobrepunham quando

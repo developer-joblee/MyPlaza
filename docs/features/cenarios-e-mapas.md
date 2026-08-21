@@ -5,15 +5,23 @@
 
 ## O que faz
 
-O mapa por onde os avatares andam. Hoje existe **um cenário: o Estúdio** — um
-escritório moderno 36x24 com lounge, open space, sala de reunião e copa, feito
-com os assets **Modern Interiors** (by LimeZu). O mapa é desenhado em **ASCII**,
-uma linha por linha de tiles, e é a mesma fonte para o desenho no client, a
-colisão nos dois lados e as zonas de áudio.
+Os mapas por onde os avatares andam. São **três cenários, do mesmo estilo de
+arte** (Modern Interiors + Modern Office, by LimeZu):
 
-Até 2026-08-21 havia quatro cenários, de três packs diferentes (Praça/Sprout
-Lands, Ruínas/Cainos, um Escritório procedural e o Estúdio). Ficou só o Estúdio
-— ver [Por que um estilo só](#por-que-um-estilo-só).
+- **Estúdio** (36x24) — lounge, open space, sala de reunião e copa (2 zonas);
+- **Escritório** (40x24) — recepção, open space maior, reunião e copa (2 zonas),
+  com impressora, máquinas de venda e quadro branco;
+- **Café** (30x20) — balcão com estação de café, mesas, lounge e uma sala
+  reservada (1 zona).
+
+Cada mapa é desenhado em **ASCII**, uma linha por linha de tiles, e é a mesma
+fonte para o desenho no client, a colisão nos dois lados e as zonas de áudio. A
+**legenda é uma só** (`MODERN_CHAR_TO_TILE`); a arte de cada cenário vem do tema
+(`scenarioThemes.ts`) — o mesmo `q` é TV no Estúdio e quadro no Escritório.
+
+Até 2026-08-21 havia quatro cenários de três packs diferentes; ficou um estilo
+só — ver [Por que um estilo só](#por-que-um-estilo-só) — e no mesmo dia o
+Escritório e o Café entraram, já no estilo unificado.
 
 ## Como funciona
 
@@ -45,12 +53,17 @@ Do `TileType` saem três decisões, todas em `shared/src/map.ts`:
   pedido com a mesma função, então direção nenhuma precisa ir pela rede.
 
 O desenho fica no client, em `client/src/game/ModernTilemap.ts` (subclasse de
-`TilemapBase`): recorta as sheets do pack por retângulos calibrados à mão
-(`RB` para o `Room_Builder`, `IN` para o `Interiors`), agrupa móveis em *runs*
-horizontais (`>oooo<` = uma mesa longa de 4, não quatro mesas), sorteia variantes
-por um `hash(x, y)` determinístico — para todos os clients verem o mesmo — e
-divide o resultado em duas camadas: `view` (chão, abaixo dos avatares) e `props`
-(sprites altos, que o `Game` joga na camada com y-sort).
+`TilemapBase`), e desde 2026-08-21 é **orientado a dados**: os frames vêm de um
+**atlas** (`client/public/tiles/modern/furniture.{png,json}`, gerado por
+`npm run atlas` — ver [Atlas de tiles](atlas-de-tiles.md)) e a arte de cada
+papel vem do **tema do cenário** (`client/src/game/scenarioThemes.ts`). O
+renderer agrupa móveis em *runs* horizontais (`>oooo<` = uma mesa longa de 4,
+não quatro mesas), sorteia variantes por um `hash(x, y)` determinístico — para
+todos os clients verem o mesmo — e divide o resultado em duas camadas: `view`
+(chão, abaixo dos avatares) e `props` (sprites altos, que o `Game` joga na
+camada com y-sort). Um cenário novo com o mesmo pack é uma entrada em
+`SCENARIOS` (shared) + um tema em `SCENARIO_THEMES` + os frames no manifest do
+atlas — o `ModernTilemap` não muda.
 
 ### O ASCII do Estúdio
 
@@ -61,6 +74,7 @@ pisos    . cinza  h espinha-de-peixe (lounge)   t azulejo verde-água (reunião)
 móveis   s sofá (run 2-3)   W workstation   o mesa longa (run 4)   T banqueta
          E estante (run 2)  L lousa de cavalete (run 2)   K balcão (run 2)
          G geladeira        g globo          P planta
+animados C máquina de café  A aquário (run 2 — `AA`)   [ver objetos-animados.md]
 cadeiras > senta olhando à direita    < senta olhando à esquerda
          c decorativa (de frente para a câmera, sem arte de sentar)
 ```
@@ -71,11 +85,13 @@ cadeiras > senta olhando à direita    < senta olhando à esquerda
 |---|---|
 | `shared/src/scenarios.ts` | os cenários: ASCII, legenda, spawns, zonas. **Fonte única** |
 | `shared/src/map.ts` | `TileType`, `buildMap`, `isSolid`, `isWallLike`, `sitFacingAt` |
-| `client/src/game/ModernTilemap.ts` | desenho: recortes das sheets, runs, y-sort |
+| `client/src/game/ModernTilemap.ts` | desenho: frames do atlas por nome, runs, y-sort |
+| `client/src/game/scenarioThemes.ts` | a arte de cada cenário: papel → nome de frame no atlas |
 | `client/src/game/TilemapBase.ts` | colisão e busca de cadeira, comum a qualquer renderer |
-| `client/public/tiles/modern/` | as duas sheets do pack (`room_builder.png`, `interiors.png`) |
+| `client/public/tiles/modern/` | o atlas gerado (`furniture.png` + `furniture.json`) |
+| `scripts/build-atlas.mjs` · `scripts/atlas.manifest.json` | geram o atlas a partir do pack pago — ver [Atlas de tiles](atlas-de-tiles.md) |
 | `server/src/world.ts` | usa `parseMap` e `spawnTiles`; valida posição salva contra o mapa |
-| `db/seed.sql` · `db/migrations/0013_single_scenario.sql` | catálogo `scenarios` no banco |
+| `db/seed.sql` · `db/migrations/0013_single_scenario.sql` · `0015_scenarios_office_cafe.sql` | catálogo `scenarios` no banco |
 
 ## Decisões e por quê
 
@@ -141,10 +157,11 @@ o `scenarioId`. Ver [Lobby](lobby.md).
 - **`charToTile` e o banco não conversam.** Adicionar um cenário exige a linha
   em `scenarios` (`db/seed.sql`), senão o FK de `places` não fecha. Remover um
   exige migração — foi o que a `0013` fez.
-- **Os recortes do `ModernTilemap` são coordenadas em pixel das sheets.**
-  Trocar `interiors.png` ou `room_builder.png` por versões com layout diferente
-  (é o caso do pack completo) invalida **todos** os retângulos de `RB` e `IN` de
-  uma vez, e o sintoma é sprite cortado ou pedaço de outro móvel — não erro.
+- **Frame que não existe no atlas falha ALTO no boot** (`Atlas de tiles não tem
+  o frame "..."`), de propósito: um tema apontando para nome errado seria móvel
+  invisível. Se aparecer esse erro, ou o nome no tema está errado, ou o manifest
+  perdeu a linha — rode `npm run atlas` e confira. As coordenadas do manifest
+  são das sheets **master** do pack (em `assets_temp/`), e só o script as lê.
 - Girar uma cadeira é trocar `>` por `<`. As mesas ficam com cadeira nas
   **laterais** porque a arte de sentar do pack só tem perfil.
 

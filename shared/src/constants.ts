@@ -64,6 +64,55 @@ export const NUDGE_MAX_NAMES = 2;
  */
 export const CALL_COOLDOWN_MS = 3000;
 
+// ------------------------------------------------------------------- emotes
+//
+// Reações efêmeras sobre a cabeça do avatar (balãozinho animado do pack de UI
+// do LimeZu). São PROTOCOLO — o id viaja em `player:emote`/`player:emoted` — e
+// não são persistidas, como `presence:nudge`. Ver docs/features/emotes.md.
+
+/**
+ * O catálogo. O id corresponde 1:1 à tira em `client/public/emotes/{id}.png`
+ * (gerada por `npm run assets:characters`, a partir de posições da sheet do
+ * pack registradas no próprio script). O `label` é o que o seletor mostra no
+ * `title`/aria — o desenho vem da tira, não daqui.
+ */
+export const EMOTES = [
+  { id: 'exclamacao', label: 'Opa!' },
+  { id: 'duvida', label: 'Hã?' },
+  { id: 'pensando', label: 'Pensando…' },
+  { id: 'musica', label: 'Música' },
+  { id: 'sono', label: 'Sono' },
+  { id: 'coracao', label: 'Adorei' },
+] as const;
+
+export type EmoteId = (typeof EMOTES)[number]['id'];
+
+export function isEmoteId(v: unknown): v is EmoteId {
+  return typeof v === 'string' && EMOTES.some((e) => e.id === v);
+}
+
+/**
+ * Intervalo mínimo entre dois emotes da MESMA pessoa (ms). Por emissor, como o
+ * do soundboard (o alvo é quem estiver olhando — cooldown por par não limitaria
+ * nada). 2s deixa emendar uma reação na outra sem dar para virar strobo.
+ * Imposto no servidor; o seletor desabilita pelo mesmo tempo, por conforto.
+ */
+export const EMOTE_COOLDOWN_MS = 2000;
+
+/**
+ * Quanto tempo o balão fica na tela (ms). Cabe a intro (~0,7s) e umas três
+ * pulsadas do ícone; mais que isso e a reação de agora vira ruído de 10s atrás.
+ */
+export const EMOTE_DURATION_MS = 3000;
+
+/**
+ * Teto de móveis dinâmicos por mundo (editor de móveis). Existe porque cada
+ * móvel é uma linha no banco e um sprite em todo cliente — sem teto, um clique
+ * preso derruba o mundo inteiro. 200 é ~4x o que o maior mapa comporta com bom
+ * senso. Imposto no servidor; o cliente mostra o motivo `full`.
+ */
+export const FURNITURE_MAX_PER_WORLD = 200;
+
 // ------------------------------------------------------------------- booble
 //
 // Uma "booble" é um grupo ad-hoc que PRIORIZA o áudio de quem está dentro, sem

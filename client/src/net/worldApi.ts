@@ -1,4 +1,4 @@
-import type { CharacterId, ScenarioId } from '@together/shared';
+import type { Appearance, EmoteId, ScenarioId } from '@together/shared';
 import { fire } from './request';
 import type { AppSocket } from './socket';
 
@@ -20,7 +20,7 @@ export interface WorldApi {
     name: string,
     color: number,
     scenarioId: ScenarioId,
-    character: CharacterId,
+    appearance: Appearance,
     worldId?: string,
   ): boolean;
   move(x: number, y: number): boolean;
@@ -45,6 +45,8 @@ export interface WorldApi {
   boobleLeave(): boolean;
   /** Comecei/parei de compartilhar a tela — o servidor só registra. */
   share(sharing: boolean): boolean;
+  /** Reação sobre a cabeça. O servidor pode recusar em silêncio (cooldown). */
+  emote(emoteId: EmoteId): boolean;
 }
 
 /**
@@ -54,8 +56,12 @@ export interface WorldApi {
  */
 export function createWorldApi(getSocket: () => AppSocket | null): WorldApi {
   return {
-    join: (name, color, scenarioId, character, worldId) =>
-      fire(getSocket(), (s) => s.emit('join', name, color, scenarioId, character, worldId)),
+    // o 4º argumento do evento é o `character` LEGADO (clientes antigos);
+    // cliente novo manda undefined ali e a aparência no 6º
+    join: (name, color, scenarioId, appearance, worldId) =>
+      fire(getSocket(), (s) =>
+        s.emit('join', name, color, scenarioId, undefined, worldId, appearance),
+      ),
     move: (x, y) => fire(getSocket(), (s) => s.emit('move', x, y)),
     sit: (sitting) => fire(getSocket(), (s) => s.emit('sit', sitting)),
     setAway: (away) => fire(getSocket(), (s) => s.emit('away', away)),
@@ -67,5 +73,6 @@ export function createWorldApi(getSocket: () => AppSocket | null): WorldApi {
     boobleJoin: (targetId) => fire(getSocket(), (s) => s.emit('booble:join', targetId)),
     boobleLeave: () => fire(getSocket(), (s) => s.emit('booble:leave')),
     share: (sharing) => fire(getSocket(), (s) => s.emit('share', sharing)),
+    emote: (emoteId) => fire(getSocket(), (s) => s.emit('player:emote', emoteId)),
   };
 }

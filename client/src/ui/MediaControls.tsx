@@ -3,10 +3,12 @@ import { setAway } from '../presence';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
 import { AudioSettings } from './AudioSettings';
+import { EmotePicker } from './EmotePicker';
 import { SettingsMenu } from './SettingsMenu';
 import { SoundboardPanel } from './SoundboardPanel';
 import {
   AwayIcon,
+  EmoteIcon,
   GearIcon,
   HeadphonesIcon,
   MicIcon,
@@ -32,9 +34,11 @@ export function MediaControls() {
   const [open, setOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [emotesOpen, setEmotesOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const boardTriggerRef = useRef<HTMLButtonElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const emoteTriggerRef = useRef<HTMLButtonElement>(null);
 
   const voiceOff = voiceStatus === 'unavailable';
   // ausente conta como mic desligado no ícone: é o que está acontecendo de fato
@@ -58,6 +62,10 @@ export function MediaControls() {
   const closeMenu = () => {
     setMenuOpen(false);
     menuTriggerRef.current?.focus();
+  };
+  const closeEmotes = () => {
+    setEmotesOpen(false);
+    emoteTriggerRef.current?.focus();
   };
   /**
    * Sem conta não há soundboard: o tempo acumulado e o arquivo no Storage
@@ -86,6 +94,7 @@ export function MediaControls() {
       {open && <AudioSettings onClose={close} />}
       {boardOpen && <SoundboardPanel onClose={closeBoard} />}
       {menuOpen && <SettingsMenu onClose={closeMenu} />}
+      {emotesOpen && <EmotePicker onClose={closeEmotes} />}
       <div className="panel media-controls">
         <button
           type="button"
@@ -154,6 +163,20 @@ export function MediaControls() {
           <SlidersIcon />
           {voiceStatus === 'reconnecting' && <span className="media-btn-badge busy" aria-hidden="true" />}
           {voiceStatus === 'error' && <span className="media-btn-badge error" aria-hidden="true" />}
+        </button>
+
+        <button
+          ref={emoteTriggerRef}
+          type="button"
+          className={`media-btn${emotesOpen ? ' open' : ''}`}
+          onClick={() => setEmotesOpen((v) => !v)}
+          aria-label="Reações"
+          aria-expanded={emotesOpen}
+          aria-haspopup="dialog"
+          aria-controls="emote-popover"
+          title="Reações"
+        >
+          <EmoteIcon />
         </button>
 
         <button

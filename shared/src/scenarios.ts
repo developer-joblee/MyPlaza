@@ -1,14 +1,15 @@
 import { TileType, buildMap, type WorldMap } from './map';
 
 /**
- * Cenários disponíveis. Hoje só o **Estúdio**: o projeto usou por um tempo mais
- * três mapas de packs diferentes (Praça/Sprout Lands, Ruínas/Cainos e um
- * Escritório procedural) e eles saíram quando se decidiu ficar num estilo só —
- * o Modern Interiors, do LimeZu. Continua sendo uma união de propósito: mapa
- * novo é uma entrada nova aqui, e todo o resto (lobby, banco, seletor de tela)
- * já trata a lista como plural.
+ * Cenários disponíveis — todos do MESMO estilo de arte (Modern Interiors +
+ * Modern Office, by LimeZu; um renderer só, temas em
+ * `client/src/game/scenarioThemes.ts`). O projeto já teve mapas de três packs
+ * diferentes e ficou num estilo só em 2026-08-21; `office` e `cafe` entraram
+ * no mesmo dia, já no estilo unificado. União de propósito: mapa novo é uma
+ * entrada nova aqui, e o resto (lobby, banco, seletor de tela) trata a lista
+ * como plural.
  */
-export type ScenarioId = 'studio';
+export type ScenarioId = 'studio' | 'office' | 'cafe';
 
 /**
  * Zona de áudio: dentro dela só se ouve quem também está dentro. Quem está
@@ -85,14 +86,14 @@ const STUDIO_ROWS = [
   '#hsshhhhh...............#tttttttttP#',
   '#hhhhhhhh...W...W...W...#tttttttttt#',
   '#hhhhhhhh...............##q##..#####',
-  '#P.................................#',
+  '#P..............................AA.#',
   '#..................................#',
   '#..........W...W...W...W...W.......#',
   '#..................................#',
   '#.................................P#',
-  '#..................................#',
+  '#........................#.........#',
   '#........................#####..####',
-  '#........................#kkkkkkKKG#',
+  '#........................#kkkkkCKKG#',
   '#.g......................#kkkkkkkkk#',
   '#........................#kk>T<kkkk#',
   '#........................#kkkkkkkkk#',
@@ -102,36 +103,106 @@ const STUDIO_ROWS = [
   '####################################',
 ];
 
+/**
+ * A legenda é UMA para todos os cenários (o vocabulário de tiles é o mesmo; o
+ * que muda por cenário é a arte, via tema). Um cenário pode não usar um
+ * caractere — a legenda maior não custa nada.
+ */
+const MODERN_CHAR_TO_TILE: Readonly<Record<string, TileType>> = {
+  '.': TileType.Floor,
+  h: TileType.FloorLounge,
+  t: TileType.FloorMeeting,
+  k: TileType.FloorKitchen,
+  r: TileType.Rug,
+  '#': TileType.Wall,
+  w: TileType.WallWindow,
+  q: TileType.WallArt,
+  b: TileType.WallBoard,
+  s: TileType.Sofa,
+  W: TileType.Workstation,
+  o: TileType.Table,
+  T: TileType.Table,
+  c: TileType.Chair,
+  '>': TileType.ChairRight,
+  '<': TileType.ChairLeft,
+  E: TileType.Shelf,
+  L: TileType.Desk,
+  K: TileType.Counter,
+  G: TileType.Fridge,
+  g: TileType.Globe,
+  P: TileType.Plant,
+  C: TileType.CoffeeMachine,
+  A: TileType.Aquarium,
+};
+
+/**
+ * Escritório 40x24: recepção com sofás à esquerda, open space de workstations,
+ * sala de reunião no topo direito e copa embaixo à direita (as duas são zonas).
+ * No tema do office, `g` desenha impressora, `G` máquina de venda e `b`/`L` o
+ * quadro branco.
+ */
+const OFFICE_ROWS = [
+  '####ww####ww####ww####ww##ww####b#######',
+  '#......................#ttttttttttttLLt#',
+  '#..W...W...W...W.......#tgttttttttttttt#',
+  '#......................#tt>oooo<ttttttt#',
+  '#..W...W...W...W.......#ttttttttttttttt#',
+  '#......................#tt>T<>T<ttttttt#',
+  '#..W...W...W...W.......#tttttttttttttPt#',
+  '#......................#ttttttttttttttt#',
+  '#......................###q##..#########',
+  '#......................................#',
+  '#..W...W...W...W...W...W............P.g#',
+  '#......................................#',
+  '#..W...W...W...W...W...W.............g.#',
+  '#......................................#',
+  '#.ss.rr................................#',
+  '#.ss.rr...................####..########',
+  '#.........................#kkkkkkkKKGCk#',
+  '#.........................#kkkkkkkkkkkk#',
+  '#.........................#kk>T<kkkkkkk#',
+  '#.........................#kkkkkkkkkkkk#',
+  '#.EE..EE..................#kkkkkkkkkkkk#',
+  '#.........................#kkGkkkkkkkkk#',
+  '#.P.......................#Pkkkkkkkkkkk#',
+  '########################################',
+];
+
+/**
+ * Café 30x20: balcão com estação de café ao fundo à esquerda (cozinha em piso
+ * claro atrás), mesas com banquetas no salão (piso de madeira), lounge de
+ * sofás embaixo e uma sala reservada no topo direito (zona), com piso quente.
+ */
+const CAFE_ROWS = [
+  '####ww####ww####ww####ww######',
+  '#...................#hhhhhhhh#',
+  '#...................#hsshhhhh#',
+  '#...................#hhhhhhhh#',
+  '#...................#h>T<hhhh#',
+  '#...................#hhhhhhhP#',
+  '#....................#####..##',
+  '#............................#',
+  '#kkkkkkkk....................#',
+  '#kkCGkkkk....................#',
+  '#KKLLKKkk....................#',
+  '#............................#',
+  '#..>T<...>T<...>T<...........#',
+  '#............................#',
+  '#..>T<...>T<...>T<......rr...#',
+  '#............................#',
+  '#.ss......................P..#',
+  '#.ss.........................#',
+  '#.P..........................#',
+  '##############################',
+];
+
 export const SCENARIOS: Record<ScenarioId, ScenarioDef> = {
   studio: {
     id: 'studio',
     label: 'Estúdio',
     description: 'Escritório moderno',
     rows: STUDIO_ROWS,
-    charToTile: {
-      '.': TileType.Floor,
-      h: TileType.FloorLounge,
-      t: TileType.FloorMeeting,
-      k: TileType.FloorKitchen,
-      r: TileType.Rug,
-      '#': TileType.Wall,
-      w: TileType.WallWindow,
-      q: TileType.WallArt,
-      b: TileType.WallBoard,
-      s: TileType.Sofa,
-      W: TileType.Workstation,
-      o: TileType.Table,
-      T: TileType.Table,
-      c: TileType.Chair,
-      '>': TileType.ChairRight,
-      '<': TileType.ChairLeft,
-      E: TileType.Shelf,
-      L: TileType.Desk,
-      K: TileType.Counter,
-      G: TileType.Fridge,
-      g: TileType.Globe,
-      P: TileType.Plant,
-    },
+    charToTile: MODERN_CHAR_TO_TILE,
     defaultTile: TileType.Floor,
     // Tapete do lounge.
     spawnTiles: [
@@ -149,6 +220,36 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDef> = {
       { id: 'reuniao', label: 'Sala de reunião', rect: [25, 1, 34, 8] },
       { id: 'copa', label: 'Copa', rect: [26, 15, 34, 22] },
     ],
+  },
+  office: {
+    id: 'office',
+    label: 'Escritório',
+    description: 'Open space com reunião e copa',
+    rows: OFFICE_ROWS,
+    charToTile: MODERN_CHAR_TO_TILE,
+    defaultTile: TileType.Floor,
+    // corredor livre da recepção (linhas 9 e 11 são todas de piso)
+    spawnTiles: [
+      [2, 9], [3, 9], [4, 9], [2, 11], [3, 11], [4, 11],
+    ],
+    // mesmas regras do Estúdio: o retângulo cobre o piso E a linha da porta
+    audioZones: [
+      { id: 'reuniao', label: 'Sala de reunião', rect: [23, 1, 39, 8] },
+      { id: 'copa', label: 'Copa', rect: [26, 15, 39, 22] },
+    ],
+  },
+  cafe: {
+    id: 'cafe',
+    label: 'Café',
+    description: 'Balcão, mesas e sala reservada',
+    rows: CAFE_ROWS,
+    charToTile: MODERN_CHAR_TO_TILE,
+    defaultTile: TileType.Floor,
+    // salão, na frente das mesas
+    spawnTiles: [
+      [12, 17], [13, 17], [14, 17], [12, 18], [13, 18], [14, 18],
+    ],
+    audioZones: [{ id: 'reservada', label: 'Sala reservada', rect: [20, 1, 29, 6] }],
   },
 };
 

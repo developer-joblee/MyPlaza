@@ -223,60 +223,103 @@ button {
   transform: scale(1.12);
 }
 
-.character-row {
+/*
+ * Montador de aparência (CharacterBuilder): preview animado à esquerda, uma
+ * linha de setas por camada à direita, e os atalhos embaixo. O canvas é pixel
+ * art ampliado — `image-rendering: pixelated` é o que evita o borrão.
+ */
+.builder {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
-  gap: 10px;
-  margin: 6px 0 26px;
-}
-
-.character-card {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: auto 1fr;
+  gap: 4px 18px;
   align-items: center;
-  gap: 6px;
-  padding: 10px 6px 8px;
+  margin: 6px 0 26px;
+  padding: 12px;
   border-radius: 12px;
   border: 1.5px solid var(--panel-border);
   background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  font-family: inherit;
-  transition: border-color 0.12s, transform 0.12s;
 }
 
-.character-card:hover {
-  transform: translateY(-1px);
-}
-
-.character-card.selected {
-  border-color: var(--mint);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-/*
- * Caixa da miniatura: altura fixa para os cinco cartões ficarem alinhados, com
- * o sprite ancorado embaixo (todos "pisam" na mesma linha). A largura vem do
- * recorte, e o sprite dentro é ampliado por transform.
- */
-.char-frame {
+.builder-preview {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  height: 72px;
-  overflow: hidden;
+  width: 88px;
+  height: 104px;
 }
 
-.char-sprite {
-  display: block;
-  background-repeat: no-repeat;
-  /* pixel art: sem suavização ao ampliar */
+.builder-preview canvas {
   image-rendering: pixelated;
-  transform-origin: bottom center;
 }
 
-.character-name {
+.builder-loading {
+  opacity: 0.5;
+  font-size: 22px;
+}
+
+.builder-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.builder-row {
+  display: grid;
+  grid-template-columns: 56px auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.builder-row-label {
   font-size: 12.5px;
   font-weight: 700;
+  opacity: 0.85;
+}
+
+.builder-arrow {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1;
+  font-family: inherit;
+}
+
+.builder-arrow:hover {
+  border-color: var(--mint);
+}
+
+.builder-count {
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.builder-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.builder-chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.builder-chip:hover {
+  border-color: var(--mint);
 }
 
 /**
@@ -2494,4 +2537,154 @@ button {
 .avatar-menu-item.booble-join:hover:not(:disabled) {
   background: rgba(142, 125, 190, 0.28);
   border-color: rgba(142, 125, 190, 0.6);
+}
+
+/*
+ * Seletor de reações (EmotePicker): mesma ancoragem do popover de áudio. O
+ * ícone de cada botão é o quadro 7 da tira do emote (x = -192px de 256px),
+ * ampliado 1,5x — pixel art, sem suavização.
+ */
+.emote-popover {
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: bottom center;
+  padding: 10px;
+  animation: popover-in 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  z-index: 41;
+}
+
+.emote-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.emote-btn {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.12s, transform 0.12s;
+}
+
+.emote-btn:hover:not(:disabled) {
+  border-color: var(--mint);
+  transform: translateY(-1px);
+}
+
+.emote-btn:disabled {
+  opacity: 0.45;
+}
+
+.emote-btn-art {
+  width: 32px;
+  height: 32px;
+  background-repeat: no-repeat;
+  background-position: -192px 0;
+  image-rendering: pixelated;
+  transform: scale(1.5);
+}
+
+/*
+ * Editor de móveis. A paleta ancora à esquerda, abaixo do roster, para não
+ * brigar com chat (direita) nem com a barra (baixo). `.settings-action` é o
+ * botão de item do menu de configurações que liga o modo.
+ */
+.settings-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.settings-action:hover {
+  border-color: var(--mint);
+}
+
+.furniture-palette {
+  position: absolute;
+  top: 96px;
+  left: 16px;
+  width: 250px;
+  padding: 12px;
+  z-index: 30;
+}
+
+.furniture-palette-head {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.furniture-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.furniture-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px 4px;
+  border-radius: 10px;
+  border: 1.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.furniture-item:hover {
+  border-color: var(--mint);
+}
+
+.furniture-item.selected {
+  border-color: var(--mint);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.furniture-icon {
+  image-rendering: pixelated;
+}
+
+.furniture-item-label {
+  font-size: 10.5px;
+  opacity: 0.85;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.furniture-hint {
+  font-size: 11px;
+  opacity: 0.7;
+  margin: 10px 0;
+  line-height: 1.45;
+}
+
+.furniture-done {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: none;
+  background: var(--mint);
+  color: #10241c;
+  font-weight: 700;
+  font-family: inherit;
 }

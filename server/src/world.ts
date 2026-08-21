@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import {
   BOOBLE_EXIT_RADIUS,
   BOOBLE_JOIN_RADIUS,
   BOOBLE_MAX_MEMBERS,
   CHAT_HISTORY_LIMIT,
+  FURNITURE_MAX_PER_WORLD,
+  furnitureDef,
+  isFurnitureId,
+  type FurnitureId,
+  type PlacedFurniture,
   SCENARIOS,
   TILE_SIZE,
   audioZoneAt,
@@ -10,7 +16,7 @@ import {
   isSolid,
   parseMap,
   sitFacingAt,
-  type CharacterId,
+  type Appearance,
   type ChatMessage,
   type PlayerState,
   type ScenarioId,
@@ -29,8 +35,10 @@ export class World {
   private readonly spawnTiles: ReadonlyArray<readonly [number, number]>;
   private readonly players = new Map<string, PlayerState>();
   private readonly chatHistory: ChatMessage[] = [];
+  private readonly furniture = new Map<string, PlacedFurniture>();
   private spawnIndex = 0;
   private chatHydrated = false;
+  private furnitureHydrated = false;
 
   /**
    * `key` identifica ESTE mundo; `scenarioId` diz qual mapa ele usa.
@@ -54,6 +62,106 @@ export class World {
     return this.players.size;
   }
 
+  // ------------------------------------------------------------- móveis
+  //
+  // A camada dinâmica do editor. A FILIAÇÃO é daqui (footprint, sobreposição,
+  // teto); quem pode editar é decidido no handler (papel), e a persistência em
+  // `db.ts` — mesmo desenho de chat e booble.
+
+  get isFurnitureHydrated(): boolean {
+    return this.furnitureHydrated;
+  }
+
+  /**
+   * Carrega o que o banco tem, UMA vez por mundo (como o chat). Móvel cujo
+   * footprint deixou de ser válido — o ASCII mudou desde que ele foi colocado —
+   * é descartado com log, nunca desenhado em cima de parede: é o espelho do
+   * `validResume` para móveis. (Fica no banco; se o mapa voltar, ele volta.)
+   */
+  hydrateFurniture(items: PlacedFurniture[]): void {
+    this.furnitureHydrated = true;
+    for (const item of items) {
+      if (!isFurnitureId(item.furnitureId) || !this.footprintFree(item.furnitureId, item.tileX, item.tileY)) {
+        console.warn(
+          `[furniture] descartado no hydrate (mapa mudou?): ${item.furnitureId} em (${item.tileX},${item.tileY})`,
+        );
+        continue;
+      }
+      this.furniture.set(item.id, item);
+    }
+  }
+
+  getFurniture(): PlacedFurniture[] {
+    return [...this.furniture.values()];
+  }
+
+  /**
+   * O footprint inteiro está dentro do mapa, sobre piso caminhável do MAPA
+   * ESTÁTICO, e sem sobrepor outro móvel dinâmico? `ignoreId` é o próprio
+   * móvel, ao mover.
+   */
+  private footprintFree(furnitureId: FurnitureId, tileX: number, tileY: number, ignoreId?: string): boolean {
+    const def = furnitureDef(furnitureId);
+    for (let dy = 0; dy < def.h; dy++) {
+      for (let dx = 0; dx < def.w; dx++) {
+        const x = tileX + dx;
+        const y = tileY + dy;
+        if (x < 0 || y < 0 || x >= this.map.cols || y >= this.map.rows) return false;
+        if (isSolid(this.map.tiles[y][x])) return false;
+      }
+    }
+    for (const other of this.furniture.values()) {
+      if (other.id === ignoreId) continue;
+      const o = furnitureDef(other.furnitureId);
+      const overlapX = tileX < other.tileX + o.w && other.tileX < tileX + def.w;
+      const overlapY = tileY < other.tileY + o.h && other.tileY < tileY + def.h;
+      if (overlapX && overlapY) return false;
+    }
+    // móvel sólido em cima de uma PESSOA a deixaria presa dentro da colisão
+    // (o unstuck do cliente cobre a corrida de latência; isto cobre o caso
+    // óbvio, que o editor vê na tela)
+    if (def.solid) {
+      for (const p of this.players.values()) {
+        const px = Math.floor(p.x / TILE_SIZE);
+        const py = Math.floor(p.y / TILE_SIZE);
+        if (px >= tileX && px < tileX + def.w && py >= tileY && py < tileY + def.h) return false;
+      }
+    }
+    return true;
+  }
+
+  placeFurniture(
+    furnitureId: FurnitureId,
+    tileX: number,
+    tileY: number,
+    rotation: number,
+  ): PlacedFurniture | 'blocked' | 'full' {
+    if (this.furniture.size >= FURNITURE_MAX_PER_WORLD) return 'full';
+    if (!this.footprintFree(furnitureId, tileX, tileY)) return 'blocked';
+    const item: PlacedFurniture = { id: randomUUID(), furnitureId, tileX, tileY, rotation };
+    this.furniture.set(item.id, item);
+    return item;
+  }
+
+  moveFurniture(
+    id: string,
+    tileX: number,
+    tileY: number,
+    rotation: number,
+  ): PlacedFurniture | 'blocked' | 'not-found' {
+    const item = this.furniture.get(id);
+    if (!item) return 'not-found';
+    if (!this.footprintFree(item.furnitureId, tileX, tileY, id)) return 'blocked';
+    item.tileX = tileX;
+    item.tileY = tileY;
+    item.rotation = rotation;
+    return item;
+  }
+
+  removeFurniture(id: string): boolean {
+    return this.furniture.delete(id);
+  }
+
   /**
    * Entra no mundo. Com `resume`, tenta voltar para onde a pessoa parou; se
    * aquela posição não serve mais (ver `validResume`), cai no spawn normal.
@@ -62,7 +170,7 @@ export class World {
     id: string,
     name: string,
     color: number,
-    character: CharacterId,
+    appearance: Appearance,
     resume?: ResumePosition | null,
   ): PlayerState {
     const at = (resume && this.validResume(resume)) || this.nextSpawn();
@@ -70,7 +178,7 @@ export class World {
       id,
       name,
       color,
-      character,
+      appearance,
       x: at.x,
       y: at.y,
       sitting: at.sitting,
@@ -108,8 +216,26 @@ export class World {
     if (isSolid(tile)) {
       return sitting && sitFacingAt(tile) !== null ? { x, y, sitting: true } : null;
     }
+    // móvel dinâmico colocado onde a pessoa parou: mesmo tratamento de parede.
+    // Funciona porque o hydrate dos móveis roda ANTES do addPlayer no join.
+    if (this.dynamicSolidAt(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE))) return null;
     // chão livre: a pessoa pode ter saído sentada de uma cadeira que virou chão
     return { x, y, sitting: false };
+  }
+
+  /** Há móvel dinâmico SÓLIDO cobrindo este tile? (contraparte do isSolid do mapa) */
+  private dynamicSolidAt(tileX: number, tileY: number): boolean {
+    for (const item of this.furniture.values()) {
+      const def = furnitureDef(item.furnitureId);
+      if (!def.solid) continue;
+      if (
+        tileX >= item.tileX && tileX < item.tileX + def.w &&
+        tileY >= item.tileY && tileY < item.tileY + def.h
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   removePlayer(id: string): boolean {

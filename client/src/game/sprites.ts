@@ -1,29 +1,33 @@
-import { Assets, Rectangle, Texture } from 'pixi.js';
-import { CHARACTERS, type CharacterId } from '@together/shared';
+import { Rectangle, Texture } from 'pixi.js';
+import { appearanceKey, type Appearance } from '@together/shared';
 import {
-  CHARACTER_DEFS,
+  GENERATOR_DEF,
   byFacing,
   type CharacterDef,
   type Facing,
   type SheetSlice,
   type SitFacing,
 } from './characterDefs';
+import { composeAppearance, loadCuratedLayers } from './composeCharacter';
 
 export type { Facing, SitFacing } from './characterDefs';
+export { loadCuratedLayers } from './composeCharacter';
 
 /**
  * O que o Avatar consome: as direções já resolvidas, com a spritesheet fatiada.
- * Toda a irregularidade de layout (passos de célula diferentes entre andar e
- * sentar, figura deslocada dentro da célula) morre no loader — o Avatar só pede
+ * Toda a irregularidade de layout morre no loader — o Avatar só pede
  * `walk[facing]` ou `sit[facing]` e desenha.
  */
 export interface CharacterFrames {
-  id: CharacterId;
+  /** a `appearanceKey` — identifica a combinação, para debug e cache */
+  id: string;
   idle: Record<Facing, Texture[]>;
   walk: Record<Facing, Texture[]>;
   /** só perfil: o pack não tem sentar de frente nem de costas */
   sit: Record<SitFacing, Texture[]>;
-  /** celular (pose de ausente): só de frente */
+  /** celular (pose de ausente), só de frente: a intro toca uma vez… */
+  phoneIntro: Texture[];
+  /** …e este é o loop que fica (ver characterDefs para o porquê do corte) */
   phone: Texture[];
   scale: number;
   labelY: number;
@@ -35,46 +39,48 @@ export interface CharacterFrames {
 }
 
 function cut(source: Texture, def: CharacterDef, slice: SheetSlice): Texture[] {
-  const stride = slice.stride ?? def.frameW;
-  const offsetX = slice.offsetX ?? 0;
   return slice.cols.map(
     (col) =>
       new Texture({
         source: source.source,
-        frame: new Rectangle(
-          col * stride + offsetX,
-          slice.row * def.frameH,
-          def.frameW,
-          def.frameH,
-        ),
+        frame: new Rectangle(col * def.frameW, slice.row * def.frameH, def.frameW, def.frameH),
       }),
   );
 }
 
 /**
  * Cache em nível de módulo: as texturas são compartilhadas entre sessões (sair
- * e voltar) e entre players que escolheram o mesmo boneco. É por isso que
+ * e voltar) e entre players com a mesma aparência. É por isso que
  * `Game.destroy()` usa `texture: false` — destruí-las aqui quebraria a próxima
  * sessão e todos os outros avatares.
  */
-const cache = new Map<CharacterId, CharacterFrames>();
+const cache = new Map<string, CharacterFrames>();
 
-export async function loadCharacterFrames(id: CharacterId): Promise<CharacterFrames> {
-  const hit = cache.get(id);
+/**
+ * As texturas desta aparência. SÍNCRONO de propósito: `addRemote` não pode
+ * esperar rede quando alguém entra, então as camadas curadas são pré-carregadas
+ * de uma vez (`loadCuratedLayers`, no `Game.create`) e a composição é canvas 2D
+ * puro. A textura nasce do canvas composto — fonte que o Pixi re-sobe sozinho
+ * se o contexto WebGL cair.
+ */
+export function framesForAppearance(appearance: Appearance): CharacterFrames {
+  const key = appearanceKey(appearance);
+  const hit = cache.get(key);
   if (hit) return hit;
 
-  const def = CHARACTER_DEFS[id];
-  const sheet = await Assets.load<Texture>(def.sheet);
+  const def = GENERATOR_DEF;
+  const sheet = Texture.from(composeAppearance(appearance));
   sheet.source.scaleMode = 'nearest'; // pixel art nítida
 
   const frames: CharacterFrames = {
-    id,
+    id: key,
     idle: byFacing((f) => cut(sheet, def, def.idle[f])),
     walk: byFacing((f) => cut(sheet, def, def.walk[f])),
     sit: {
       left: cut(sheet, def, def.sit.left),
       right: cut(sheet, def, def.sit.right),
     },
+    phoneIntro: cut(sheet, def, def.phoneIntro),
     phone: cut(sheet, def, def.phone),
     scale: def.scale,
     labelY: def.labelY,
@@ -84,16 +90,6 @@ export async function loadCharacterFrames(id: CharacterId): Promise<CharacterFra
     sitFrameS: def.sitFrameS,
     phoneFrameS: def.phoneFrameS,
   };
-  cache.set(id, frames);
+  cache.set(key, frames);
   return frames;
-}
-
-/**
- * Carrega todos os personagens de uma vez. As sheets são pequenas (17 KB cada)
- * e pré-carregar evita ter de lidar com carregamento assíncrono no meio do
- * `addRemote`, quando alguém entra com um boneco ainda não carregado.
- */
-export async function loadAllCharacterFrames(): Promise<Map<CharacterId, CharacterFrames>> {
-  await Promise.all(CHARACTERS.map((c) => loadCharacterFrames(c.id)));
-  return cache;
 }

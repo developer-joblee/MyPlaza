@@ -27,12 +27,14 @@ on conflict (id) do update
   set label = excluded.label,
       sort_order = excluded.sort_order;
 
--- Um cenário só: o projeto ficou num estilo de arte (Modern Interiors, LimeZu)
--- e os outros três (`office`, `plaza`, `ruins`) saíram do código. Este insert
--- não apaga o que já existe — quem tem um banco de antes roda a
--- `0013_single_scenario.sql`, que é o único lugar que remove.
+-- Três cenários do MESMO estilo de arte (Modern Interiors + Modern Office,
+-- LimeZu). O `office` daqui NÃO é o escritório procedural antigo — aquele saiu
+-- com a `0013_single_scenario.sql` (que é o único lugar que remove; rode-a
+-- antes deste seed num banco de antes). Este insert não apaga nada.
 insert into scenarios (id, label, description, sort_order) values
-  ('studio', 'Estúdio', 'Escritório moderno', 1)
+  ('studio', 'Estúdio',    'Escritório moderno', 1),
+  ('office', 'Escritório', 'Open space com reunião e copa', 2),
+  ('cafe',   'Café',       'Balcão, mesas e sala reservada', 3)
 on conflict (id) do update
   set label = excluded.label,
       description = excluded.description,
@@ -43,8 +45,11 @@ on conflict (id) do update
 -- geometria em dois lugares é ter duas verdades. Hoje só o Estúdio tem zonas.
 -- Requer `0003_activity.sql` aplicado.
 insert into audio_zones (scenario_id, zone_key, label) values
-  ('studio', 'reuniao', 'Sala de reunião'),
-  ('studio', 'copa',    'Copa')
+  ('studio', 'reuniao',   'Sala de reunião'),
+  ('studio', 'copa',      'Copa'),
+  ('office', 'reuniao',   'Sala de reunião'),
+  ('office', 'copa',      'Copa'),
+  ('cafe',   'reservada', 'Sala reservada')
 on conflict (scenario_id, zone_key) do update
   set label = excluded.label;
 

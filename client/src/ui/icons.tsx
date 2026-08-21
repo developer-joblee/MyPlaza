@@ -205,3 +205,15 @@ export function MuteSenderIcon({ off }: IconProps) {
     </svg>
   );
 }
+
+/** Carinha sorridente — o botão de emotes/reações da barra. */
+export function EmoteIcon() {
+  return (
+    <svg {...base}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" />
+      <line x1="9" y1="9.5" x2="9" y2="10" />
+      <line x1="15" y1="9.5" x2="15" y2="10" />
+    </svg>
+  );
+}
