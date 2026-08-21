@@ -5,6 +5,191 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Volume por pessoa (voz e soundboard) — 2026-08-21
+
+Feature nova: [`volume-por-pessoa.md`](docs/features/volume-por-pessoa.md). Dois
+sliders por pessoa no menu de contexto do avatar (voz e sons de soundboard,
+independentes, 0% = mudo), **salvos na conta**. Toca `shared/` (tipos, duas
+constantes, dois eventos), `server/` (módulo novo `audioPrefs.ts`, `db.ts`,
+`handlers.ts`, `index.ts`), `db/` (**migração `0014`**) e bastante `client/`
+(inclusive dois arquivos novos: `peerAudio.ts` e `net/audioApi.ts`).
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build -w client` OK.
+- ✅ **`peerVolumeFor` sem navegador, 42/42** (script `tsx` na raiz, apagado
+  depois). O que ele cobre, e é o que mais importa nesta entrega: a
+  **regressão** — com o ajuste ausente **ou** em 100%, o resultado é
+  **idêntico** a `audioVolumeFor` em onze geometrias (colado, platô, meio da
+  rampa, limite, além do limite, mesma sala longe, zona diferente, eu fora/ela
+  dentro, mesma booble atravessando parede, booble alheia, eu na booble e ela
+  fora). Mais: 0% zerando **todas** as onze (inclusive as que davam 1), a
+  multiplicação exata em cinco casos (50% colado, 20% colado, 50% na sala com
+  volume plano, 50% na mesma booble, 50% multiplicando os 7% da borda de booble),
+  o campo `sound` **não** influenciando a voz, a sala fechada continuando 0
+  mesmo com o slider a 100%, e monotonicidade de 0 a 100.
+- ✅ **`clampPeerVolume`, 18/18.** As dez entradas defensivas (`null`,
+  `undefined`, `''`, `false`, `true`, `{}`, `[]`, `NaN`, `Infinity`, `'abc'`)
+  caindo no **default 100** e nunca em 0 — é o bug que `clampVolume` já sofreu, e
+  aqui ele seria pior: o sintoma seria "não ouço só o Bruno". Mais a faixa (0
+  válido, negativo → 0, 150 → 100, arredondamento, string numérica).
+- ✅ **A semântica do mapa no store, 11/11:** merge parcial preservando o que já
+  havia (é o formato que o servidor manda), o slider sobrescrevendo, a
+  hidratação posterior vencendo no mesmo id, a **poda em `removeRosterEntry`**
+  tirando só o id que saiu, e o `leave()` zerando o mapa **sem** mexer no volume
+  global do soundboard.
+- ✅ **O handler contra o servidor headless (:3099, sem Supabase e sem LiveKit),
+  20/20:** `audio:setPeer` responde `not-configured` antes e depois do `join`;
+  **nenhum `audio:prefs` é emitido sem banco**; doze payloads de lixo (alvo
+  vazio/nulo/objeto/inexistente/eu mesmo, `voice` string/negativo/>100/`NaN`,
+  `sound` nulo/`Infinity`, os dois `undefined`) respondem sem derrubar socket
+  nenhum; evento **sem ack** não derruba; e o `move` continua passando depois de
+  tudo (o mundo segue vivo).
+- ✅ **`smoke-test.mts` 14/14** contra o mesmo servidor headless — importa porque
+  `shared/` mudou.
+- ✅ **Um defeito real corrigido antes de ir para a tela** (achado por revisão do
+  desenho, não por teste): o cache do servidor (`socket.data.peerAudio`) era
+  atualizado **só quando a escrita no banco dava certo**. Como o cliente mantém o
+  valor local quando a gravação falha (contrato do volume do soundboard), o F5 do
+  **outro** lado projetaria o valor antigo e a pessoa voltaria a 100% no meio da
+  sessão, sem nada na tela. Agora o cache entra antes do `await` e sobrevive à
+  falha — a razão está escrita no código.
+- ✅ **Um defeito de teclado evitado:** copiar o `onKeyDown={e =>
+  e.stopPropagation()}` cru do `SoundboardPanel` mataria o **Escape** deste menu
+  (ele fecha por listener nativo em `document`, e o React despacha no root, abaixo
+  dele na bolha). A propagação é barrada só para `RANGE_KEYS`. Não foi observado
+  num navegador — só raciocinado.
+
+Os scripts de teste rodaram da raiz e **não** ficaram no repo.
+
+## Falta verificar (em ordem de importância)
+
+### 1. A `0014` não foi aplicada, e sem ela metade da feature não existe
+
+`db/migrations/0014_peer_audio_prefs.sql` cria `peer_audio_prefs`. **Não rodou.**
+Sem ela os sliders funcionam **na sessão** e nada persiste — em silêncio, porque o
+`db.ts` é fail-soft (o motivo aparece como `[db] savePeerAudioPref` no log).
+
+Ao aplicar, conferir: a tabela existe com **RLS ligada**
+(`select tablename, rowsecurity from pg_tables where schemaname='public'` — 17
+tabelas agora), uma política de `select` só e **nenhuma** de escrita, e o grant
+para o `service_role` (a migração já o inclui explicitamente, ao contrário da
+`0010`, justamente porque o `42501` é o modo de falha que já morde neste projeto).
+
+### 2. Nada foi executado contra um Supabase real
+
+`loadPeerAudioPrefs` e `savePeerAudioPref` nunca rodaram. Segue sem verificação:
+o upsert com `onConflict: 'profile_id,target_profile_id'` (é a primeira vez que
+este projeto usa `upsert` com chave composta), a leitura devolvendo o mapa, e o
+`check (profile_id <> target_profile_id)` recusando o que o servidor já barra.
+
+E, mais importante, **o caminho de sucesso do handler nunca foi alcançado**: sem
+Supabase tudo para no `whoAmI` com `not-configured`, que vem **antes** da
+validação de entrada. Ou seja: a recusa `invalid-input` e a `not-found` (alvo
+fora do mundo) **não foram executadas** — é a mesma lacuna já registrada para o
+soundboard, e o `smoke-test.mts` não pode cobri-la (ele não tem token).
+
+### 3. Nada foi aberto num navegador — e a UI é a metade da feature
+
+`tsc` não prova nada do que importa aqui:
+
+- **os dois sliders**, a seção, o ícone ao lado do rótulo, o `mudo` no lugar do
+  `%`, e o painel ~90px mais alto virando para dentro na borda de baixo da tela
+  (o `useLayoutEffect` mede uma vez, e é agora que isso importa de verdade);
+- **o `data-capture-keys`**: as setas movem o slider e **não** andam com o avatar;
+- **o Escape com o foco no slider** — é o defeito que o filtro de `RANGE_KEYS`
+  existe para evitar, e ele não foi observado funcionando;
+- **a roda sobre o painel** não fechar o menu, e fora dele fechar;
+- **o volume mudando na hora** (o `refreshPeerVolume`, sem esperar o tick de
+  250ms). Se ele estiver errado o sintoma é um slider que responde em degraus;
+- **o `não salvo`** no cabeçalho da seção, que nunca apareceu;
+- **estalo ao arrastar**: `setVolume` do LiveKit é `.volume` de um elemento de
+  áudio, **sem rampa** (o `SoundPlayer` tem 30ms). O arrasto gera passos
+  pequenos, então em teoria não estala — não foi ouvido.
+
+### 4. O teste que mais provavelmente falha: o F5 da OUTRA pessoa
+
+É o ponto inteiro da tradução perfil→socket. A sequência é `player:left` (id
+velho, o store poda) → `player:joined` (id novo) → o `hydratePeerAudio` **dela**
+emite `{ [idNovo]: minhaPref }` para mim. Entre os dois eventos existe uma janela
+em que ela está a 100%. Ela deveria ser curta o bastante para vencer a subscrição
+do LiveKit, e é por isso que o `onTrackSubscribed` também lê a preferência — mas
+**nada disso foi observado**.
+
+### 5. A corrida do laço de hidratação nunca foi provocada
+
+As duas direções num laço só existem para cobrir "B entra enquanto o `await` do
+banco de A ainda está no ar". Isso exige duas pessoas entrando quase juntas com o
+banco lento, e não foi reproduzido. O comentário no código explica por que a
+metade aparentemente redundante não pode ser removida.
+
+### 6. Duas abas da mesma conta divergem — por desenho, mas não observado
+
+Cada socket tem seu próprio cache e não há leitura sob demanda: a aba A baixa o
+Bruno, a aba B continua projetando 100%. É a mesma classe de obsolescência que o
+soundboard assume, e a correção (v2) seria pedir `audio:prefs` ao abrir o menu.
+Ninguém viu o efeito na prática.
+
+### 7. Uma verificação de token no Supabase por gravação
+
+`whoAmI()` chama `verifyAccessToken` (round-trip ao Supabase Auth) em **cada**
+`audio:setPeer`. O soundboard tem a mesma forma, mas ele tem um slider global e
+este tem dois por pessoa: com o debounce de 500ms e alguém mexendo em três
+pessoas, são vários round-trips. A guarda `if (!profileId)` já cobre o caso que o
+comentário justifica; o re-verify é só para respeitar revogação. Um memo de ~60s
+por socket, em `auth.ts` e reusado pelo soundboard, resolveria — não foi feito
+para não mexer numa feature existente nesta entrega. **Custo conhecido, não
+medido.**
+
+### 8. Não há limite de frequência em `audio:setPeer`
+
+Um cliente adulterado gera um upsert **e** um verify de token por mensagem. O
+idioma da casa existe (`socket.data.soundAt`), e um piso por alvo seria cinco
+linhas. Foi **deliberadamente** deixado de fora: um limite que recusa em silêncio
+poderia descartar justamente o valor final do slider (arrastar → gravar → mexer
+de novo → fechar o menu em menos do que o piso), o que é uma regressão pior para
+o usuário real que o abuso que ele evita. Se virar problema, o lugar é aqui.
+
+### 9. Sair do mundo dentro dos 500ms do último arrasto perde a persistência
+
+O flush do unmount manda o evento, o servidor responde `not-found` (ele exige o
+alvo no mesmo mundo — e essa exigência é correta: sem ela o handler viraria sonda
+de "esse socket existe?"), e nada é gravado. O valor não se aplicava a ninguém
+nesta sessão de todo jeito; o prejuízo é a próxima vez. Não observado.
+
+### 10. `onTrackSubscribed` ignora o teto de subscrições (defeito PREEXISTENTE)
+
+Ele checa `silenced` e `lastPeer`, mas não `audioWanted`: uma faixa que chega para
+alguém além de `MAX_AUDIO_SUBSCRIPTIONS` entra com volume geométrico em vez de 0.
+**Não é desta entrega** e não foi tocado para não misturar as coisas — a correção
+seria guardar o `audioWanted` do último tick e consultá-lo ali. Fica registrado
+porque agora esse mesmo trecho passou a ler a preferência, e quem for mexer nele
+vai encontrar os dois assuntos juntos.
+
+### 11. O anel de "falando" a 0% é decisão, e ninguém viu se ela lê bem
+
+Com alguém em 0% o badge `voz` continua na lista e o anel continua acendendo. A
+razão está no doc (é o único diagnóstico de "baixei essa pessoa" na tela), mas é
+uma escolha que só se avalia olhando: pode ler como bug. O extra opcional, se
+incomodar, é uma classe no badge para ele ficar apagado — só CSS, sem elemento
+novo e sem mexer na precedência `ausente > booble > voz`.
+
+### 12. Um processo só
+
+`io.sockets.sockets.get(id)` e `io.to(id)` não atravessam nós. Já é premissa do
+repo (o `presence:nudge` faz igual) e o `index.ts` não instala adapter, mas se um
+dia entrar Redis este módulo e o `presence` caem juntos.
+
+### 13. Nada é gravado sobre quem ajustou quem
+
+Só o estado atual, sem trilha. É a mesma escolha do `presence:nudge` e do
+soundboard — e aqui é mais forte que escolha: a RLS foi escrita **assimétrica** de
+propósito (política só por `profile_id`) para que a tabela não possa virar um
+relatório de "quem me silenciou". Não adicione política nem índice por
+`target_profile_id`.
+
+---
+
 # Microfone desligado ao entrar (e ao voltar de uma queda) — 2026-08-21
 
 Doc: [`microfone-mudo-ao-entrar.md`](docs/features/microfone-mudo-ao-entrar.md).

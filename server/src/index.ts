@@ -11,6 +11,7 @@ import {
 import { registerHandlers, type SocketData } from './handlers';
 import { registerLobbyHandlers } from './lobby';
 import { registerSoundboardHandlers } from './soundboard';
+import { registerAudioPrefHandlers } from './audioPrefs';
 
 const PORT = Number(process.env.PORT) || SERVER_PORT;
 
@@ -83,6 +84,8 @@ io.on('connection', (socket) => {
   registerLobbyHandlers(io, socket);
   // soundboard: biblioteca por ack + o disparo para quem está perto
   registerSoundboardHandlers(io, socket);
+  // volume por pessoa: a escrita do meu ajuste (a leitura vem no join)
+  registerAudioPrefHandlers(io, socket);
 });
 
 httpServer.listen(PORT, () => {

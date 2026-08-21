@@ -1,3 +1,4 @@
+import { PEER_VOLUME_DEFAULT, PEER_VOLUME_MAX } from '@together/shared';
 import { audioVolumeFor } from '../voice/proximity';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
@@ -73,7 +74,20 @@ export function receiveSound(fromId: string, fromName: string, soundId: string, 
   // posição não há volume honesto, e adivinhar 1 seria alto demais
   if (!peer) return;
 
-  const gain = audioVolumeFor(info.self, peer);
+  /**
+   * Dois fatores, e os dois por pessoa: a geometria (a MESMA função da voz) e o
+   * meu ajuste de soundboard **para esta pessoa**. O terceiro fator, o volume
+   * global, é o gain mestre lá dentro do `SoundPlayer`.
+   *
+   * O ajuste por pessoa entra aqui, e não num `GainNode` por emissor, porque
+   * `play()` recebe o ganho já resolvido: a consequência é que mudar o slider
+   * **não** altera um som que já está tocando (só o mestre faz isso, por ser um
+   * nó só). Com sons de no máximo 5s, é o mesmo comportamento que o mute por
+   * pessoa já tem — ver `docs/features/volume-por-pessoa.md`.
+   */
+  const gain =
+    audioVolumeFor(info.self, peer) *
+    ((store.peerAudio[fromId]?.sound ?? PEER_VOLUME_DEFAULT) / PEER_VOLUME_MAX);
   runtime.soundboard?.play(soundId, url, gain);
 }
 

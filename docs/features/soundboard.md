@@ -56,8 +56,23 @@ pontas, e sai um WAV de ~215 KB.
 `profiles.soundboard_volume` (0..100, default `SOUND_VOLUME_DEFAULT` = 70) viaja
 no `SoundboardState` e é aplicado num **gain mestre** do `SoundPlayer`, por onde
 todo som passa antes do destino — é isso que faz arrastar o slider mudar o som que
-**já está tocando**. São dois estágios independentes: a atenuação por distância é
-o gain de cada som, a preferência é o mestre. Não toca na voz.
+**já está tocando**. São dois estágios independentes no `SoundPlayer`: a atenuação
+é o gain de cada som, a preferência global é o mestre. Não toca na voz.
+
+O gain de cada som tem **dois** fatores desde o
+[volume por pessoa](volume-por-pessoa.md), e a cadeia inteira é:
+
+```
+SOUND_PEAK (0,7) × audioVolumeFor(geometria) × pref.sound/100 × volumeGlobal/100
+       teto            do evento               desta pessoa        o mestre
+```
+
+Os quatro são de naturezas diferentes, e é por isso que são quatro. **Não
+adicione um quinto.** O fator por pessoa entra no gain **do som**, e não num nó
+por emissor, o que tem uma consequência que é o oposto do mestre: mexer no
+slider de sons de alguém **não** muda um som que já está tocando. Com sons de no
+máximo 5s isso é aceitável, e é o mesmo comportamento que o mute por pessoa já
+tem.
 
 ### O disparo (quem ouve, e quanto)
 
@@ -192,6 +207,14 @@ voz já usa.
 - **Surdo e ausente NÃO ouvem soundboard** — ao contrário do "toc-toc", que
   atravessa de propósito. O chamado é a campainha da porta, dirigida a você; o
   soundboard é a conversa da sala, e quem cortou a sala cortou isso também.
+- **Silenciar uma pessoa e BAIXAR uma pessoa são controles diferentes, e os dois
+  ficam.** Desde o [volume por pessoa](volume-por-pessoa.md) há duas formas de
+  reduzir os sons de alguém, e a divisão é a mesma do par slider+botão do volume
+  global: o **mute** é rápido, de sessão, um clique, e mora na lista "quem tocou
+  som" deste painel; o **slider** é durável e graduado, e mora no boneco (botão
+  direito). Um emissor com o slider em 0 **continua** entrando em `soundSenders`,
+  pela mesma razão que o mute já entrava: silenciar alguém não pode apagar o
+  rastro de que ele existe.
 - **Silenciar uma pessoa mora no painel, não na linha do roster.** A linha tem
   uma cadeia de badges **exclusivos** (ausente > booble > voz, um só carrega o
   `margin-left:auto`); um botão a mais ali quebraria essa precedência por um caso
@@ -326,6 +349,8 @@ navegador. Ver `PENDENTES.md`.
 
 ## Relacionado
 
+- [Volume por pessoa](volume-por-pessoa.md) — o terceiro fator do gain de cada
+  som, e o outro jeito de silenciar alguém.
 - [Booble](booble.md) — a regra de audibilidade que o soundboard reusa.
 - [Chamado de quem está ausente](chamado-ausente.md) — o precedente de evento
   efêmero com som, e a decisão oposta sobre atravessar o silêncio.

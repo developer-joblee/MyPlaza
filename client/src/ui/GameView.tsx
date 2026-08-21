@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Game } from '../game/Game';
 import { bindStoreToSocket } from '../net/bindStore';
 import { createSocket } from '../net/socket';
+import { createAudioApi } from '../net/audioApi';
 import { createSoundboardApi } from '../net/soundboardApi';
 import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
@@ -37,6 +38,9 @@ export function GameView() {
     // o soundboard tem fronteira própria (é outro conjunto de eventos) e um
     // player de áudio próprio, que não passa pelo LiveKit
     runtime.soundApi = createSoundboardApi(() => runtime.socket);
+    // volume por pessoa: fronteira própria também, porque é a única operação por
+    // ack que atravessa a sessão de mundo para escrever no perfil
+    runtime.audioApi = createAudioApi(() => runtime.socket);
     const soundPlayer = createSoundPlayer();
     const unbindStore = bindStoreToSocket(socket);
 
@@ -121,6 +125,7 @@ export function GameView() {
       runtime.voice = null;
       runtime.soundApi = null;
       runtime.soundboard = null;
+      runtime.audioApi = null;
     };
   }, []);
 

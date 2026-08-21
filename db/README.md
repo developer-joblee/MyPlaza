@@ -89,9 +89,17 @@ ordem**:
     `[db] getPlaceById: cenário "plaza" não existe mais` a cada entrada nesse
     mundo, e o mapa carregado é o do Estúdio de todo jeito.
 
-14. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+14. `migrations/0014_peer_audio_prefs.sql` — **volume por pessoa**. Entra a
+    tabela `peer_audio_prefs`: quanto EU ouço a voz e os sons de soundboard de
+    CADA pessoa (0..100 nos dois, default 100 = como era antes). Obrigatória
+    junto com o código dessa feature: sem ela os sliders do menu de contexto
+    funcionam **na sessão** e o valor não sobrevive ao F5 — em silêncio, porque o
+    `db.ts` é fail-soft (o motivo aparece como `[db] savePeerAudioPref` no log).
+    Ver [Volume por pessoa](../docs/features/volume-por-pessoa.md).
 
-O passo 14 **não é opcional**: sem as linhas de `characters`, `scenarios` e
+15. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+
+O passo 15 **não é opcional**: sem as linhas de `characters`, `scenarios` e
 `audio_zones` os FKs de `profiles`, `places`, `sessions`, `presence_state` e
 `zone_visits` não fecham, e o servidor falha em toda escrita.
 
@@ -122,7 +130,8 @@ VITE_SUPABASE_ANON_KEY=...    # Project Settings > API > anon (secret-scan:ignor
 ## Conferindo que pegou
 
 ```sql
--- 16 tabelas, todas com RLS ligada (a 16ª é `user_sounds`, da 0010)
+-- 17 tabelas, todas com RLS ligada (a 16ª é `user_sounds`, da 0010; a 17ª é
+-- `peer_audio_prefs`, da 0014)
 select tablename, rowsecurity from pg_tables
 where schemaname = 'public' order by tablename;
 

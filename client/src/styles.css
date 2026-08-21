@@ -2168,20 +2168,30 @@ button {
 
 /* ------------------------------------------- Volume do soundboard */
 
-.sound-volume {
+/*
+ * `.peer-volume` (volume de UMA pessoa, no menu de contexto do avatar) entra em
+ * cada seletor daqui em vez de ganhar um bloco próprio: é o MESMO controle — um
+ * rótulo com o valor à direita em cima de um `.clip-range` —, e duas cópias das
+ * mesmas declarações divergiriam na primeira alteração. O que é específico do
+ * menu (a moldura da seção, o espaçamento apertado) fica em `.avatar-menu-audio`.
+ */
+.sound-volume,
+.peer-volume {
   display: flex;
   flex-direction: column;
   gap: 4px;
   margin-bottom: 12px;
 }
 
-.sound-volume .join-label {
+.sound-volume .join-label,
+.peer-volume .join-label {
   display: flex;
   align-items: baseline;
   gap: 6px;
 }
 
-.sound-volume .join-label small {
+.sound-volume .join-label small,
+.peer-volume .join-label small {
   margin-left: auto;
   color: var(--mint);
   font-size: 11px;
@@ -2192,7 +2202,8 @@ button {
 
 /* silenciado: o número deixa de ser mint (não há volume a exibir) e o slider
    desabilitado explica sozinho que o controle de cima manda */
-.sound-volume.muted .join-label small {
+.sound-volume.muted .join-label small,
+.peer-volume.muted .join-label small {
   color: var(--text-dim);
 }
 
@@ -2200,6 +2211,65 @@ button {
   color: var(--text-dim);
   font-size: 10px;
   line-height: 1.4;
+}
+
+/* --------------------------- Volume por pessoa (no menu do avatar) */
+
+/*
+ * A seção fica DEPOIS dos dois itens de ação, separada por uma linha: booble e
+ * chamar são coisas que você faz *com* a pessoa, e isto é um ajuste sobre como
+ * você a ouve — misturar os dois grupos faria o menu parecer uma lista de sete
+ * coisas sem hierarquia.
+ *
+ * `margin-bottom: 0` no último `.peer-volume` porque o painel já tem padding: a
+ * margem de 12px que serve dentro do painel do soundboard (onde há mais coisa
+ * embaixo) aqui viraria um rodapé vazio.
+ */
+.avatar-menu-audio {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.avatar-menu-audio .peer-volume:last-of-type {
+  margin-bottom: 0;
+}
+
+/*
+ * O cabeçalho da seção. O `small` da direita é o slot do aviso de "não salvo" —
+ * ele fica VAZIO no caso normal, e é por isso que o aviso não muda a altura do
+ * painel: o `useLayoutEffect` do menu mede uma vez só, e uma linha nascendo
+ * depois deixaria a caixa pendurada fora da tela.
+ */
+.avatar-menu-audio-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.avatar-menu-audio-head small {
+  margin-left: auto;
+  min-width: 3.5em;
+  color: var(--amber);
+  font-size: 10px;
+  text-align: right;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* o ícone acompanha o rótulo em vez de disputar espaço com ele */
+.avatar-menu-audio .peer-volume .join-label svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  opacity: 0.75;
+}
+
+/* mudo não é "volume zero": o rótulo perde o mint e o ícone apaga junto, para o
+   estado ser legível sem ler o número */
+.avatar-menu-audio .peer-volume.muted .join-label svg {
+  opacity: 0.4;
 }
 
 /* --------------------------------------- Menu de configurações (popover) */
@@ -2340,7 +2410,9 @@ button {
   position: fixed;
   z-index: 42;
   min-width: 168px;
-  max-width: 240px;
+  /* 260 e não 240: com os dois sliders de volume, o rótulo ("🎙 voz") e o valor
+     ("100%") disputavam a mesma linha e o número quebrava para baixo */
+  max-width: 260px;
   padding: 10px 12px;
   /* o --radius de 16px do `.panel` lê como cartão numa caixa deste tamanho */
   border-radius: 12px;

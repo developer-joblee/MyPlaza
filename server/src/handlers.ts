@@ -14,6 +14,7 @@ import {
   type ChatMessage,
   type ClientToServerEvents,
   type JoinDeniedReason,
+  type PeerAudioPrefs,
   type PlayerState,
   type ScenarioId,
   type ServerToClientEvents,
@@ -22,6 +23,7 @@ import {
 import { getWorld, scenarioWorldKey, type ResumePosition } from './world';
 import { mintVoiceToken, roomNameFor, voiceConfigured } from './voice';
 import { authRequired, verifyAccessToken } from './auth';
+import { hydratePeerAudio } from './audioPrefs';
 import { dbConfigured } from './supabase';
 import {
   closeScreenShare,
@@ -63,6 +65,18 @@ export interface SocketData {
   sessionId?: string | null;
   /** última gravação de posição, para respeitar POSITION_SAVE_MS */
   positionSavedAt?: number;
+  /**
+   * O MEU volume por pessoa, chaveado pelo **perfil** de cada pessoa.
+   *
+   * Cache em memória, lido do banco uma vez no `join`. Ele existe para os dois
+   * lados da tradução: projetar o meu mapa para os `socket.id` de quem está no
+   * mundo, e responder "esta pessoa já me ajustou?" quando alguém entra — sem
+   * uma consulta por pessoa que chega. Ausente = sem banco (ou join ainda não
+   * concluído), e aí a feature vale só na sessão do cliente.
+   *
+   * Ver `server/src/audioPrefs.ts`.
+   */
+  peerAudio?: Map<string, PeerAudioPrefs>;
   /** zona de áudio atual (chave do shared) — `null` é área aberta */
   zoneKey?: string | null;
   /**
@@ -248,6 +262,15 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       );
       socket.emit('world:snapshot', world.getPlayers(), world.getChatHistory(), scenarioId);
       socket.to(worldKey).emit('player:joined', player);
+
+      /**
+       * Volume por pessoa: manda o meu mapa e avisa quem já me ajustou que eu
+       * cheguei com um `socket.id` novo. Depois do `player:joined` de propósito
+       * — o mapa é indexado por socket, e o cliente precisa da pessoa no roster
+       * antes de ter uma preferência para ela. Não se espera por isto (é
+       * preferência, não entrada), e sem banco é no-op.
+       */
+      void hydratePeerAudio(io, socket, world);
 
       /**
        * Grava o vínculo (nome, cor, personagem e posição) AGORA, e não no

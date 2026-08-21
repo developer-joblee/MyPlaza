@@ -3,6 +3,8 @@ import type {
   ChatMessage,
   JoinDeniedReason,
   LobbyResult,
+  PeerAudioMap,
+  PeerAudioResult,
   SoundboardResult,
   PlayerState,
   VoiceTokenResponse,
@@ -85,6 +87,22 @@ export interface ServerToClientEvents {
     soundId: string,
     url: string,
   ) => void;
+  /**
+   * O MEU mapa de volume por pessoa, chaveado por `socket.id`.
+   *
+   * Sempre **parcial**, e o cliente faz merge: quem não vem no mapa fica no
+   * default (cheio). Chega em dois momentos, os dois no join — nunca por
+   * difusão, porque este mapa é meu e de mais ninguém:
+   *
+   * 1. **no meu join**, com todos os presentes que eu já ajustei alguma vez;
+   * 2. **quando alguém entra** que eu já tinha ajustado, com uma entrada só —
+   *    é o que faz o ajuste sobreviver ao F5 da outra pessoa, já que o
+   *    `socket.id` dela mudou e a chave antiga morreu.
+   *
+   * Sem Supabase este evento simplesmente não vem, e os sliders valem só na
+   * sessão. Ver `docs/features/volume-por-pessoa.md`.
+   */
+  'audio:prefs': (prefs: PeerAudioMap) => void;
   /**
    * A entrada foi recusada e o `world:snapshot` não vem. O cliente volta para a
    * tela de entrada com o motivo — sem isto ele ficaria esperando para sempre.
@@ -369,4 +387,29 @@ export interface ClientToServerEvents {
    * resposta a "consegui?" não deve virar sonda de quem está onde.
    */
   'soundboard:play': (soundId: string) => void;
+
+  // ----------------------------------------------- volume por pessoa
+  //
+  // O quanto EU ouço UMA pessoa (voz e sons, separados). Ver
+  // `docs/features/volume-por-pessoa.md`.
+
+  /**
+   * Grava o meu ajuste para esta pessoa. `targetId` é o `socket.id` dela; o
+   * servidor traduz para o perfil, que é o que persiste.
+   *
+   * **Por ack**, e não como evento de mundo, pelo mesmo motivo do
+   * `soundboard:setVolume`: é escrita no meu perfil, e a tela precisa poder
+   * dizer "aplicado, mas não salvo". O cliente aplica na hora e manda depois,
+   * com debounce — senão arrastar o slider seria uma escrita por pixel.
+   *
+   * Os dois volumes vão **juntos** mesmo quando só um mudou: a linha do banco é
+   * um upsert do par, e mandar um campo só exigiria ler-modificar-escrever no
+   * servidor para não zerar o outro.
+   */
+  'audio:setPeer': (
+    targetId: string,
+    voice: number,
+    sound: number,
+    ack: (res: PeerAudioResult) => void,
+  ) => void;
 }

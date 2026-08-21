@@ -1,5 +1,6 @@
 import { receiveBoobleChange } from '../booble';
 import { receiveCall, receiveCallAnswer } from '../call';
+import { receivePeerAudio } from '../peerAudio';
 import { receiveNudge } from '../presence';
 import { receiveSound } from '../soundboard';
 import { useStore } from '../state/store';
@@ -59,6 +60,12 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
    */
   socket.on('player:booble', (id, boobleId) => receiveBoobleChange(id, boobleId));
   /**
+   * O meu mapa de volume por pessoa, chaveado por `socket.id`. Vai por
+   * `peerAudio.ts` pela mesma razão dos três acima: reaplicar o ganho na sala de
+   * voz é efeito de áudio, e o dono desse efeito não é este arquivo.
+   */
+  socket.on('audio:prefs', (prefs) => receivePeerAudio(prefs));
+  /**
    * Recusado: volta para a tela de entrada com o motivo. Sem isto o cliente
    * ficaria para sempre num mundo vazio esperando um snapshot que não vem.
    */
@@ -76,6 +83,7 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
     socket.removeAllListeners('presence:callAnswered');
     socket.removeAllListeners('soundboard:played');
     socket.removeAllListeners('player:booble');
+    socket.removeAllListeners('audio:prefs');
     socket.removeAllListeners('join:denied');
   };
 }

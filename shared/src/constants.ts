@@ -401,3 +401,48 @@ export function clampVolume(value: unknown): number {
  * cai. A saída normal (`disconnect`) credita o resto na hora.
  */
 export const PRESENCE_CREDIT_MS = 60_000;
+
+/**
+ * Volume que EU escolhi para UMA pessoa, em passos de 0 a 100.
+ *
+ * Mesma escala inteira do `SOUND_VOLUME_MAX`, e pela mesma razão: o número
+ * atravessa o banco e é o que o slider mostra. São duas preferências
+ * independentes por pessoa — a voz dela e os sons de soundboard dela — e as duas
+ * usam esta faixa.
+ *
+ * **Não passa de 100 de propósito.** Amplificar exigiria montar um grafo de
+ * WebAudio em cima da faixa do LiveKit: `RemoteParticipant.setVolume` acaba no
+ * `.volume` de um `HTMLAudioElement`, que é limitado a 1.0 e ignora o resto.
+ * Um slider que vai a 150% e não faz nada acima de 100 é pior que um que para
+ * em 100.
+ */
+export const PEER_VOLUME_MAX = 100;
+
+/**
+ * Volume inicial para quem nunca foi ajustado: **cheio**.
+ *
+ * Ao contrário do `SOUND_VOLUME_DEFAULT` (70), que existe para o soundboard não
+ * assustar na primeira vez, aqui o default tem de ser exatamente o
+ * comportamento de antes desta feature — quem nunca abriu o menu de ninguém não
+ * pode ouvir o mundo diferente de ontem. O ajuste é opt-in, pessoa por pessoa.
+ */
+export const PEER_VOLUME_DEFAULT = PEER_VOLUME_MAX;
+
+/**
+ * Normaliza um volume por pessoa vindo de fora (slider, banco, cliente
+ * adulterado). Mesmo idioma de `clampVolume`, com default próprio.
+ *
+ * A guarda de `typeof` **antes** de converter não é purismo, e a razão está
+ * escrita por extenso em `clampVolume`: `Number(null)`, `Number('')` e
+ * `Number(false)` valem todos **0**, então sem ela um valor ausente silenciaria
+ * uma pessoa que ninguém pediu para silenciar. Aqui isso seria pior ainda que no
+ * volume global, porque o sintoma é "não ouço só o Bruno" — que ninguém
+ * associaria a um payload torto.
+ */
+export function clampPeerVolume(value: unknown): number {
+  if (typeof value !== 'number' && typeof value !== 'string') return PEER_VOLUME_DEFAULT;
+  if (value === '') return PEER_VOLUME_DEFAULT;
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return PEER_VOLUME_DEFAULT;
+  return Math.min(PEER_VOLUME_MAX, Math.max(0, n));
+}

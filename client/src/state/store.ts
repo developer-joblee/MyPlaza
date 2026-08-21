@@ -7,6 +7,8 @@ import {
   type ChatMessage,
   type JoinDeniedReason,
   type LobbyState,
+  type PeerAudioMap,
+  type PeerAudioPrefs,
   type PendingInvite,
   SOUND_VOLUME_DEFAULT,
   type ScenarioId,
@@ -203,6 +205,20 @@ interface AppState {
    * dessilenciar.
    */
   soundSenders: { id: string; name: string }[];
+  /**
+   * O quanto EU ouço cada pessoa — voz e sons de soundboard, separados —, por
+   * `socket.id`. Ausente = cheio (`PEER_VOLUME_DEFAULT`).
+   *
+   * Ao contrário de `mutedSenders`, isto **não** é de sessão: o valor vive no
+   * banco por perfil e o servidor rehidrata este mapa no `join`, traduzindo
+   * perfil → `socket.id`. Quem cai e volta é um socket novo, e é o servidor que
+   * repõe a chave — é por isso que a entrada de quem sai é descartada aqui em
+   * vez de guardada "para quando ela voltar".
+   *
+   * Sem Supabase nada hidrata e nada persiste, e o mapa vale só na sessão.
+   * Ver `client/src/peerAudio.ts` e `docs/features/volume-por-pessoa.md`.
+   */
+  peerAudio: PeerAudioMap;
   /** preferência do usuário para o cancelamento de ruído */
   noiseFilter: boolean;
   /** se o filtro está de fato rodando (pode falhar por falta de suporte) */
@@ -294,6 +310,10 @@ interface AppState {
   setSoundboardVolume: (volume: number) => void;
   toggleSenderMuted: (id: string) => void;
   noteSoundSender: (id: string, name: string) => void;
+  /** o slider mexeu — ver `client/src/peerAudio.ts` */
+  setPeerAudio: (id: string, prefs: PeerAudioPrefs) => void;
+  /** hidratação do servidor: merge, nunca substituição (o mapa é parcial) */
+  mergePeerAudio: (prefs: PeerAudioMap) => void;
   /** booble de um player (o próprio ou um remoto) — ver `client/src/booble.ts` */
   setPlayerBooble: (id: string, boobleId: string | null) => void;
   /** a intenção de booble em quem está longe — ver `client/src/booble.ts` */
@@ -372,6 +392,7 @@ export const useStore = create<AppState>((set) => ({
   soundboardVolume: SOUND_VOLUME_DEFAULT,
   mutedSenders: [],
   soundSenders: [],
+  peerAudio: {},
   noiseFilter: (() => {
     try {
       return localStorage.getItem('together:noiseFilter') !== 'off';
@@ -496,6 +517,12 @@ export const useStore = create<AppState>((set) => ({
       // `soundboardMuted` e `soundboardVolume` NÃO entram aqui: são preferência
       // (a segunda vive no perfil, no banco). O que morre é o estado de sessão.
       soundboard: null,
+      /**
+       * `peerAudio` entra: a preferência é durável, mas a CHAVE é `socket.id` e
+       * ela não sobrevive a sair do mundo. Quem volta é rehidratado pelo
+       * servidor no join — guardar o mapa antigo seria guardar chaves mortas.
+       */
+      peerAudio: {},
       mutedSenders: [],
       soundSenders: [],
       noiseFilterActive: false,
@@ -521,11 +548,19 @@ export const useStore = create<AppState>((set) => ({
       // quem saiu do mundo não deixa chamado pendurado: nem o alerta na minha
       // tela, nem o item do menu "pressionado" para um id que já morreu
       const { [id]: _gone, ...myCalls } = s.myCalls;
+      /**
+       * O ajuste de volume desta pessoa sai junto: a chave é `socket.id`, e
+       * guardá-la faria o mapa crescer sem fim numa sessão longa apontando para
+       * gente que não existe mais. Não se perde nada — quem volta ganha um
+       * socket novo e o servidor reenvia a preferência no join dela.
+       */
+      const { [id]: _volumeGone, ...peerAudio } = s.peerAudio;
       return {
         roster: s.roster.filter((r) => r.id !== id),
         speaking: { ...s.speaking, [id]: false },
         calls: s.calls.filter((c) => c.id !== id),
         myCalls,
+        peerAudio,
       };
     }),
   setChat: (chat) => set({ chat }),
@@ -571,6 +606,13 @@ export const useStore = create<AppState>((set) => ({
         ? s.mutedSenders.filter((x) => x !== id)
         : [...s.mutedSenders, id],
     })),
+  setPeerAudio: (id, prefs) => set((s) => ({ peerAudio: { ...s.peerAudio, [id]: prefs } })),
+  /**
+   * Merge, e não substituição: o mapa que o servidor manda é PARCIAL — no join
+   * ele traz quem eu já ajustei, e depois uma entrada por pessoa que chega.
+   * Substituir apagaria o ajuste que acabei de fazer em quem já estava aqui.
+   */
+  mergePeerAudio: (prefs) => set((s) => ({ peerAudio: { ...s.peerAudio, ...prefs } })),
   setPlayerAway: (id, away) =>
     set((s) => ({ roster: s.roster.map((r) => (r.id === id ? { ...r, away } : r)) })),
   setPlayerBooble: (id, boobleId) =>

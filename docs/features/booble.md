@@ -439,6 +439,16 @@ maior, você entraria e seria expulso no mesmo instante.
   `VoiceRoom` recria a duplicata que esta entrega acabou de remover. E se mudar a
   regra, `nearby` e `reconcileSpeaking` mudam junto **de graça** — é o motivo de
   eles derivarem de `audioVolumeFor`.
+- **E hoje aquele arquivo tem DUAS funções, que não são intercambiáveis.** Desde
+  o [volume por pessoa](volume-por-pessoa.md):
+  `audioVolumeFor` responde *"dá para ouvir esta pessoa?"* (só geometria: booble,
+  zona, distância) e é dela que saem o badge `voz`, o anel de "falando" e a
+  escolha de destinatário do soundboard; `peerVolumeFor` é `audioVolumeFor` ×
+  *o volume que eu escolhi para aquela pessoa*, e é a **única** que deve alimentar
+  `setVolume`. Se você vai escrever volume, você quer a segunda; se você vai
+  decidir se alguém está ao alcance, você quer a primeira. Enfiar a preferência
+  dentro de `audioVolumeFor` faria "baixei o volume do Bruno" virar "o Bruno
+  desapareceu da lista de audíveis e eu não consigo mais abrir booble com ele".
 - **A prioridade na fila de subscrição é obrigatória, não otimização.** Tirar os
   membros da frente do `slice(0, MAX_AUDIO_SUBSCRIPTIONS)` deixa membro sem
   stream, e "sem stream" é silêncio, não volume baixo.

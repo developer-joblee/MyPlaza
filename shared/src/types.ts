@@ -334,3 +334,56 @@ export type SoundboardErrorReason =
 export type SoundboardResult =
   | { ok: true; state: SoundboardState }
   | { ok: false; reason: SoundboardErrorReason };
+
+/**
+ * O quanto EU ouço UMA pessoa — a voz dela e os sons de soundboard dela, em
+ * escalas independentes de 0 a `PEER_VOLUME_MAX`.
+ *
+ * É preferência de quem OUVE, não propriedade de quem fala: dois clientes na
+ * mesma sala têm mapas diferentes para a mesma pessoa, e é isso que a feature
+ * promete ("para mim o Bruno é 50%"). Por isso ela nunca é difundida — cada
+ * cliente recebe só o próprio mapa.
+ *
+ * Os dois campos são separados porque respondem a incômodos diferentes: "a voz
+ * dela estoura no meu fone" não é "os sons dela me interrompem".
+ */
+export interface PeerAudioPrefs {
+  /** multiplica o volume da VOZ dela (a geometria decide o resto) */
+  voice: number;
+  /** multiplica o volume dos SONS de soundboard dela */
+  sound: number;
+}
+
+/**
+ * Mapa de preferências chaveado por **`socket.id`** — não por perfil.
+ *
+ * O servidor guarda por perfil (é o que faz o ajuste sobreviver ao F5) e
+ * **traduz** para socket ao enviar, porque é assim que o cliente chaveia tudo:
+ * roster, distâncias, participantes do LiveKit, `mutedSenders`. Traduzir num
+ * lugar só evita que o `profileId` de terceiros entre no protocolo por uma razão
+ * que não pede isso.
+ *
+ * Sempre **parcial**: quem não está no mapa está no default (cheio).
+ */
+export type PeerAudioMap = Record<string, PeerAudioPrefs>;
+
+export type PeerAudioErrorReason =
+  /** `socket-down` e `timeout` são do CLIENTE — mesma convenção do `SoundboardResult`. */
+  | 'socket-down'
+  | 'timeout'
+  /** o servidor não tem Supabase: dá para ajustar na sessão, mas não para salvar */
+  | 'not-configured'
+  | 'auth-required'
+  | 'invalid-token'
+  /** alvo malformado, alvo = eu mesmo, volume fora de 0..`PEER_VOLUME_MAX` */
+  | 'invalid-input'
+  /** o alvo não está neste mundo (ou saiu antes do pedido chegar) */
+  | 'not-found'
+  | 'error';
+
+/**
+ * Resposta de `audio:setPeer`. Sucesso é vazio de propósito: o cliente já
+ * aplicou o valor localmente antes de pedir (é um slider), então devolver o
+ * estado só criaria a chance de a tela pular para trás.
+ */
+export type PeerAudioResult = { ok: true } | { ok: false; reason: PeerAudioErrorReason };
