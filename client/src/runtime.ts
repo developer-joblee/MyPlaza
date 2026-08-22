@@ -1,4 +1,5 @@
 import type { AppSocket } from './net/socket';
+import type { AudioApi } from './net/audioApi';
 import type { SoundboardApi } from './net/soundboardApi';
 import type { WorldApi } from './net/worldApi';
 import type { VoiceRoom } from './voice/VoiceRoom';
@@ -22,6 +23,8 @@ export const runtime: {
   soundApi: SoundboardApi | null;
   /** quem de fato toca os sons; separado da api porque um é rede, outro é áudio */
   soundboard: SoundPlayer | null;
+  /** fronteira de requisição do volume por pessoa — ver `peerAudio.ts` */
+  audioApi: AudioApi | null;
 } = {
   socket: null,
   api: null,
@@ -29,4 +32,5 @@ export const runtime: {
   game: null,
   soundApi: null,
   soundboard: null,
+  audioApi: null,
 };

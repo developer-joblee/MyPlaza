@@ -322,6 +322,391 @@ em `characterDefs.ts`, `phoneIntro` no `sprites.ts`, `Avatar.update` →
 5. **O repo ainda estava público** quando as sheets pagas entraram no working
    tree. A decisão de torná-lo privado é do usuário e precisa acontecer ANTES do
    push (licença proíbe redistribuição).
+# Prévia de tela no topo-centro — 2026-08-21
+
+Mudança de layout numa feature que já existia e **ganhou doc nesta entrega**:
+[`compartilhamento-de-tela.md`](docs/features/compartilhamento-de-tela.md). As
+prévias de tela saíram da coluna `.top-right-stack` (canto superior direito) e
+foram para uma coluna nova, `.top-center-stack`, junto com a pilha de avisos —
+prévias em cima, avisos abaixo. Múltiplas telas ficam **lado a lado**.
+
+Entrega **só de client**, e **só de layout**: nada em `shared/`, nada em
+`server/`, nada no protocolo do Socket.IO, e `ScreenShareView.tsx` **não mudou
+uma linha** — a tela ampliada, o fullscreen, o `Esc` e o filtro do tile são os
+mesmos. Dois arquivos: `client/src/ui/GameView.tsx` e `client/src/styles.css`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build -w client` OK.
+- ✅ Por leitura de código: a restrição de `z-index` acompanhou o componente. A
+  `.screen-focus` (`fixed; z-index: 20`) é filha da coluna nova, então é a
+  `.top-center-stack` que não pode ganhar `z-index` — e a `.top-right-stack`
+  deixou de ter esse motivo (o comentário dela foi corrigido para não mentir).
+- ✅ **Um defeito real, achado e corrigido antes de ir para a tela** (por revisão
+  do CSS, não por teste): a coluna nasceu centralizada com `left: 50%` +
+  `transform: translateX(-50%)`, copiado da `.notice-stack`. Mas `transform` cria
+  contexto de empilhamento **e** bloco contentor para descendente
+  `position: fixed` — e a `.screen-focus` (`fixed; inset: 0`) passou a ser filha
+  da coluna. O `inset: 0` mediria a coluna de 240px em vez da viewport: a tela
+  "ampliada" viraria uma janelinha no topo, presa abaixo da barra de mídia. É
+  exatamente a armadilha que o comentário do `z-index` descreve, por outra porta.
+  Agora a coluna centraliza com `left: 0; right: 0` + `align-items: center`, e a
+  razão está escrita no CSS e no doc. **Corrigido por raciocínio — não foi visto
+  na tela**, e é o item 1 abaixo.
+- ✅ Por leitura de código: com a coluna ocupando a largura toda, o
+  `pointer-events: none` **subiu** para ela (senão engoliria o clique no mapa), e
+  quem religa são `.screen-tile`, `.notice` e `.screen-focus`. O `auto` da
+  `.screen-focus` é o que mantém os botões `⛶` e `✕ Sair` vivos.
+
+## Falta verificar (em ordem de importância)
+
+### 1. Nada foi aberto num navegador — e a entrega é 100% visual
+
+Precisa das `LIVEKIT_*` (sem elas não há tela nenhuma para ver) e de duas abas.
+`tsc` e o build não provam **nada** do que importa aqui. Roteiro completo em
+"Como testar" do doc; o que mais provavelmente falha:
+
+- **a tela ampliada continuar cobrindo a janela inteira.** É o defeito do
+  `transform` (corrigido acima) e a armadilha do `z-index`, e as duas quebram
+  **em silêncio**. Este é o teste mais importante da entrega: abrir uma tela
+  ampliada e confirmar que ela cobre a viewport toda, com os botões `⛶` e
+  `✕ Sair` clicáveis e a barra de mídia por cima. Nada disso foi observado;
+- **os `pointer-events`.** Três sintomas possíveis, todos silenciosos: "cliquei
+  na prévia e não ampliou" (faltou `auto` no tile), "cliquei no mapa na faixa de
+  cima e o avatar não andou" (faltou `none` na coluna ou na `.screens`) e "os
+  botões da tela ampliada não respondem" (faltou `auto` na `.screen-focus`);
+- **a prévia e o aviso da booble juntos**: o "Na booble · Sair" tem de aparecer
+  **abaixo** da prévia, sem sobrepor, e o Sair tem de funcionar.
+
+### 2. O `:has()` da colisão com a pastilha de compartilhamento
+
+`.game-view:has(.sharing-badge) .top-center-stack { padding-top: 20px }` é o
+**primeiro `:has()` do arquivo**, e existe porque a `.sharing-badge`
+(`fixed; top: 0; left: 50%; z-index: 31`, ~27px) cobriria a borda de cima da
+primeira prévia. Ver isso exige o caso duplo: **você** compartilhando **e** outra
+pessoa também. Nunca foi visto. Onde o `:has()` não existir, o resultado é a
+sobreposição de antes — não um layout quebrado.
+
+### 3. Três ou mais telas simultâneas
+
+`.screens` é `row` com `flex-wrap` e a coluna tem `max-width: calc(100vw - 32px)`.
+Três tiles de 240px são 750px, então em janela estreita a terceira desce — e aí a
+coluna cresce para baixo sobre o mapa, sem `max-height` nem rolagem. Exige três
+pessoas compartilhando ao mesmo tempo; não foi reproduzido.
+
+### 4. O que a mudança NÃO consertou
+
+A prévia continua sendo só das telas **dos outros**: `remoteScreens` não inclui a
+sua. Quem compartilha não se vê — é o comportamento de antes, e não foi tocado.
+
+### 5. Defeito PREEXISTENTE: o `F` no chat entra em fullscreen
+
+`ScreenFocus` registra o `keydown` na `window` **sem checar o alvo**, então com
+uma tela ampliada aberta digitar **f** no input do chat dispara fullscreen
+nativo. O `Escape` tem guard (`!document.fullscreenElement`), o `f` não. **Não é
+desta entrega** e não foi tocado para não misturar as coisas — a correção seria
+ignorar a tecla quando o alvo é `input`/`textarea` (ou quando o elemento está
+dentro de um `[data-capture-keys]`, que é o idioma da casa).
+
+---
+
+# Token de socket vivo (`auth:token`) — 2026-08-21
+
+Correção de bug, não feature nova: *"Sua sessão expirou. Entre de novo."*
+aparecendo na barra do soundboard sem motivo. Duas causas, as duas corrigidas na
+raiz — ver
+[`autenticacao-e-acesso.md`](docs/features/autenticacao-e-acesso.md), seções "O
+token de um socket que não cai" e "Não deu para verificar ≠ sessão expirou".
+
+1. **Token congelado no handshake.** `socket.handshake.auth` é imutável depois da
+   conexão; o access token do Supabase vence em ~1h e o SDK o renova em
+   background. Passada a primeira hora de aba aberta, o servidor validava a cópia
+   velha e **toda** operação de soundboard e de volume por pessoa recusava com
+   `invalid-token`, para sempre, sem a conexão precisar cair.
+2. **`verifyAccessToken` colapsava tudo em `null`.** Timeout de 2,5s do `guard`,
+   Supabase fora do ar e token de fato vencido davam a mesma resposta, e a tela
+   dizia "entre de novo" para uma falha de rede.
+
+Toca `shared/` (evento `auth:token`), `server/` (arquivo novo `socketAuth.ts`,
+mais `auth.ts`, `handlers.ts`, `lobby.ts`, `soundboard.ts`, `audioPrefs.ts`,
+`index.ts`) e `client/` (arquivo novo `net/authToken.ts`, mais
+`auth/supabase.ts`, `ui/GameView.tsx`, `ui/LobbyScreen.tsx`). Sem migração.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build -w client` OK.
+- ✅ **`socketToken`, 12/12** (script `tsx` na raiz, apagado depois): precedência
+  do token empurrado sobre o do handshake, cada um sozinho, nenhum dos dois,
+  `handshake.auth` ausente, token não-string e token nulo. Mais `authRequired`
+  falso sem env, `verifyAccessToken('')` = `invalid`, sem cliente =
+  `unavailable`, e `whoIsSocket` = `not-configured`.
+- ✅ **Um defeito latente achado pelo teste**: `socket.data.accessToken ??
+  handshake` deixaria um `accessToken` **vazio** apagar o único token válido. O
+  handler nunca guarda vazio hoje, então era armadilha para depois; virou `||`,
+  com a razão escrita no código.
+- ✅ **Regressão contra o servidor headless (:3099, sem Supabase e sem LiveKit),
+  10/10:** nove payloads de lixo em `auth:token` (string, vazio, `null`,
+  `undefined`, número, objeto, array, booleano, 5000 caracteres) não derrubam o
+  socket antes nem depois do `join`; `join`/`move`/`chat` seguem funcionando; as
+  quatro operações do bug respondem `not-configured`; um segundo socket entra e
+  vê o primeiro; e `voice:token` continua recusando sem LiveKit.
+- ✅ **O bug reproduzido e a correção provada, 18/18** — e é o teste que importa.
+  Sem credencial nenhuma: `SUPABASE_URL` aponta para um **endpoint HTTP local**
+  que responde como o GoTrue (`GET /auth/v1/user`, 200 com o usuário ou 401 para
+  token vencido), e o código do servidor é o de verdade. O que ficou provado, em
+  ordem:
+  1. **o bug** — socket com o token vencido no handshake recusa a operação com
+     `invalid-token`, e recusa **de novo** na chamada seguinte (não sara sozinho:
+     era exatamente o "aparece a todo momento");
+  2. **a correção** — depois do `auth:token` com o token renovado, `socketToken`
+     passa a devolvê-lo e a operação responde `{ ok: true }`, e continua
+     respondendo;
+  3. **a causa 2** — Supabase que demora mais que o `DB_TIMEOUT_MS` de 2,5s dá
+     `unavailable` no `verifyAccessToken` e `error` no `whoIsSocket` — **não**
+     `invalid-token`, que é o que punha "sua sessão expirou" na tela;
+  4. **o handler não é porta de entrada** — token que não verifica, token de
+     **outra conta** e seis payloads de lixo não trocam o token guardado, e a
+     operação segue recusada; token válido de outra conta no handshake dá
+     `invalid-token` pela checagem de identidade;
+  5. **antes do `join`** — socket sem `profileId` dá `auth-required` (não
+     `invalid-token`), e o token válido é aceito para uso posterior;
+  6. **não custa round-trip novo** — reenviar o mesmo token não chama o Supabase
+     (o guard de igualdade funciona).
+- ✅ **O ciclo inteiro sobre um socket.io real, 6/6.** Servidor socket.io de
+  verdade em processo, cliente `socket.io-client` de verdade, Supabase falso:
+  conecta com o token vencido no handshake → operação recusada; o cliente emite
+  `auth:token` **pela rede** no socket já conectado → o servidor guarda e a
+  operação passa a funcionar, com o socket seguindo conectado. Mais a reconexão
+  com token novo no handshake, que é o caminho que já existia.
+
+## Não verificado
+
+### 1. A metade do navegador (é o que resta)
+
+O servidor está provado ponta a ponta; o que **não** foi observado é o gatilho no
+navegador: o SDK do Supabase disparando `onAuthStateChange` na renovação, o
+`onAccessTokenChange` repassando e o `bindAccessToken` emitindo. São três linhas
+de assinatura, mas dependem de comportamento do SDK e de Supabase real — não há
+como exercitá-las em Node (o módulo lê `import.meta.env`, que é do Vite).
+
+Se esse gatilho não disparar como se espera, **o bug volta inteiro** e com o
+mesmo sintoma. A prova é o passo 14 de "Como testar" do doc de autenticação, com
+o atalho do **JWT expiry em 60s** no dashboard — dois minutos de teste em vez de
+uma hora.
+
+Vale registrar o desenho que reduziria essa dependência a zero, e que **não** foi
+feito: recuperar-se sozinho de um `invalid-token` (pedir o token atual ao SDK,
+empurrar e repetir a chamada uma vez). Faria o sistema convergir mesmo que o
+evento nunca chegue. Ficou de fora por ser escopo além da correção pedida.
+
+### 2. As duas telas ligando e desligando a assinatura
+
+`GameView` e `LobbyScreen` chamam `bindAccessToken` e devolvem o `unbind` no
+cleanup. Só passou por `tsc`: uma assinatura que sobrevivesse ao unmount
+emitiria num socket morto (inócuo — `fire()` devolve `false`), e uma que não
+fosse criada faria o bug voltar em silêncio.
+
+### 3. O round-trip por gravação continua lá
+
+O item 7 da entrega de volume por pessoa (abaixo) segue valendo: `whoIsSocket`
+chama `verifyAccessToken` em **cada** gravação. O que mudou é que agora existe
+**um** lugar para pôr o memo de ~60s, em vez de dois — mas ele **não** foi feito,
+de propósito: memo enfraquece a revogação imediata, que é uma propriedade que o
+doc de autenticação promete, e isso é decisão de produto, não de refactor.
+
+### 4. Duas abas da mesma conta
+
+O Supabase compartilha a sessão pelo `localStorage`, então as duas abas veem a
+mesma renovação e cada socket empurra o seu token. Não foi observado; a suspeita
+de defeito é baixa, porque os sockets são independentes e o servidor trata cada
+um pelo seu `socket.data`.
+
+---
+
+# Volume por pessoa (voz e soundboard) — 2026-08-21
+
+Feature nova: [`volume-por-pessoa.md`](docs/features/volume-por-pessoa.md). Dois
+sliders por pessoa no menu de contexto do avatar (voz e sons de soundboard,
+independentes, 0% = mudo), **salvos na conta**. Toca `shared/` (tipos, duas
+constantes, dois eventos), `server/` (módulo novo `audioPrefs.ts`, `db.ts`,
+`handlers.ts`, `index.ts`), `db/` (**migração `0014`**) e bastante `client/`
+(inclusive dois arquivos novos: `peerAudio.ts` e `net/audioApi.ts`).
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build -w client` OK.
+- ✅ **`peerVolumeFor` sem navegador, 42/42** (script `tsx` na raiz, apagado
+  depois). O que ele cobre, e é o que mais importa nesta entrega: a
+  **regressão** — com o ajuste ausente **ou** em 100%, o resultado é
+  **idêntico** a `audioVolumeFor` em onze geometrias (colado, platô, meio da
+  rampa, limite, além do limite, mesma sala longe, zona diferente, eu fora/ela
+  dentro, mesma booble atravessando parede, booble alheia, eu na booble e ela
+  fora). Mais: 0% zerando **todas** as onze (inclusive as que davam 1), a
+  multiplicação exata em cinco casos (50% colado, 20% colado, 50% na sala com
+  volume plano, 50% na mesma booble, 50% multiplicando os 7% da borda de booble),
+  o campo `sound` **não** influenciando a voz, a sala fechada continuando 0
+  mesmo com o slider a 100%, e monotonicidade de 0 a 100.
+- ✅ **`clampPeerVolume`, 18/18.** As dez entradas defensivas (`null`,
+  `undefined`, `''`, `false`, `true`, `{}`, `[]`, `NaN`, `Infinity`, `'abc'`)
+  caindo no **default 100** e nunca em 0 — é o bug que `clampVolume` já sofreu, e
+  aqui ele seria pior: o sintoma seria "não ouço só o Bruno". Mais a faixa (0
+  válido, negativo → 0, 150 → 100, arredondamento, string numérica).
+- ✅ **A semântica do mapa no store, 11/11:** merge parcial preservando o que já
+  havia (é o formato que o servidor manda), o slider sobrescrevendo, a
+  hidratação posterior vencendo no mesmo id, a **poda em `removeRosterEntry`**
+  tirando só o id que saiu, e o `leave()` zerando o mapa **sem** mexer no volume
+  global do soundboard.
+- ✅ **O handler contra o servidor headless (:3099, sem Supabase e sem LiveKit),
+  20/20:** `audio:setPeer` responde `not-configured` antes e depois do `join`;
+  **nenhum `audio:prefs` é emitido sem banco**; doze payloads de lixo (alvo
+  vazio/nulo/objeto/inexistente/eu mesmo, `voice` string/negativo/>100/`NaN`,
+  `sound` nulo/`Infinity`, os dois `undefined`) respondem sem derrubar socket
+  nenhum; evento **sem ack** não derruba; e o `move` continua passando depois de
+  tudo (o mundo segue vivo).
+- ✅ **`smoke-test.mts` 14/14** contra o mesmo servidor headless — importa porque
+  `shared/` mudou.
+- ✅ **Um defeito real corrigido antes de ir para a tela** (achado por revisão do
+  desenho, não por teste): o cache do servidor (`socket.data.peerAudio`) era
+  atualizado **só quando a escrita no banco dava certo**. Como o cliente mantém o
+  valor local quando a gravação falha (contrato do volume do soundboard), o F5 do
+  **outro** lado projetaria o valor antigo e a pessoa voltaria a 100% no meio da
+  sessão, sem nada na tela. Agora o cache entra antes do `await` e sobrevive à
+  falha — a razão está escrita no código.
+- ✅ **Um defeito de teclado evitado:** copiar o `onKeyDown={e =>
+  e.stopPropagation()}` cru do `SoundboardPanel` mataria o **Escape** deste menu
+  (ele fecha por listener nativo em `document`, e o React despacha no root, abaixo
+  dele na bolha). A propagação é barrada só para `RANGE_KEYS`. Não foi observado
+  num navegador — só raciocinado.
+
+Os scripts de teste rodaram da raiz e **não** ficaram no repo.
+
+## Falta verificar (em ordem de importância)
+
+### 1. A `0014` não foi aplicada, e sem ela metade da feature não existe
+
+`db/migrations/0014_peer_audio_prefs.sql` cria `peer_audio_prefs`. **Não rodou.**
+Sem ela os sliders funcionam **na sessão** e nada persiste — em silêncio, porque o
+`db.ts` é fail-soft (o motivo aparece como `[db] savePeerAudioPref` no log).
+
+Ao aplicar, conferir: a tabela existe com **RLS ligada**
+(`select tablename, rowsecurity from pg_tables where schemaname='public'` — 17
+tabelas agora), uma política de `select` só e **nenhuma** de escrita, e o grant
+para o `service_role` (a migração já o inclui explicitamente, ao contrário da
+`0010`, justamente porque o `42501` é o modo de falha que já morde neste projeto).
+
+### 2. Nada foi executado contra um Supabase real
+
+`loadPeerAudioPrefs` e `savePeerAudioPref` nunca rodaram. Segue sem verificação:
+o upsert com `onConflict: 'profile_id,target_profile_id'` (é a primeira vez que
+este projeto usa `upsert` com chave composta), a leitura devolvendo o mapa, e o
+`check (profile_id <> target_profile_id)` recusando o que o servidor já barra.
+
+E, mais importante, **o caminho de sucesso do handler nunca foi alcançado**: sem
+Supabase tudo para no `whoAmI` com `not-configured`, que vem **antes** da
+validação de entrada. Ou seja: a recusa `invalid-input` e a `not-found` (alvo
+fora do mundo) **não foram executadas** — é a mesma lacuna já registrada para o
+soundboard, e o `smoke-test.mts` não pode cobri-la (ele não tem token).
+
+### 3. Nada foi aberto num navegador — e a UI é a metade da feature
+
+`tsc` não prova nada do que importa aqui:
+
+- **os dois sliders**, a seção, o ícone ao lado do rótulo, o `mudo` no lugar do
+  `%`, e o painel ~90px mais alto virando para dentro na borda de baixo da tela
+  (o `useLayoutEffect` mede uma vez, e é agora que isso importa de verdade);
+- **o `data-capture-keys`**: as setas movem o slider e **não** andam com o avatar;
+- **o Escape com o foco no slider** — é o defeito que o filtro de `RANGE_KEYS`
+  existe para evitar, e ele não foi observado funcionando;
+- **a roda sobre o painel** não fechar o menu, e fora dele fechar;
+- **o volume mudando na hora** (o `refreshPeerVolume`, sem esperar o tick de
+  250ms). Se ele estiver errado o sintoma é um slider que responde em degraus;
+- **o `não salvo`** no cabeçalho da seção, que nunca apareceu;
+- **estalo ao arrastar**: `setVolume` do LiveKit é `.volume` de um elemento de
+  áudio, **sem rampa** (o `SoundPlayer` tem 30ms). O arrasto gera passos
+  pequenos, então em teoria não estala — não foi ouvido.
+
+### 4. O teste que mais provavelmente falha: o F5 da OUTRA pessoa
+
+É o ponto inteiro da tradução perfil→socket. A sequência é `player:left` (id
+velho, o store poda) → `player:joined` (id novo) → o `hydratePeerAudio` **dela**
+emite `{ [idNovo]: minhaPref }` para mim. Entre os dois eventos existe uma janela
+em que ela está a 100%. Ela deveria ser curta o bastante para vencer a subscrição
+do LiveKit, e é por isso que o `onTrackSubscribed` também lê a preferência — mas
+**nada disso foi observado**.
+
+### 5. A corrida do laço de hidratação nunca foi provocada
+
+As duas direções num laço só existem para cobrir "B entra enquanto o `await` do
+banco de A ainda está no ar". Isso exige duas pessoas entrando quase juntas com o
+banco lento, e não foi reproduzido. O comentário no código explica por que a
+metade aparentemente redundante não pode ser removida.
+
+### 6. Duas abas da mesma conta divergem — por desenho, mas não observado
+
+Cada socket tem seu próprio cache e não há leitura sob demanda: a aba A baixa o
+Bruno, a aba B continua projetando 100%. É a mesma classe de obsolescência que o
+soundboard assume, e a correção (v2) seria pedir `audio:prefs` ao abrir o menu.
+Ninguém viu o efeito na prática.
+
+### 7. Uma verificação de token no Supabase por gravação
+
+`whoAmI()` chama `verifyAccessToken` (round-trip ao Supabase Auth) em **cada**
+`audio:setPeer`. O soundboard tem a mesma forma, mas ele tem um slider global e
+este tem dois por pessoa: com o debounce de 500ms e alguém mexendo em três
+pessoas, são vários round-trips. A guarda `if (!profileId)` já cobre o caso que o
+comentário justifica; o re-verify é só para respeitar revogação. Um memo de ~60s
+por socket, em `auth.ts` e reusado pelo soundboard, resolveria — não foi feito
+para não mexer numa feature existente nesta entrega. **Custo conhecido, não
+medido.** (Atualização de 2026-08-21: o `whoAmI` agora é um só, em
+`socketAuth.ts`, então o memo teria **um** lugar. Continua não feito — ver o item
+3 da entrega do `auth:token`, no topo deste arquivo.)
+
+### 8. Não há limite de frequência em `audio:setPeer`
+
+Um cliente adulterado gera um upsert **e** um verify de token por mensagem. O
+idioma da casa existe (`socket.data.soundAt`), e um piso por alvo seria cinco
+linhas. Foi **deliberadamente** deixado de fora: um limite que recusa em silêncio
+poderia descartar justamente o valor final do slider (arrastar → gravar → mexer
+de novo → fechar o menu em menos do que o piso), o que é uma regressão pior para
+o usuário real que o abuso que ele evita. Se virar problema, o lugar é aqui.
+
+### 9. Sair do mundo dentro dos 500ms do último arrasto perde a persistência
+
+O flush do unmount manda o evento, o servidor responde `not-found` (ele exige o
+alvo no mesmo mundo — e essa exigência é correta: sem ela o handler viraria sonda
+de "esse socket existe?"), e nada é gravado. O valor não se aplicava a ninguém
+nesta sessão de todo jeito; o prejuízo é a próxima vez. Não observado.
+
+### 10. `onTrackSubscribed` ignora o teto de subscrições (defeito PREEXISTENTE)
+
+Ele checa `silenced` e `lastPeer`, mas não `audioWanted`: uma faixa que chega para
+alguém além de `MAX_AUDIO_SUBSCRIPTIONS` entra com volume geométrico em vez de 0.
+**Não é desta entrega** e não foi tocado para não misturar as coisas — a correção
+seria guardar o `audioWanted` do último tick e consultá-lo ali. Fica registrado
+porque agora esse mesmo trecho passou a ler a preferência, e quem for mexer nele
+vai encontrar os dois assuntos juntos.
+
+### 11. O anel de "falando" a 0% é decisão, e ninguém viu se ela lê bem
+
+Com alguém em 0% o badge `voz` continua na lista e o anel continua acendendo. A
+razão está no doc (é o único diagnóstico de "baixei essa pessoa" na tela), mas é
+uma escolha que só se avalia olhando: pode ler como bug. O extra opcional, se
+incomodar, é uma classe no badge para ele ficar apagado — só CSS, sem elemento
+novo e sem mexer na precedência `ausente > booble > voz`.
+
+### 12. Um processo só
+
+`io.sockets.sockets.get(id)` e `io.to(id)` não atravessam nós. Já é premissa do
+repo (o `presence:nudge` faz igual) e o `index.ts` não instala adapter, mas se um
+dia entrar Redis este módulo e o `presence` caem juntos.
+
+### 13. Nada é gravado sobre quem ajustou quem
+
+Só o estado atual, sem trilha. É a mesma escolha do `presence:nudge` e do
+soundboard — e aqui é mais forte que escolha: a RLS foi escrita **assimétrica** de
+propósito (política só por `profile_id`) para que a tabela não possa virar um
+relatório de "quem me silenciou". Não adicione política nem índice por
+`target_profile_id`.
 
 ---
 
@@ -547,19 +932,18 @@ Os scripts de teste rodaram da raiz e **não** ficaram no repo.
   pressionado mint, o desabilitado por ausência e por cooldown, e o `setTimeout`
   que reabilita o item quando o cooldown vence.
 
-### 2. A coluna nova do canto superior direito mexeu em layout que já existia
+### 2. A coluna nova do canto superior direito mexeu em layout que já existia — PARCIALMENTE SUPERSEDIDO em 2026-08-21
 
 `.top-right-stack` tirou o `position/top/right` do `.zoom-controls` e do
 `.screens`, que antes eram ancorados **os dois** no mesmo ponto e se sobrepunham
 quando alguém compartilhava tela. Isso é correção, mas não foi vista:
 
 - o zoom continua onde estava? (é o primeiro item da coluna, então deveria);
-- as prévias de tela descem quando há alerta, sem ficar por baixo dele?
-- a **tela ampliada** (`.screen-focus`, `fixed; inset: 0; z-index: 20`) agora é
-  filha da coluna. Ela continua cobrindo a janela **porque a coluna não tem
-  `z-index`** — se alguém adicionar um ali, a tela ampliada fica presa no
-  contexto de empilhamento novo. O raciocínio está no comentário do CSS e do
-  `GameView`, mas ninguém abriu uma tela ampliada depois da mudança.
+- ~~as prévias de tela descem quando há alerta, sem ficar por baixo dele?~~ e
+  ~~a **tela ampliada** … agora é filha da coluna~~ — **as prévias saíram desta
+  coluna**: foram para a `.top-center-stack` (ver a entrega "Prévia de tela no
+  topo-centro", no topo deste arquivo). A armadilha do `z-index` foi com elas, e
+  as duas perguntas continuam abertas, só que sobre a coluna nova.
 
 ### 3. O `knock.ts` foi refatorado e o toc-toc não foi ouvido depois
 
@@ -1001,8 +1385,10 @@ Três pontos merecem atenção na primeira execução:
 Todo o `SoundboardPanel` é lógica de client não exercitada: a grade com slots
 bloqueado/vazio/cheio, o `<input type=file>` escondido, a medição de duração com
 `decodeAudioData`, as mensagens de recusa, o slot que acende enquanto o som toca,
-a lista "Quem tocou som" e os dois mutes. O botão novo na barra inferior também
+o volume dos sons e o mute global. O botão novo na barra inferior também
 não foi visto — em particular o estado **desabilitado** em modo anônimo.
+(A lista "Quem tocou som" e o mute por emissor que este item citava foram
+**removidos** em 2026-08-21 — o slider de sons do menu do boneco faz o papel.)
 
 ### 3. Nenhum som foi ouvido
 
@@ -1117,11 +1503,13 @@ tocando ao mesmo tempo isso é trabalho de banco que a voz e o chat não fazem.
 Dá para cachear a autorização por `soundId` no socket; não foi feito para não
 cachear decisão de acesso antes de ver o custo real.
 
-### 12. `soundSenders` guarda `socket.id`
+### 12. ~~`soundSenders` guarda `socket.id`~~ — resolvido por remoção
 
-Como os `nudges`, é identificador de exibição: quem cai e volta é uma pessoa
-"nova" na lista, e o mute dela se perde. É o comportamento desejado (o mute é de
-sessão), mas nunca foi observado com queda real.
+A lista "quem tocou som" e o mute por emissor saíram em 2026-08-21: quem silencia
+uma pessoa agora é o slider de sons do menu de contexto do boneco, que é chaveado
+por perfil no banco. Não há mais `soundSenders` nem `mutedSenders`.
+**Não verificado:** que o painel do soundboard continua íntegro sem a seção (só
+`typecheck`; ninguém abriu num navegador).
 
 ---
 

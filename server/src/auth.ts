@@ -30,15 +30,30 @@ export interface AuthUser {
 }
 
 /**
- * Quem é o dono deste token, ou null se o token é inválido, vencido, revogado
- * ou se o Supabase não respondeu.
+ * Quem é o dono deste token.
  *
- * Null é sempre "não entra". Nunca "entra sem verificar" — é a razão de esta
- * função não ter fallback permissivo como as de `db.ts`.
+ * Devolve o MOTIVO em vez de só `null`, e a distinção não é cosmética: um
+ * `null` para tudo fazia "o Supabase não respondeu em 2,5s" chegar à tela como
+ * `invalid-token`, ou seja, *"Sua sessão expirou. Entre de novo."* — mandando a
+ * pessoa deslogar por causa de um soluço de rede. É a mesma confusão que o
+ * `whoAmI` do lobby já tinha corrigido do seu lado (ver o comentário lá).
+ *
+ * `invalid` é decisão do Supabase (401/403: token torto, vencido, revogado).
+ * `unavailable` é falha nossa ou de rede — e **também recusa**: a função
+ * continua fail-closed, só para de mentir sobre o porquê.
  */
-export async function verifyAccessToken(token: string): Promise<AuthUser | null> {
-  if (!client || !token) return null;
-  return guard<AuthUser | null>(
+export type VerifyResult =
+  | { ok: true; user: AuthUser }
+  | { ok: false; reason: 'invalid' | 'unavailable' };
+
+const INVALID: VerifyResult = { ok: false, reason: 'invalid' };
+const UNAVAILABLE: VerifyResult = { ok: false, reason: 'unavailable' };
+
+export async function verifyAccessToken(token: string): Promise<VerifyResult> {
+  // sem token não há o que perguntar; sem cliente não há a quem perguntar
+  if (!token) return INVALID;
+  if (!client) return UNAVAILABLE;
+  return guard<VerifyResult>(
     'verifyAccessToken',
     async () => {
       const { data, error } = await client!.auth.getUser(token);
@@ -58,11 +73,14 @@ export async function verifyAccessToken(token: string): Promise<AuthUser | null>
             `[auth] getUser falhou, e NÃO por token ruim: ${error.message} — ` +
               'confira SUPABASE_URL (e se é o mesmo projeto do VITE_SUPABASE_URL do client).',
           );
+          return UNAVAILABLE;
         }
-        return null;
+        return INVALID;
       }
-      return { id: data.user.id, email: data.user.email ?? null };
+      return { ok: true, user: { id: data.user.id, email: data.user.email ?? null } };
     },
-    null,
+    // timeout do `guard` ou exceção: não deu para verificar. Recusa, mas como
+    // falha de infraestrutura — não como sessão vencida.
+    UNAVAILABLE,
   );
 }

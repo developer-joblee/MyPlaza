@@ -11,17 +11,23 @@ abre um menu de contexto ao lado do cursor, com o nome de quem foi clicado
 
 Este doc é sobre o **caminho** — do clique no canvas do Pixi até um painel do DOM
 no lugar certo, sobre a pessoa certa. Ele nasceu vazio de propósito, e hoje tem
-dois itens, nesta ordem:
+dois itens e uma seção, nesta ordem:
 
 | Item | O que faz | Doc |
 |---|---|---|
 | **booble** / **entrar na booble** | abre (ou entra na) conversa paralela com essa pessoa — de qualquer distância: de longe o avatar vai até lá | [Booble](booble.md) |
 | **chamar** / **cancelar chamado** | acende um alerta na tela dela, com "Ir até" | [Chamar pelo menu de contexto](chamar-e-ir-ate.md) |
+| **Áudio de X** (dois sliders: voz e sons) | o quanto **você** ouve essa pessoa; 0% é mudo, e fica salvo na sua conta | [Volume por pessoa](volume-por-pessoa.md) |
 
-A ordem não é arbitrária: os dois são as duas metades da mesma pergunta — "quero
-falar com essa pessoa". **booble** é *eu vou até ela* (e o avatar caminha
-sozinho); **chamar** é *ela vem até mim*. Ir você mesmo é o caso comum e não
-interrompe ninguém, então fica em cima.
+A ordem dos dois itens não é arbitrária: eles são as duas metades da mesma
+pergunta — "quero falar com essa pessoa". **booble** é *eu vou até ela* (e o
+avatar caminha sozinho); **chamar** é *ela vem até mim*. Ir você mesmo é o caso
+comum e não interrompe ninguém, então fica em cima.
+
+A seção de áudio vem **depois**, separada por uma linha, porque é de outra
+natureza: booble e chamar são coisas que você faz *com* a pessoa e que ela
+percebe; o volume é uma preferência *sua sobre* ela, que ninguém mais vê. Sem a
+separação o menu leria como uma lista de quatro coisas do mesmo tipo.
 
 No próprio avatar não há ação, e aí o painel mostra "Nenhuma ação sobre você por
 enquanto." — um painel completamente vazio pareceria quebrado.
@@ -88,7 +94,7 @@ que o clique nasce no Pixi e não num teste de distância feito à mão.
 |---|---|
 | `client/src/game/Avatar.ts` | `setContextMenuHandler()` — `eventMode`, `hitArea`, `rightdown` |
 | `client/src/game/Game.ts` | suprime o menu nativo, liga local e remotos, abre o menu, limpa no `destroy` |
-| `client/src/ui/AvatarContextMenu.tsx` | o painel e seus dois itens |
+| `client/src/ui/AvatarContextMenu.tsx` | o painel, seus dois itens e o `PeerAudioControls` |
 | `client/src/ui/GameView.tsx` | renderiza o painel |
 | `client/src/state/store.ts` | `contextMenu`, `openContextMenu`, `closeContextMenu` |
 | `client/src/styles.css` | `.avatar-menu*` |
@@ -161,6 +167,13 @@ o painel é `fixed`, e deixá-lo aberto o abandonaria no ponto do clique enquant
 avatar atravessa a sala. Quando a ação resolve na hora (booble perto, `chamar`) o
 menu fica, porque é ali que se vê o item mudar de estado.
 
+**E as minhas PREFERÊNCIAS sobre uma pessoa também vêm para cá.** O volume dela
+não é uma ação (nada acontece na tela de ninguém) nem um status (não é sobre o
+mundo, é sobre mim), mas é a mesma pergunta de navegação: "quero mexer em algo
+relativo àquele boneco ali". A alternativa era um mixer com a lista de todo mundo
+no painel de áudio, que é melhor para ajustar vários e pior para o caso real —
+você identifica a pessoa **na tela**, não num nome numa lista.
+
 **Ações sobre uma pessoa vêm para cá; status fica na lista do HUD.** É a linha
 que decidiu a migração da booble: a lista responde bem "quem está aqui, e como"
 (selos `ausente`/`booble`/`voz`), e responde mal "quero fazer algo com aquele
@@ -184,11 +197,29 @@ estar longe e atrás de outros.
   regra é do servidor (`World.joinBooble`, `presence:call`), e um cliente
   modificado que mande o evento leva a mesma recusa em silêncio. Quem for
   adicionar item novo deve espelhar a recusa do servidor, não inventar uma.
-- **WASD continua andando com o menu aberto.** O painel não tem
-  `data-capture-keys` porque nenhum item tem campo de texto (o `chamar` é um
-  botão). É aceitável hoje (o menu é transitório e não se move com o avatar) e
-  vira problema **no primeiro item com input** — nesse dia, o atributo entra,
-  como no menu de configurações.
+- **`data-capture-keys` entrou, e o dia previsto aqui chegou.** A armadilha
+  original dizia: "o painel não tem `data-capture-keys` porque nenhum item tem
+  campo de texto … vira problema no primeiro item com input — nesse dia, o
+  atributo entra". Os sliders de volume são esse dia. O atributo está na raiz do
+  painel, e o `game/input.ts` resolve por `closest('[data-capture-keys]')`, então
+  a raiz basta.
+- **Mas NÃO copie o `stopPropagation()` cru do `SoundboardPanel` para um input
+  daqui.** Este menu fecha por um listener nativo em `document`, e
+  `e.stopPropagation()` num handler do React barra o evento **nativo** antes de
+  ele chegar lá (o React despacha no root, que está abaixo do `document` na
+  bolha). O resultado é o **Escape parando de fechar o menu** quando o foco está
+  no slider. A saída é filtrar: só as teclas que o controle consome
+  (`RANGE_KEYS`, em `AvatarContextMenu.tsx`) param a propagação.
+- **A altura do painel é medida UMA vez.** O `useLayoutEffect` roda na montagem
+  para virar a caixa para dentro da janela e nunca recalcula: qualquer linha que
+  nasça depois (um aviso, uma mensagem de erro) pode deixar o menu pendurado fora
+  da tela. Quem for adicionar estado que aparece e desaparece precisa de um slot
+  de altura fixa — foi o que a seção de áudio fez com o `<small>` do cabeçalho.
+- **A roda fecha o menu, menos sobre o próprio menu.** O fechamento existe porque
+  o zoom move o mundo debaixo de um painel preso à tela; com a seção de áudio
+  passou a existir algo com que interagir dentro dele, e rolar mirando um slider
+  fechava o painel na cara de quem estava mexendo. Não há incoerência: o zoom
+  escuta a roda no **canvas**, então uma roda sobre o painel não move mundo nenhum.
 - **`hitArea` não acompanha a pose.** Ela é o retângulo do sprite de pé. Sentado
   ou ausente o boneco ocupa área parecida, então na prática não incomoda — mas
   se alguém adicionar uma pose bem maior, a área não cresce junto.
@@ -244,6 +275,8 @@ um script de 23 casos sobre a chegada do `AutoWalk` — nada de tela.
   enquanto único) item
 - [Booble](booble.md) — o segundo item, que **veio** da lista do HUD; o doc dela
   tem a regra de filiação e o porquê da migração
+- [Volume por pessoa](volume-por-pessoa.md) — a seção de áudio, e o primeiro
+  conteúdo deste menu que não é um botão
 - [Chamado de quem está ausente](chamado-ausente.md) — o "chamar" que **fica** na
   lista, porque é para quem está ausente
 - README, seção [Controles](../../README.md#controles)

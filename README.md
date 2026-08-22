@@ -131,11 +131,12 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Ficar ausente | Botão de celular na barra inferior: corta microfone e áudio, e seu avatar aparece mexendo no celular, com um feed rolando ao lado da cabeça e a pastilha **ausente** acima do nome. Andar volta ao normal, e suas preferências de microfone e fone são preservadas — ver [Modo ausente (celular)](docs/features/modo-ausente.md) |
 | Chamar quem está ausente | Botão **chamar** ao lado do nome dela na lista. Ela vê um aviso com quem chamou e a hora, ouve um "toc-toc" e tem um botão para voltar — ver [Chamado de quem está ausente](docs/features/chamado-ausente.md) |
 | Conversa paralela (**booble**) | **Botão direito** no boneco de alguém → **booble** (ou **entrar na booble**, se ela já tiver uma), **de qualquer distância**: se estiver longe, seu avatar vai até lá caminhando e a booble abre na chegada — andar, clicar no chão ou o **Cancelar** do aviso desistem. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 7% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra, e um balãozinho de cochicho ao lado de cada cabeça mostra que a conversa está rolando. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
-| Compartilhar tela | Botão de tela na barra inferior (visível para quem está perto) |
+| Compartilhar tela | Botão de tela na barra inferior. Quem está perto (ou na sua **booble**) vê uma **prévia no topo-centro da tela**; clicar nela amplia para a janela inteira, com `⛶`/`F` para fullscreen e `Esc` para voltar — ver [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
 | Reagir (emote) | Botão de **carinha** na barra inferior: escolha uma das 6 reações e um balãozinho animado aparece sobre a sua cabeça por 3s, para todos — ver [Emotes](docs/features/emotes.md) |
 | Chat | Painel no canto inferior direito (global) |
-| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa: **booble** e **chamar**. É o lugar das ações *sobre uma pessoa* — na lista do canto superior esquerdo ficam os selos de status — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
+| Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa: **booble**, **chamar** e o **volume dela**. É o lugar das ações *sobre uma pessoa* — na lista do canto superior esquerdo ficam os selos de status — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
+| Ajustar o volume de UMA pessoa | **Botão direito** no boneco dela → a seção **Áudio de X**, com dois sliders: **voz** e **sons** (soundboard), independentes. 0% é mudo, e o ajuste **fica salvo na sua conta** — vale em qualquer navegador e sobrevive ao F5, o seu e o dela. Ninguém é notificado — ver [Volume por pessoa](docs/features/volume-por-pessoa.md) |
 | Chamar alguém que está presente | **Botão direito** no boneco → **chamar**. Ela ouve um "pin" e vê no canto superior direito *"SEU NOME te chamou"*, com **Ir até** — que faz o avatar dela **caminhar sozinho** até você, contornando parede, e parar a dois tiles. O item é um interruptor: clicar de novo tira o alerta da tela dela, e clicar mais uma vez toca o pin de novo — ver [Chamar pelo menu de contexto](docs/features/chamar-e-ir-ate.md) |
 | Configurações / sair | Botão de **engrenagem** na barra inferior (última posição, onde ficava o telefone): mostra em que mundo você está, **o seu ID**, o campo para **adicionar alguém a este mundo pelo ID** — sem sair do mundo — e o **Finalizar chamada** — ver [Menu de configurações](docs/features/configuracoes-no-jogo.md) |
 
@@ -154,7 +155,7 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Zonas de áudio (salas fechadas) | [Zonas de áudio](#zonas-de-áudio-salas-fechadas) *(sem doc próprio ainda)* | `client/src/voice/VoiceRoom.ts`, `shared/src/scenarios.ts` |
 | Booble (conversa paralela: dentro 100%, fora 7%) | [Booble](docs/features/booble.md) | `client/src/booble.ts`, `client/src/voice/proximity.ts`, `client/src/game/BoobleRings.ts`, `client/src/game/BoobleWhisper.ts`, `client/src/game/AutoWalk.ts`, `client/src/ui/AvatarContextMenu.tsx`, `server/src/world.ts` |
 | Soundboard gamificado (sons próprios, liberados por tempo na plataforma) | [Soundboard gamificado](docs/features/soundboard.md) | `client/src/soundboard/`, `server/src/soundboard.ts`, `shared/src/levels.ts` |
-| Compartilhamento de tela | [Arquitetura](#arquitetura) *(sem doc próprio ainda)* | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts` |
+| Compartilhamento de tela (prévia no topo-centro, clique amplia) | [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md) | `client/src/ui/ScreenShareView.tsx`, `client/src/voice/VoiceRoom.ts`, `client/src/ui/GameView.tsx` |
 | Chat de texto | — *(sem doc)* | `client/src/ui/Chat.tsx`, `server/src/handlers.ts` |
 | Modo ausente (celular) | [Modo ausente (celular)](docs/features/modo-ausente.md) | `client/src/presence.ts`, `client/src/game/AwayIndicator.ts`, `client/src/ui/MediaControls.tsx` |
 | Chamado de quem está ausente ("toc-toc") | [Chamado de quem está ausente](docs/features/chamado-ausente.md) | `client/src/presence.ts`, `client/src/ui/knock.ts`, `server/src/handlers.ts` |
@@ -167,10 +168,11 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Editor de móveis (dono do mundo decora; persiste por mundo) | [Editor de móveis](docs/features/editor-de-moveis.md) | `shared/src/furniture.ts`, `client/src/game/FurnitureLayer.ts`, `client/src/ui/FurniturePalette.tsx`, `server/src/world.ts` |
 | Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/net/voiceApi.ts` |
 | Persistência (Supabase): perfis, empresas, locais, posição salva e atividade da sessão | [Persistência (Supabase)](docs/features/persistencia-supabase.md) | `db/`, `server/src/db.ts` |
-| Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `server/src/auth.ts`, `server/src/handlers.ts` |
+| Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `client/src/net/authToken.ts`, `server/src/auth.ts`, `server/src/socketAuth.ts`, `server/src/handlers.ts` |
 | Lobby: criar mundos e convidar pessoas | [Lobby](docs/features/lobby.md) | `client/src/ui/LobbyScreen.tsx`, `server/src/lobby.ts` |
 | Menu de configurações no jogo (adicionar pelo ID sem sair do mundo; sair) | [Menu de configurações](docs/features/configuracoes-no-jogo.md) | `client/src/ui/SettingsMenu.tsx`, `client/src/ui/MediaControls.tsx` |
-| Menu de contexto no avatar (botão direito; itens **booble** e **chamar**) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
+| Menu de contexto no avatar (botão direito; **booble**, **chamar** e o volume da pessoa) | [Menu de contexto no avatar](docs/features/menu-de-contexto.md) | `client/src/ui/AvatarContextMenu.tsx`, `client/src/game/Avatar.ts`, `client/src/game/Game.ts` |
+| Volume por pessoa (voz e soundboard, separados, salvos na conta) | [Volume por pessoa](docs/features/volume-por-pessoa.md) | `client/src/peerAudio.ts`, `client/src/voice/proximity.ts`, `server/src/audioPrefs.ts`, `db/migrations/0014_peer_audio_prefs.sql` |
 | Chamar pelo menu de contexto ("pin", alerta e **ir até** com caminhada automática) | [Chamar pelo menu de contexto](docs/features/chamar-e-ir-ate.md) | `client/src/call.ts`, `client/src/ui/CallAlerts.tsx`, `client/src/game/pathfind.ts`, `client/src/game/AutoWalk.ts`, `server/src/handlers.ts` |
 | Vínculo com o mundo (o nome fica guardado; entrar direto depois do logout) | [Vínculo com o mundo](docs/features/vinculo-com-o-mundo.md) | `db/migrations/0009_world_binding.sql`, `client/src/state/store.ts`, `server/src/db.ts` |
 | Camada de requisição (client → servidor) | [Camada de requisição](docs/features/camada-de-requisicao.md) | `client/src/net/` |
@@ -178,10 +180,11 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 > As features **sem doc próprio** nasceram antes desta convenção e estão
 > descritas nas seções deste README. Ao mexer em uma delas, crie o
 > `docs/features/<slug>.md`, mova o detalhe técnico para lá e deixe aqui só o
-> resumo e o link. As treze com doc (persistência, autenticação, lobby, camada de
-> requisição, chamado de ausente, modo ausente, vínculo com o mundo, booble,
-> soundboard, menu de configurações, menu de contexto, chamar pelo menu de
-> contexto e microfone mudo ao entrar) já seguem a convenção.
+> resumo e o link. As dezesseis com doc (persistência, autenticação, lobby,
+> camada de requisição, chamado de ausente, modo ausente, vínculo com o mundo,
+> booble, soundboard, menu de configurações, menu de contexto, chamar pelo menu
+> de contexto, microfone mudo ao entrar, volume por pessoa, cenários e mapas e
+> compartilhamento de tela) já seguem a convenção.
 
 ## Convenções de desenvolvimento
 
@@ -257,16 +260,21 @@ db/       schema do Supabase em SQL, aplicado à mão por enquanto
   já é 0, então a conexão fica pré-carregada e não há corte ao se aproximar.
   A regra de quanto se ouve de quem — proximidade, zona e booble — é uma função
   pura em `voice/proximity.ts`, e é dela que saem também o badge `voz` e o anel
-  de "falando".
+  de "falando". Ao lado dela vive uma segunda, `peerVolumeFor`, que multiplica
+  aquele número pelo **volume que você escolheu para aquela pessoa** — e é só
+  essa que vai para o alto-falante. Ver
+  [Volume por pessoa](docs/features/volume-por-pessoa.md).
 - **Soundboard**: sons curtos do próprio usuário, tocados para quem está perto.
   **Não** passam pelo LiveKit: o servidor escolhe quem recebe (posição, zona e
   booble) e cada navegador baixa o arquivo do Supabase Storage e toca em WebAudio,
-  aplicando o volume pela **mesma** função de audibilidade da voz. Quantos sons
-  cada pessoa tem é liberado pelo tempo acumulado na plataforma. Ver
-  [Soundboard gamificado](docs/features/soundboard.md).
-- **Tela compartilhada**: publicada como `ScreenShare` no LiveKit; o consumo usa
-  `track.attach()` (obrigatório com `adaptiveStream`, senão o servidor para de
-  encaminhar e a tela fica preta). Some quando o peer sai do alcance.
+  aplicando o volume pela **mesma** função de audibilidade da voz — vezes o
+  volume que você escolheu para aquela pessoa, e vezes o volume global do
+  soundboard. Quantos sons cada pessoa tem é liberado pelo tempo acumulado na
+  plataforma. Ver [Soundboard gamificado](docs/features/soundboard.md).
+- **Tela compartilhada**: publicada como `ScreenShare` no LiveKit, com portão de
+  proximidade **binário** (não existe "ver a tela a 7%"). Quem recebe vê uma
+  prévia no topo-centro e amplia com um clique. Ver
+  [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md).
 - **Fronteira de requisição**: `client/src/net/` é o único lugar que fala com o
   servidor. Componente, objeto de jogo e store **não** chamam `socket.emit` —
   usam `net/lobbyApi.ts` (operações do lobby), `net/worldApi.ts` (estando

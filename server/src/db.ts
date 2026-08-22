@@ -15,7 +15,9 @@ import {
   type AssignableWorldRole,
   type PendingInvite,
   SOUND_VOLUME_DEFAULT,
+  clampPeerVolume,
   clampVolume,
+  type PeerAudioPrefs,
   type ScenarioId,
   type SentInvite,
   type UserSound,
@@ -1700,6 +1702,78 @@ export async function loadSoundboardPrefs(
       };
     },
     { presenceSeconds: 0, volume: SOUND_VOLUME_DEFAULT },
+  );
+}
+
+/**
+ * O MEU mapa de volume por pessoa, chaveado pelo **perfil** de cada pessoa.
+ *
+ * Lido uma vez, no `join`, e guardado em memória no socket — quem entra depois
+ * é resolvido a partir desse cache, sem consulta nova. Sem isso, entrar num
+ * mundo com dez pessoas custaria dez consultas, e cada pessoa que entrasse
+ * depois custaria uma para cada um que já estava lá.
+ *
+ * Linha ausente = default (cheio), então este mapa é sempre PARCIAL: quem nunca
+ * foi ajustado não aparece aqui, e é o cliente que trata a ausência.
+ */
+export async function loadPeerAudioPrefs(profileId: string): Promise<Map<string, PeerAudioPrefs>> {
+  return guard<Map<string, PeerAudioPrefs>>(
+    'loadPeerAudioPrefs',
+    async () => {
+      const { data, error } = await client!
+        .from('peer_audio_prefs')
+        .select('target_profile_id, voice_volume, sound_volume')
+        .eq('profile_id', profileId);
+      if (error) throw error;
+      const out = new Map<string, PeerAudioPrefs>();
+      for (const row of data ?? []) {
+        const target = String(row.target_profile_id ?? '');
+        if (!target) continue;
+        out.set(target, {
+          voice: clampPeerVolume(row.voice_volume),
+          sound: clampPeerVolume(row.sound_volume),
+        });
+      }
+      return out;
+    },
+    new Map(),
+  );
+}
+
+/**
+ * Grava o meu ajuste para UMA pessoa. `false` = não gravou (a tela avisa).
+ *
+ * Upsert do par inteiro, e não `update` de um campo: a linha pode não existir
+ * (o default vive no código, não numa linha por par de gente que existe), e
+ * gravar um campo só exigiria ler-modificar-escrever para não zerar o outro.
+ *
+ * Não apaga a linha quando os dois voltam a 100. Linha ausente e 100/100 são a
+ * mesma coisa para quem lê, então apagar seria só uma escrita a mais para
+ * economizar bytes que ninguém está pagando.
+ */
+export async function savePeerAudioPref(
+  profileId: string,
+  targetProfileId: string,
+  voice: number,
+  sound: number,
+): Promise<boolean> {
+  return guard<boolean>(
+    'savePeerAudioPref',
+    async () => {
+      const { error } = await client!.from('peer_audio_prefs').upsert(
+        {
+          profile_id: profileId,
+          target_profile_id: targetProfileId,
+          voice_volume: clampPeerVolume(voice),
+          sound_volume: clampPeerVolume(sound),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'profile_id,target_profile_id' },
+      );
+      if (error) throw error;
+      return true;
+    },
+    false,
   );
 }
 

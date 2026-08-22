@@ -16,6 +16,7 @@ import {
   type WorldRole,
 } from '@together/shared';
 import { authRequired, verifyAccessToken, type AuthUser } from './auth';
+import { socketToken } from './socketAuth';
 import {
   acceptInviteById,
   archiveWorld,
@@ -104,10 +105,21 @@ export function registerLobbyHandlers(io: IoServer, socket: IoSocket): void {
   async function whoAmI(): Promise<Who> {
     if (identity) return { ok: true, me: identity };
     if (!authRequired) return { ok: false, reason: 'not-configured' };
-    const token = String(socket.handshake.auth?.token ?? '');
+    // `socketToken`, não o handshake direto: o token do handshake vence em ~1h e
+    // o socket do lobby pode ficar aberto mais que isso
+    const token = socketToken(socket);
     if (!token) return { ok: false, reason: 'auth-required' };
-    const authUser = await verifyAccessToken(token);
-    if (!authUser) return { ok: false, reason: 'invalid-token' };
+    const verified = await verifyAccessToken(token);
+    /**
+     * `unavailable` recusa igual, mas com o motivo certo: "o Supabase não
+     * respondeu" não é sessão vencida, e mandar a pessoa entrar de novo por
+     * causa de um timeout é a mesma mentira que o `ensureProfile` abaixo já
+     * tinha deixado de contar.
+     */
+    if (!verified.ok) {
+      return { ok: false, reason: verified.reason === 'invalid' ? 'invalid-token' : 'error' };
+    }
+    const authUser = verified.user;
     const profile = await ensureProfile(authUser.id, authUser.email);
     if (!profile) {
       /**

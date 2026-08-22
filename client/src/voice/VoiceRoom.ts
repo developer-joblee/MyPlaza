@@ -24,7 +24,7 @@ import type { AppSocket } from '../net/socket';
 import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
 import { useStore } from '../state/store';
-import { audioVolumeFor, type AudioInfo, type PeerAudio } from './proximity';
+import { audioVolumeFor, peerVolumeFor, type AudioInfo, type PeerAudio } from './proximity';
 import { requestVoiceToken } from '../net/voiceApi';
 
 const VIDEO_RADIUS = PROXIMITY_RADIUS + PROXIMITY_HYSTERESIS;
@@ -370,9 +370,17 @@ export class VoiceRoom {
       // subscrição nova entra com o volume que o tick daria: sem isto, os
       // primeiros pacotes de alguém distante chegam a todo volume por um tick
       // (estalo audível). Mesma função do tick, de propósito — ver `proximity.ts`.
+      // Inclui o ajuste por pessoa: sem ele, quem eu baixei entraria alto por um
+      // tick, que é justamente o estalo que este bloco existe para evitar.
       const peer = this.lastPeer.get(participant.identity);
       track.setVolume(
-        this.silenced || peer === undefined ? 0 : audioVolumeFor(this.getAudioInfo().self, peer),
+        this.silenced || peer === undefined
+          ? 0
+          : peerVolumeFor(
+              this.getAudioInfo().self,
+              peer,
+              useStore.getState().peerAudio[participant.identity],
+            ),
       );
     } else if (track instanceof RemoteVideoTrack && pub.source === Track.Source.ScreenShare) {
       // guarda a faixa, não um MediaStream montado à mão: com adaptiveStream o
@@ -553,6 +561,8 @@ export class VoiceRoom {
 
     const { self, peers } = this.getAudioInfo();
     const now = performance.now();
+    // uma leitura por tick, não uma por participante
+    const peerAudio = useStore.getState().peerAudio;
 
     /**
      * A REGRA de quanto se ouve de quem mora em `audioVolumeFor`
@@ -625,7 +635,15 @@ export class VoiceRoom {
       if (!this.silenced && audioWanted.has(id)) {
         timers.audioOutSince = null;
         this.setSubscribed(participant, Track.Source.Microphone, true);
-        participant.setVolume(volume);
+        /**
+         * O que SAI no alto-falante é `peerVolumeFor`, não o `volume` acima: o
+         * ajuste por pessoa multiplica a geometria. Continua assinando (e
+         * continua contando no badge e no anel) mesmo com o ajuste em 0 — quem
+         * eu baixei ainda está ao meu lado, e desassinar por preferência faria a
+         * pessoa desaparecer da lista de audíveis e do predicado de booble.
+         * Ver `proximity.ts`.
+         */
+        participant.setVolume(peerVolumeFor(self, info, peerAudio[id]));
       } else {
         participant.setVolume(0);
         timers.audioOutSince ??= now;
@@ -706,6 +724,30 @@ export class VoiceRoom {
    */
   private forceMicOff(): void {
     this.micIntent = false;
+  }
+
+  /**
+   * Reaplica o volume de UMA pessoa agora, sem esperar o próximo tick.
+   *
+   * O tick roda a cada `VOICE_TICK_MS` (250ms) e já corrigiria sozinho — mas um
+   * slider que responde em até um quarto de segundo lê como travado, e a pessoa
+   * arrasta mais do que queria para "compensar". Chamado por
+   * `client/src/peerAudio.ts` depois de escrever no store.
+   *
+   * Não mexe em subscrição nem no badge: só no ganho. Se o participante não está
+   * na sala (ou o tick o teria silenciado por zona/distância), não faz nada — o
+   * tick continua sendo a autoridade.
+   */
+  refreshPeerVolume(id: string): void {
+    const room = this.room;
+    if (this.destroyed || !room || this.silenced) return;
+    const participant = room.remoteParticipants.get(id);
+    if (!participant) return;
+    const peer = this.lastPeer.get(id);
+    if (peer === undefined) return;
+    participant.setVolume(
+      peerVolumeFor(this.getAudioInfo().self, peer, useStore.getState().peerAudio[id]),
+    );
   }
 
   setMicEnabled(enabled: boolean): void {
@@ -833,6 +875,7 @@ export class VoiceRoom {
   private debugState() {
     const room = this.room;
     const { self, peers } = this.getAudioInfo();
+    const peerAudio = useStore.getState().peerAudio;
     return {
       status: useStore.getState().voiceStatus,
       state: room?.state ?? 'sem sala',
@@ -856,6 +899,20 @@ export class VoiceRoom {
         distance: peers.get(p.identity)?.distance ?? null,
         zona: peers.get(p.identity)?.zone ?? null,
         booble: peers.get(p.identity)?.booble ?? null,
+        /**
+         * `geometria` é o que a distância/zona/booble dariam; `meuAjuste` é o
+         * quanto EU escolhi ouvir esta pessoa (ausente = cheio); `volume` é o
+         * produto, que é o que de fato saiu no alto-falante.
+         *
+         * Os três juntos porque "por que essa pessoa está baixa?" é a pergunta
+         * que o volume por pessoa cria, e com um número só não há como
+         * responder: 0.35 pode ser distância ou pode ser o slider.
+         */
+        geometria: (() => {
+          const peer = peers.get(p.identity);
+          return peer ? audioVolumeFor(self, peer) : null;
+        })(),
+        meuAjuste: peerAudio[p.identity] ?? null,
         volume: p.getVolume() ?? null,
         audioSubscribed: p.getTrackPublication(Track.Source.Microphone)?.isSubscribed ?? false,
         videoSubscribed: p.getTrackPublication(Track.Source.ScreenShare)?.isSubscribed ?? false,

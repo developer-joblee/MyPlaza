@@ -1,5 +1,6 @@
 import { receiveBoobleChange } from '../booble';
 import { receiveCall, receiveCallAnswer } from '../call';
+import { receivePeerAudio } from '../peerAudio';
 import { receiveNudge } from '../presence';
 import { receiveSound } from '../soundboard';
 import { useStore } from '../state/store';
@@ -49,8 +50,11 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
    * store, pela mesma razão do chamado acima: o evento tem efeito de áudio, e o
    * dono desse efeito é aquele módulo.
    */
-  socket.on('soundboard:played', (fromId, fromName, soundId, url) =>
-    receiveSound(fromId, fromName, soundId, url),
+  // `fromName` continua no payload (o servidor manda), mas o cliente já não
+  // precisa dele: quem ajusta som por pessoa faz isso no menu do boneco, pelo
+  // nome que o roster já tem.
+  socket.on('soundboard:played', (fromId, _fromName, soundId, url) =>
+    receiveSound(fromId, soundId, url),
   );
   /**
    * A booble de alguém mudou. Vai por `booble.ts` (e não direto no store)
@@ -58,6 +62,12 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
    * usa para decidir volume. Mesmo arranjo do chamado acima.
    */
   socket.on('player:booble', (id, boobleId) => receiveBoobleChange(id, boobleId));
+  /**
+   * O meu mapa de volume por pessoa, chaveado por `socket.id`. Vai por
+   * `peerAudio.ts` pela mesma razão dos três acima: reaplicar o ganho na sala de
+   * voz é efeito de áudio, e o dono desse efeito não é este arquivo.
+   */
+  socket.on('audio:prefs', (prefs) => receivePeerAudio(prefs));
   /**
    * Recusado: volta para a tela de entrada com o motivo. Sem isto o cliente
    * ficaria para sempre num mundo vazio esperando um snapshot que não vem.
@@ -76,6 +86,7 @@ export function bindStoreToSocket(socket: AppSocket): () => void {
     socket.removeAllListeners('presence:callAnswered');
     socket.removeAllListeners('soundboard:played');
     socket.removeAllListeners('player:booble');
+    socket.removeAllListeners('audio:prefs');
     socket.removeAllListeners('join:denied');
   };
 }

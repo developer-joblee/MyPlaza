@@ -21,7 +21,7 @@ import {
   type SoundboardState,
   type SoundMime,
 } from '@together/shared';
-import { authRequired, verifyAccessToken } from './auth';
+import { whoIsSocket, type SocketWho } from './socketAuth';
 import {
   deleteUserSound,
   getUserSound,
@@ -66,27 +66,11 @@ export function registerSoundboardHandlers(io: IoServer, socket: IoSocket): void
   const fail = (reason: SoundboardErrorReason): SoundboardResult => ({ ok: false, reason });
 
   /**
-   * Quem está pedindo.
-   *
-   * Diferente do lobby, aqui NÃO se cria perfil: o soundboard é uma tela de
-   * dentro do jogo, então o `join` já passou e o perfil já existe. Se o socket
-   * ainda não entrou em mundo nenhum (`socket.data.profileId` vazio), o pedido é
-   * cedo demais — e o token é verificado de novo em vez de confiar só no
-   * `socket.data`, porque `profileId` só é escrito no `join` e um pedido antes
-   * dele não teria passado por autenticação nenhuma.
+   * Quem está pedindo. O `whoAmI` vive em `socketAuth.ts` porque o
+   * `audioPrefs.ts` precisa do mesmo — e ele nasceu como cópia declarada deste,
+   * que é o jeito conhecido de duas verificações de identidade divergirem.
    */
-  async function whoAmI(): Promise<{ ok: true; profileId: string } | { ok: false; reason: SoundboardErrorReason }> {
-    if (!authRequired) return { ok: false, reason: 'not-configured' };
-    const profileId = socket.data.profileId;
-    if (!profileId) return { ok: false, reason: 'auth-required' };
-    const token = String(socket.handshake.auth?.token ?? '');
-    if (!token) return { ok: false, reason: 'auth-required' };
-    const authUser = await verifyAccessToken(token);
-    if (!authUser || authUser.id !== socket.data.authUserId) {
-      return { ok: false, reason: 'invalid-token' };
-    }
-    return { ok: true, profileId };
-  }
+  const whoAmI = (): Promise<SocketWho> => whoIsSocket(socket);
 
   /**
    * O estado inteiro: sons, tempo acumulado e o próximo marco. Vem em toda

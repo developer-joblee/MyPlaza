@@ -69,6 +69,38 @@ export async function currentAccessToken(): Promise<string | null> {
   return (await currentSession())?.access_token ?? null;
 }
 
+/**
+ * Avisa quando o access token **muda**, para o socket já conectado receber o
+ * token novo.
+ *
+ * O handshake do socket resolve a conexão, e só ela: `socket.handshake.auth` é
+ * fotografado no momento da conexão e o servidor continuaria validando aquela
+ * cópia para sempre. Como o token vence em ~1h e o SDK o renova em background,
+ * uma aba aberta por mais de uma hora passava a levar `invalid-token` em toda
+ * operação por ack — e a tela dizia "sua sessão expirou" com a sessão viva. Ver
+ * `client/src/net/authToken.ts`, que é quem escuta isto.
+ *
+ * Filtra pelo **valor**, não pelo nome do evento: além do `TOKEN_REFRESHED`, o
+ * Supabase dispara `SIGNED_IN`, `USER_UPDATED` e `INITIAL_SESSION` — alguns com
+ * o mesmo token, e depender da lista exata de nomes é depender de detalhe de
+ * versão do SDK. Comparar o token cobre os três casos com uma regra.
+ *
+ * Token ausente (logout) **não** é notificado: não existe "socket sem token"
+ * para atualizar, e sair da conta desmonta a tela do jogo, o que derruba o
+ * socket.
+ */
+export function onAccessTokenChange(cb: (token: string) => void): () => void {
+  if (!supabase) return () => {};
+  let last: string | null = null;
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const token = session?.access_token ?? null;
+    if (!token || token === last) return;
+    last = token;
+    cb(token);
+  });
+  return () => data.subscription.unsubscribe();
+}
+
 export interface AuthResult {
   /** entrou de verdade: existe sessão, a tela de login pode sair. */
   signedIn: boolean;

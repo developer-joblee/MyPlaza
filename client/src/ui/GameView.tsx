@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { Game } from '../game/Game';
+import { bindAccessToken } from '../net/authToken';
 import { bindStoreToSocket } from '../net/bindStore';
 import { createSocket } from '../net/socket';
+import { createAudioApi } from '../net/audioApi';
 import { createSoundboardApi } from '../net/soundboardApi';
 import { createWorldApi } from '../net/worldApi';
 import { runtime } from '../runtime';
@@ -44,8 +46,17 @@ export function GameView() {
     // o soundboard tem fronteira própria (é outro conjunto de eventos) e um
     // player de áudio próprio, que não passa pelo LiveKit
     runtime.soundApi = createSoundboardApi(() => runtime.socket);
+    // volume por pessoa: fronteira própria também, porque é a única operação por
+    // ack que atravessa a sessão de mundo para escrever no perfil
+    runtime.audioApi = createAudioApi(() => runtime.socket);
     const soundPlayer = createSoundPlayer();
     const unbindStore = bindStoreToSocket(socket);
+    /**
+     * Empurra o token renovado para um socket que não caiu. Sem isto, passada a
+     * validade do token (~1h de aba aberta), soundboard e volume por pessoa
+     * respondiam `invalid-token` — "sua sessão expirou" numa sessão viva.
+     */
+    const unbindToken = bindAccessToken(() => runtime.socket);
 
     let cancelled = false;
     let game: Game | null = null;
@@ -120,6 +131,7 @@ export function GameView() {
       voice?.destroy(); // invalida awaits em vôo e solta o microfone
       soundPlayer.destroy(); // corta som em vôo e fecha o AudioContext
       game?.destroy();
+      unbindToken();
       unbindStore();
       socket.disconnect();
       runtime.socket = null;
@@ -128,6 +140,7 @@ export function GameView() {
       runtime.voice = null;
       runtime.soundApi = null;
       runtime.soundboard = null;
+      runtime.audioApi = null;
     };
   }, []);
 
@@ -136,25 +149,37 @@ export function GameView() {
       <div ref={containerRef} className="canvas-host" />
       <Hud />
       <Chat />
-      <Notices />
       <MediaControls />
       <FurnitureEditGate />
       {/*
-        Uma coluna só para o canto superior direito. Antes o zoom e as prévias de
-        tela eram ancorados os DOIS em `top:16 right:16` e se sobrepunham quando
-        alguém compartilhava; empilhar resolve isso e abre lugar para o alerta de
-        chamado. O zoom fica primeiro de propósito: é controle, e controle que se
-        desloca quando chega um aviso é pior que aviso 44px mais abaixo.
+        A coluna do TOPO-CENTRO: prévias de tela e, abaixo delas, a pilha de
+        avisos. As prévias vinham do canto superior direito, onde era fácil não
+        notar que havia tela para ver — o topo-centro é o único ponto da tela em
+        que o olho já passa (é onde vive o "Na booble · Sair").
+
+        A prévia vem PRIMEIRO por escolha de produto: quando alguém compartilha,
+        a tela é o assunto, e um aviso que desce 150px continua legível. O
+        contrário — aviso fixo e prévia abaixo — deslocaria a prévia a cada
+        chamado, reconexão ou booble.
 
         A tela AMPLIADA (`.screen-focus`) é `fixed; inset: 0`, então continua
-        cobrindo a janela mesmo aninhada aqui — e por isso esta coluna não pode
+        cobrindo a janela mesmo aninhada aqui — e por isso ESTA coluna não pode
         ganhar `z-index`: criar um contexto de empilhamento aqui prenderia a tela
-        ampliada dentro dele.
+        ampliada dentro dele. (A restrição andou junto com o `ScreenShareView`:
+        antes valia para a `.top-right-stack`.)
+      */}
+      <div className="top-center-stack">
+        <ScreenShareView />
+        <Notices />
+      </div>
+      {/*
+        O canto superior direito: zoom e alerta de chamado. O zoom fica primeiro
+        de propósito — é controle, e controle que se desloca quando chega um
+        aviso é pior que aviso 44px mais abaixo.
       */}
       <div className="top-right-stack">
         <ZoomControls />
         <CallAlerts />
-        <ScreenShareView />
       </div>
       <SharingIndicator />
       <AvatarContextMenu />

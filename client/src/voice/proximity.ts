@@ -1,4 +1,10 @@
-import { BOOBLE_OUTSIDE_VOLUME, PROXIMITY_RADIUS } from '@together/shared';
+import {
+  BOOBLE_OUTSIDE_VOLUME,
+  PEER_VOLUME_DEFAULT,
+  PEER_VOLUME_MAX,
+  PROXIMITY_RADIUS,
+  type PeerAudioPrefs,
+} from '@together/shared';
 
 /** Volume total até 40% do raio, depois rampa linear até 0 no limite. */
 export function volumeForDistance(distance: number): number {
@@ -67,4 +73,41 @@ export function audioVolumeFor(self: SelfAudio, peer: PeerAudio): number {
 
   if (self.booble !== null || peer.booble !== null) return base * BOOBLE_OUTSIDE_VOLUME;
   return base;
+}
+
+/**
+ * **O volume que de fato sai no alto-falante:** a geometria × o meu ajuste para
+ * esta pessoa.
+ *
+ * Por que é uma função SEPARADA de `audioVolumeFor`, e não uma quarta camada
+ * dentro dela: aquele número não decide só o volume. Ele decide também o badge
+ * `voz` do HUD e o anel de "falando" — e, pelo comentário do tick, o predicado
+ * de com quem dá para abrir uma booble. Se a preferência entrasse lá, "baixei o
+ * volume do Bruno" viraria "o Bruno não aparece mais como alguém ao alcance" e
+ * "não consigo mais abrir booble com o Bruno": efeitos colaterais que ninguém
+ * pediu, e que não dariam erro nenhum.
+ *
+ * A divisão, então, é esta e vale a pena decorar:
+ *
+ * - **`audioVolumeFor` = audibilidade** (geometria: booble, zona, distância).
+ *   É a verdade sobre *quem está ao meu alcance*, e é o que a UI mostra.
+ *   Ninguém deveria mexer nela para expressar preferência.
+ * - **`peerVolumeFor` = o que eu ouço** (audibilidade × preferência). É só isto
+ *   que vai para `setVolume`.
+ *
+ * As duas continuam morando neste arquivo, que é o que a armadilha do
+ * `docs/features/booble.md` pede: a regra não se espalha pelo `VoiceRoom`.
+ *
+ * `prefs` ausente = cheio, e é o caso comum — o mapa do store é parcial de
+ * propósito (só quem foi ajustado aparece nele).
+ */
+export function peerVolumeFor(
+  self: SelfAudio,
+  peer: PeerAudio,
+  prefs: PeerAudioPrefs | undefined,
+): number {
+  const base = audioVolumeFor(self, peer);
+  if (base === 0) return 0;
+  const pref = prefs?.voice ?? PEER_VOLUME_DEFAULT;
+  return base * (pref / PEER_VOLUME_MAX);
 }

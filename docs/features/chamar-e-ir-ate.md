@@ -66,7 +66,7 @@ O **"ir até"** é 100% de cliente, e é a única parte sem precedente no projet
 | `client/src/state/store.ts` | `CallAlert`, `calls`, `myCalls` e as quatro ações |
 | `client/src/ui/AvatarContextMenu.tsx` | o item **chamar** (o primeiro item real do menu) |
 | `client/src/ui/CallAlerts.tsx` | a pilha do canto superior direito |
-| `client/src/ui/GameView.tsx` | a coluna `.top-right-stack` |
+| `client/src/ui/GameView.tsx` | a coluna `.top-right-stack` (zoom + alerta) |
 | `client/src/ui/sfx.ts` | primitiva de WebAudio (contexto único + envelope) |
 | `client/src/ui/ping.ts` | o "pin" |
 | `client/src/ui/knock.ts` | passou a usar o `sfx` (o "toc-toc" não mudou de som) |
@@ -177,6 +177,13 @@ sobrepunham quando alguém compartilhava. Agora são itens de uma coluna, com o
 zoom **primeiro**: controle que se desloca quando chega um aviso é pior que aviso
 44px mais abaixo.
 
+> **Atualização de 2026-08-21:** as prévias de tela **saíram** desta coluna e
+> foram para o topo-centro — ver
+> [Compartilhamento de tela](compartilhamento-de-tela.md). A coluna ficou com o
+> zoom e o alerta de chamado, e a restrição de **não** dar `z-index` a ela foi
+> embora com o `ScreenShareView` (era a `.screen-focus`, filha dele, que exigia
+> isso). O alerta continua onde estava.
+
 **O pin é curto (~200ms, um ciclo), o toc-toc é longo (2,5s, repetido).** Quem
 recebe um pin está **na frente da tela**, com o alerta aparecendo no mesmo
 instante; o som só precisa virar a atenção. Insistir com quem já está olhando soa
@@ -250,8 +257,9 @@ Interface, `npm run dev` com duas abas no mesmo mundo:
    reabilita sozinho quando o cooldown vence.
 8. A outra pessoa fica **ausente**: o item vira desabilitado ("use o chamar da
    lista"), e o botão da lista do HUD continua funcionando com o toc-toc.
-9. Com alguém compartilhando tela: o alerta **não** fica por baixo da prévia, e a
-   prévia **não** fica por baixo do zoom.
+9. Com alguém compartilhando tela: o alerta continua no canto superior direito,
+   abaixo do zoom, e a prévia da tela fica no **topo-centro** — nenhum dos dois
+   por baixo do outro.
 10. Chamar alguém **sentado** → a caminhada termina ao lado da cadeira.
 11. A outra aba **sai do mundo** com o chamado no ar → o alerta e o
     "pressionado" desaparecem sozinhos.
