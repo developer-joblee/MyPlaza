@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import {
   AVATAR_COLORS,
-  CHARACTERS,
   DEFAULT_SCENARIO,
   NAME_MAX_LENGTH,
-  type CharacterId,
+  type Appearance,
   type ScenarioId,
 } from '@together/shared';
 import { MULTIPLE_SCENARIOS, SCENARIO_EMOJI, SCENARIO_LIST } from './scenarioEmoji';
 import type { JoinDeniedReason } from '@together/shared';
 import { authConfigured, signOut } from '../auth/supabase';
-import { characterPreview } from '../game/characterDefs';
+import { CharacterBuilder } from './CharacterBuilder';
 import { useStore } from '../state/store';
 import { colorToCss } from './util';
 
@@ -31,31 +30,6 @@ const DENIED_TEXT: Record<JoinDeniedReason, string> = {
   'no-place': 'Este mundo não existe mais. Volte ao lobby.',
   error: 'Algo falhou do nosso lado. Tente de novo.',
 };
-
-/**
- * Miniatura do personagem, recortada direto da spritesheet. É CSS puro em vez
- * de canvas para não depender de o PixiJS ter carregado: um div do tamanho do
- * quadro, posicionado no recorte certo, ampliado com `transform: scale`.
- */
-function CharacterSprite({ id }: { id: CharacterId }) {
-  const { sheet, x, y, w, h, zoom } = characterPreview(id);
-  return (
-    // a altura da caixa é fixa no CSS, para os cinco cartões ficarem alinhados
-    // mesmo com os personagens tendo alturas de arte diferentes
-    <span className="char-frame" style={{ width: w * zoom }}>
-      <span
-        className="char-sprite"
-        style={{
-          width: w,
-          height: h,
-          backgroundImage: `url(${sheet})`,
-          backgroundPosition: `-${x}px -${y}px`,
-          transform: `scale(${zoom})`,
-        }}
-      />
-    </span>
-  );
-}
 
 /**
  * Texto da recusa, com uma exceção que evita um beco sem saída.
@@ -89,8 +63,8 @@ export function JoinScreen() {
   const [scenario, setScenario] = useState<ScenarioId>(
     () => useStore.getState().selfScenario ?? DEFAULT_SCENARIO,
   );
-  const [character, setCharacter] = useState<CharacterId>(
-    () => useStore.getState().selfCharacter,
+  const [appearance, setAppearance] = useState<Appearance>(
+    () => useStore.getState().selfAppearance,
   );
 
   const canJoin = name.trim().length > 0;
@@ -98,7 +72,7 @@ export function JoinScreen() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (canJoin) join(name.trim(), color, scenario, character);
+    if (canJoin) join(name.trim(), color, scenario, appearance);
   };
 
   return (
@@ -134,20 +108,7 @@ export function JoinScreen() {
         </div>
 
         <span className="join-label">Personagem</span>
-        <div className="character-row">
-          {CHARACTERS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={`character-card${c.id === character ? ' selected' : ''}`}
-              onClick={() => setCharacter(c.id)}
-              aria-pressed={c.id === character}
-            >
-              <CharacterSprite id={c.id} />
-              <span className="character-name">{c.label}</span>
-            </button>
-          ))}
-        </div>
+        <CharacterBuilder value={appearance} onChange={setAppearance} />
 
         <span className="join-label">Sua cor (nome e lista)</span>
         <div className="color-row">

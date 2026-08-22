@@ -9,8 +9,15 @@ import {
   NUDGE_COOLDOWN_MS,
   PRESENCE_CREDIT_MS,
   POSITION_SAVE_MS,
+  EMOTE_COOLDOWN_MS,
+  LEGACY_CHARACTER_APPEARANCE,
+  appearanceKey,
+  isAppearance,
+  isEmoteId,
   isCharacterId,
+  isFurnitureId,
   isScenarioId,
+  type CharacterId,
   type ChatMessage,
   type ClientToServerEvents,
   type JoinDeniedReason,
@@ -30,9 +37,13 @@ import {
   closeScreenShare,
   closeSession,
   closeZoneVisit,
+  deleteWorldFurniture,
   findMembership,
   findOrCreateProfile,
   getPlaceById,
+  insertWorldFurniture,
+  loadWorldFurniture,
+  moveWorldFurniture,
   isPlaceMember,
   loadChatHistory,
   loadPosition,
@@ -70,6 +81,12 @@ export interface SocketData {
   joining?: boolean;
   /** identidade estável entre reconexões; ausente = sessão sem persistência */
   profileId?: string;
+  /**
+   * O `character` legado do payload do join (ou o DEFAULT). Só existe para as
+   * escritas de `character_id` (FK/NOT NULL nas tabelas antigas) — a aparência
+   * de verdade é o `appearance` do `PlayerState`.
+   */
+  legacyCharacter?: CharacterId;
   /** local (uuid) correspondente ao cenário; null = banco indisponível */
   placeId?: string | null;
   sessionId?: string | null;
@@ -110,6 +127,10 @@ export interface SocketData {
    * compartilhar a janela faria um limitar o outro sem nenhuma razão.
    */
   calledAt?: Map<string, number>;
+  /** último emote deste socket, para impor EMOTE_COOLDOWN_MS */
+  emotedAt?: number;
+  /** decidido no join (dono do mundo; em modo anônimo, todos) — nunca do payload */
+  canEditFurniture?: boolean;
   /** mesma corrente, para o compartilhamento de tela */
   shareRecord?: Promise<string | null>;
   /**
@@ -152,7 +173,7 @@ type IoSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string
 export function registerHandlers(io: IoServer, socket: IoSocket): void {
   socket.data.connectedAt = Date.now();
 
-  socket.on('join', async (rawName, color, rawScenario, rawCharacter, rawWorldId) => {
+  socket.on('join', async (rawName, color, rawScenario, rawCharacter, rawWorldId, rawAppearance) => {
     // `joining` além de `worldKey`: entre o pedido e o `addPlayer` há awaits de
     // rede, e sem a trava dois `join` seguidos criariam dois players
     if (socket.data.worldKey !== undefined || socket.data.joining) return;
@@ -172,6 +193,15 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
         : AVATAR_COLORS[0];
       // id desconhecido (cliente antigo ou payload adulterado) cai no padrão
       const character = isCharacterId(rawCharacter) ? rawCharacter : DEFAULT_CHARACTER;
+      /**
+       * A aparência por camadas. A escada de fallback é a mesma da leitura do
+       * banco: payload válido > tradução do personagem legado (que o `character`
+       * acima já normalizou). Cliente novo manda as duas coisas coerentes;
+       * cliente velho só o `character` — e ninguém entra sem aparência.
+       */
+      const appearance = isAppearance(rawAppearance)
+        ? rawAppearance
+        : LEGACY_CHARACTER_APPEARANCE[character];
 
       /**
        * O portão. Cada passo pode recusar, e recusar é o default: qualquer
@@ -184,6 +214,8 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       let placeId: string | null = null;
       let profileId: string | undefined;
       let resume: ResumePosition | null = null;
+      // sem banco não há papel: todos editam móveis; com banco, só o dono (abaixo)
+      let canEditFurniture = !authRequired;
 
       if (authRequired) {
         // 1. quem é você — a identidade sai do token, nunca do payload
@@ -197,7 +229,7 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
         const authUser = verified.user;
 
         // 2. o perfil desta conta
-        const profile = await findOrCreateProfile(authUser.id, name, safeColor, character);
+        const profile = await findOrCreateProfile(authUser.id, name, safeColor, character, appearance);
         if (!profile) return deny('error');
 
         // 3. o mundo — escolhido no lobby, nunca derivado do cenário. Derivar
@@ -247,6 +279,7 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
         worldKey = place.id;
         placeId = place.id;
         profileId = profile;
+        canEditFurniture = place.createdBy === profile;
         socket.data.authUserId = authUser.id;
       }
 
@@ -256,25 +289,42 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
         resume = await loadPosition(placeId, profileId);
         // histórico do chat: uma vez por mundo, no primeiro join após o boot
         if (!world.isChatHydrated) world.hydrateChat(await loadChatHistory(placeId));
+        // móveis dinâmicos: mesmo desenho do chat
+        if (!world.isFurnitureHydrated) world.hydrateFurniture(await loadWorldFurniture(placeId));
+      } else if (!world.isFurnitureHydrated) {
+        // modo anônimo: nada a carregar, mas marca — a camada vive em memória
+        world.hydrateFurniture([]);
       }
 
       // caiu enquanto esperávamos a rede: não adiciona ninguém ao mundo, senão
       // fica um player fantasma (o handler de disconnect já rodou e não achou nada)
       if (socket.disconnected) return;
 
-      const player = world.addPlayer(socket.id, name, safeColor, character, resume);
+      const player = world.addPlayer(socket.id, name, safeColor, appearance, resume);
       socket.data.scenarioId = scenarioId;
       socket.data.worldKey = worldKey;
       socket.data.profileId = profileId;
       socket.data.placeId = placeId;
+      // `character_id` continua sendo escrito no banco (FK/NOT NULL); o valor é
+      // o legado do payload — para cliente novo, o DEFAULT — e a verdade é o
+      // `appearance` jsonb, que vai junto em toda escrita
+      socket.data.legacyCharacter = character;
       socket.join(worldKey);
       console.log(
-        `[join] ${name} (${socket.id}) -> ${scenarioId} como ${character}` +
+        `[join] ${name} (${socket.id}) -> ${scenarioId} como ${appearanceKey(appearance)}` +
           ` mundo=${worldKey}` +
           (resume ? ' (posição restaurada)' : '') +
           (authRequired ? '' : ' (anônimo: sem Supabase)'),
       );
       socket.emit('world:snapshot', world.getPlayers(), world.getChatHistory(), scenarioId);
+      /**
+       * Quem pode editar móveis: quem CRIOU o mundo (com banco); sem banco não
+       * há papel, então todos podem — é o que torna a feature usável (e
+       * testável) em modo anônimo. A regra é reavaliada a cada join, nunca
+       * confiada do cliente.
+       */
+      socket.data.canEditFurniture = canEditFurniture;
+      socket.emit('furniture:snapshot', world.getFurniture(), canEditFurniture);
       socket.to(worldKey).emit('player:joined', player);
 
       /**
@@ -299,7 +349,7 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       if (placeId && profileId) {
         const userAgent = String(socket.handshake.headers['user-agent'] ?? '').slice(0, 300) || null;
         startPresenceCredit();
-        void openSession(placeId, profileId, socket.id, character, userAgent).then((id) => {
+        void openSession(placeId, profileId, socket.id, character, appearance, userAgent).then((id) => {
           socket.data.sessionId = id;
           // quem nasceu (ou foi restaurado) dentro de uma sala já conta como
           // dentro dela; sem isto a visita só começaria no primeiro passo
@@ -377,7 +427,8 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
       y: player.y,
       sitting: player.sitting,
       away: player.away,
-      character: player.character,
+      appearance: player.appearance,
+      character: socket.data.legacyCharacter ?? DEFAULT_CHARACTER,
       // o VÍNCULO com este mundo: como a pessoa se chama aqui. Vai na mesma
       // escrita da posição de propósito — é a mesma linha de `presence_state`,
       // então guardar o nome não custa consulta nem tabela nova (ver 0009).
@@ -501,6 +552,86 @@ export function registerHandlers(io: IoServer, socket: IoSocket): void {
      */
     if (player.away) broadcastBooble(worldKey, world.leaveBooble(socket.id));
     persistPosition(true);
+  });
+
+  /**
+   * Editor de móveis. Os três seguem o mesmo esqueleto: só dentro de um mundo,
+   * só quem pode editar (decidido no join, nunca no payload), entradas
+   * validadas, a REGRA (footprint/teto/sobreposição) no `World`, broadcast ao
+   * mundo inteiro — inclusive quem pediu, que desenha do broadcast — e a
+   * escrita no banco depois, sem segurar o ack (fail-soft: sem banco, a camada
+   * vive em memória).
+   */
+  const furnitureGate = (): { world: ReturnType<typeof getWorld> } | { reason: 'forbidden' } => {
+    const { worldKey, scenarioId, canEditFurniture } = socket.data;
+    if (!worldKey || !scenarioId || !canEditFurniture) return { reason: 'forbidden' };
+    return { world: getWorld(worldKey, scenarioId) };
+  };
+
+  // variante de arte 0..7 — o teto é folga; o client decide quantas existem
+  const safeRotation = (raw: unknown): number | null => {
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 0 && n <= 7 ? n : null;
+  };
+
+  socket.on('furniture:place', (rawId, rawX, rawY, rawRot, ack) => {
+    if (typeof ack !== 'function') return;
+    const gate = furnitureGate();
+    if ('reason' in gate) return ack({ ok: false, reason: gate.reason });
+    const tileX = Number(rawX);
+    const tileY = Number(rawY);
+    const rotation = safeRotation(rawRot);
+    if (!isFurnitureId(rawId) || !Number.isInteger(tileX) || !Number.isInteger(tileY) || rotation === null) {
+      return ack({ ok: false, reason: 'invalid' });
+    }
+    const res = gate.world.placeFurniture(rawId, tileX, tileY, rotation);
+    if (res === 'blocked' || res === 'full') return ack({ ok: false, reason: res });
+    io.to(socket.data.worldKey!).emit('furniture:changed', res);
+    const { placeId, profileId } = socket.data;
+    if (placeId) void insertWorldFurniture(placeId, res, profileId ?? null);
+    ack({ ok: true });
+  });
+
+  socket.on('furniture:move', (rawId, rawX, rawY, rawRot, ack) => {
+    if (typeof ack !== 'function') return;
+    const gate = furnitureGate();
+    if ('reason' in gate) return ack({ ok: false, reason: gate.reason });
+    const id = String(rawId ?? '');
+    const tileX = Number(rawX);
+    const tileY = Number(rawY);
+    const rotation = safeRotation(rawRot);
+    if (!id || !Number.isInteger(tileX) || !Number.isInteger(tileY) || rotation === null) {
+      return ack({ ok: false, reason: 'invalid' });
+    }
+    const res = gate.world.moveFurniture(id, tileX, tileY, rotation);
+    if (res === 'blocked' || res === 'not-found') return ack({ ok: false, reason: res });
+    io.to(socket.data.worldKey!).emit('furniture:changed', res);
+    if (socket.data.placeId) void moveWorldFurniture(id, tileX, tileY, rotation);
+    ack({ ok: true });
+  });
+
+  socket.on('furniture:remove', (rawId, ack) => {
+    if (typeof ack !== 'function') return;
+    const gate = furnitureGate();
+    if ('reason' in gate) return ack({ ok: false, reason: gate.reason });
+    const id = String(rawId ?? '');
+    if (!id) return ack({ ok: false, reason: 'invalid' });
+    if (!gate.world.removeFurniture(id)) return ack({ ok: false, reason: 'not-found' });
+    io.to(socket.data.worldKey!).emit('furniture:removed', id);
+    if (socket.data.placeId) void deleteWorldFurniture(id);
+    ack({ ok: true });
+  });
+
+  socket.on('player:emote', (rawEmoteId) => {
+    const { worldKey } = socket.data;
+    if (!worldKey) return;
+    // recusas em silêncio, como nudge/call: id inválido e metralhadora
+    if (!isEmoteId(rawEmoteId)) return;
+    const now = Date.now();
+    if (now - (socket.data.emotedAt ?? 0) < EMOTE_COOLDOWN_MS) return;
+    socket.data.emotedAt = now;
+    // para o mundo INTEIRO, inclusive o emissor: caminho único de render
+    io.to(worldKey).emit('player:emoted', socket.id, rawEmoteId);
   });
 
   socket.on('sit', (sitting) => {

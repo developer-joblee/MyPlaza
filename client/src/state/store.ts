@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import {
   AVATAR_COLORS,
-  DEFAULT_CHARACTER,
+  DEFAULT_APPEARANCE,
   DEFAULT_SCENARIO,
-  type CharacterId,
+  type Appearance,
   type ChatMessage,
+  type FurnitureId,
   type JoinDeniedReason,
   type LobbyState,
   type PeerAudioMap,
@@ -85,7 +86,7 @@ interface AppState {
   selfName: string;
   selfColor: number;
   selfScenario: ScenarioId;
-  selfCharacter: CharacterId;
+  selfAppearance: Appearance;
   selfId: string | null;
   /** e-mail da conta logada; null = anônimo (servidor sem Supabase) */
   authEmail: string | null;
@@ -240,7 +241,21 @@ interface AppState {
    */
   contextMenu: { id: string; x: number; y: number } | null;
 
-  join: (name: string, color: number, scenario: ScenarioId, character: CharacterId) => void;
+  /**
+   * Editor de móveis. `furnitureCanEdit` vem do servidor
+   * (`furniture:snapshot`) — o cliente nunca decide papel. `furniturePick` é o
+   * item da paleta na mão (null = nada); quem consome os dois é o `Game`
+   * (ghost e cliques) e a `FurniturePalette`.
+   */
+  furnitureCanEdit: boolean;
+  furnitureEditing: boolean;
+  furniturePick: FurnitureId | null;
+
+  join: (name: string, color: number, scenario: ScenarioId, appearance: Appearance) => void;
+  setFurnitureCanEdit: (canEdit: boolean) => void;
+  /** entrar/sair do modo de edição (sair larga o que estiver na mão) */
+  setFurnitureEditing: (editing: boolean) => void;
+  setFurniturePick: (pick: FurnitureId | null) => void;
   /** terminou o boot: vai para o login, o lobby, ou direto para a entrada */
   setPhase: (phase: 'login' | 'lobby' | 'join') => void;
   setLobby: (state: LobbyState, detail?: WorldDetail) => void;
@@ -324,7 +339,7 @@ export const useStore = create<AppState>((set) => ({
   selfName: '',
   selfColor: AVATAR_COLORS[0],
   selfScenario: DEFAULT_SCENARIO,
-  selfCharacter: DEFAULT_CHARACTER,
+  selfAppearance: DEFAULT_APPEARANCE,
   selfId: null,
   authEmail: null,
   worlds: [],
@@ -385,16 +400,29 @@ export const useStore = create<AppState>((set) => ({
   focusedScreenId: null,
   zoomPct: 100,
   contextMenu: null,
+  furnitureCanEdit: false,
+  furnitureEditing: false,
+  furniturePick: null,
 
-  join: (name, color, scenario, character) =>
+  join: (name, color, scenario, appearance) =>
     set({
       phase: 'playing',
       joinDenied: null,
       selfName: name,
       selfColor: color,
       selfScenario: scenario,
-      selfCharacter: character,
+      selfAppearance: appearance,
     }),
+
+  setFurnitureCanEdit: (canEdit) =>
+    set((s) => ({
+      furnitureCanEdit: canEdit,
+      // perder o papel (reconexão para outro mundo) fecha o modo de edição
+      furnitureEditing: canEdit ? s.furnitureEditing : false,
+      furniturePick: canEdit ? s.furniturePick : null,
+    })),
+  setFurnitureEditing: (editing) => set({ furnitureEditing: editing, furniturePick: null }),
+  setFurniturePick: (pick) => set({ furniturePick: pick }),
 
   setPhase: (phase) => set({ phase }),
   setLobby: (lobby, detail) =>
@@ -410,7 +438,7 @@ export const useStore = create<AppState>((set) => ({
        */
       selfName: lobby.me.name,
       selfColor: lobby.me.color,
-      selfCharacter: lobby.me.character,
+      selfAppearance: lobby.me.appearance,
       // `detail` ausente numa resposta não fecha o painel aberto: operações que
       // não são de gerenciamento (aceitar convite, criar mundo) não devem
       // derrubar a tela de quem está no meio de administrar outro mundo
@@ -437,7 +465,7 @@ export const useStore = create<AppState>((set) => ({
         // usada) — é o prefill da tela, não uma escolha já feita
         selfName: binding?.name ?? state.selfName,
         selfColor: binding?.color ?? state.selfColor,
-        selfCharacter: binding?.character ?? state.selfCharacter,
+        selfAppearance: binding?.appearance ?? state.selfAppearance,
       };
     }),
   backToLobby: () => set({ phase: 'lobby', joinDenied: null }),

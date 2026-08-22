@@ -1,5 +1,6 @@
 import { Container } from 'pixi.js';
 import { TILE_SIZE, TileType, isSolid, sitFacingAt, type WorldMap } from '@together/shared';
+import type { AnimatedProp } from './AnimatedProp';
 import type { SitFacing } from './characterDefs';
 
 /** Uma cadeira sentável: onde ela está e para que lado quem senta fica virado. */
@@ -18,6 +19,8 @@ export abstract class TilemapBase {
   readonly view = new Container();
   /** sprites altos para o layer com y-sort do Game */
   readonly props: Container[] = [];
+  /** props que trocam de textura sozinhos; `animate` os avança */
+  protected readonly animatedProps: AnimatedProp[] = [];
 
   constructor(protected map: WorldMap) {}
 
@@ -26,9 +29,22 @@ export abstract class TilemapBase {
     return this.map.tiles[y][x];
   }
 
+  /** Sólidos além do mapa (a camada dinâmica de móveis do editor). */
+  private dynamicSolid: ((tileX: number, tileY: number) => boolean) | null = null;
+
+  /**
+   * Liga a colisão dinâmica. Entrar por AQUI (e não por uma segunda checagem
+   * nos chamadores) faz movimento, pathfind e `freeTileNear` enxergarem os
+   * móveis do editor de graça — todos já perguntam a `isSolidAt`.
+   */
+  setDynamicSolid(fn: ((tileX: number, tileY: number) => boolean) | null): void {
+    this.dynamicSolid = fn;
+  }
+
   isSolidAt(tileX: number, tileY: number): boolean {
     const t = this.tileAt(tileX, tileY);
-    return t === null ? true : isSolid(t);
+    if (t === null || isSolid(t)) return true;
+    return this.dynamicSolid?.(tileX, tileY) ?? false;
   }
 
   /** Colisão de um círculo (aproximado por AABB) contra tiles sólidos. */
@@ -102,6 +118,8 @@ export abstract class TilemapBase {
     return null;
   }
 
-  /** Animações do cenário (ex.: água). Padrão: nada. */
-  animate(_dt: number): void {}
+  /** Avança os props animados. O Game chama todo frame. */
+  animate(dt: number): void {
+    for (const prop of this.animatedProps) prop.update(dt);
+  }
 }

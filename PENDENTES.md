@@ -5,6 +5,323 @@ O que **não foi verificado** (ou foi verificado só parcialmente). Atualizado e
 
 ---
 
+# Editor de móveis v2: colisão e variantes (fase 8, última do plano) — 2026-08-21
+
+Doc: [`editor-de-moveis.md`](docs/features/editor-de-moveis.md) (atualizado).
+Todos os 12 móveis viraram sólidos; colisão dinâmica via hook em
+`TilemapBase.isSolidAt` (movimento, pathfind e `freeTileNear` herdam); unstuck
+no `LocalPlayer`; servidor recusa colocar sobre pessoa e o `validResume` não
+devolve ninguém dentro de móvel; `rotation` (variante de arte, tecla R) no
+protocolo e no banco (coluna já existia na 0016). Toca `shared/`, `server/`,
+`client/`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 16/16** com os casos v2: rotação fora da faixa =
+  `invalid`; colocar `sofa_big` cobrindo o tile de uma pessoa = `blocked`;
+  `rotation` propagado no move.
+- ✅ **Colisão vista na tela** (Chrome headless): sofá colocado no caminho e o
+  avatar parou ENCOSTADO na borda dele (posição conferida por
+  `__togetherPos`: x=628 contra o tile do sofá em 640) — sem atravessar; zero
+  erros de console. R alternou a variante do ghost sem erro.
+- ✅ Por leitura: o pathfind do "ir até" usa `isSolidAt` → contorna móveis.
+
+## Falta verificar (em ordem de importância)
+
+1. **O unstuck com queda real de latência** (móvel colocado em cima de alguém em
+   trânsito) — a regra é 3 linhas, mas nunca disparou de verdade.
+2. **O "ir até"/booble contornando um móvel dinâmico na tela** (por leitura o
+   BFS enxerga; não observado).
+3. **Repath do AutoWalk quando um móvel entra NO MEIO da rota já calculada** —
+   o repath de 500ms do "ir até" cobre; a caminhada da booble também repassa? —
+   conferir na tela.
+4. **`rotation` persistindo no banco** (0016 nunca aplicada; ver fase 7).
+5. **Variantes**: só o ghost foi visto alternando; um móvel COLOCADO com
+   variante 1 renderizando igual nas duas abas não foi observado (o smoke cobre
+   o campo propagado, não o desenho).
+
+---
+
+# Editor de móveis v1 (fase 7 do plano de assets) — 2026-08-21
+
+Doc: [`editor-de-moveis.md`](docs/features/editor-de-moveis.md). Camada dinâmica
+de móveis por mundo: catálogo de 12 itens no shared, 3 pedidos com ack + 3
+broadcasts, regra no `World` (footprint/sobreposição/teto), migração **0016**,
+paleta com ghost no client. **v1 decorativa** (sem colisão — v2). Toca
+`shared/`, `server/`, `client/`, `db/`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 16/16** (headless :3099), caso novo cobrindo:
+  place/move/remove propagando aos dois sockets (inclusive o emissor), mover
+  para parede = `blocked`, sobreposição = `blocked`, id fora do catálogo =
+  `invalid`.
+- ✅ **Visto num navegador, duas abas** (build servido em :3099, modo anônimo):
+  menu → Editar móveis → paleta com os 12 ícones recortados do atlas; palmeira
+  na mão vira ghost seguindo o mouse; clique colocou e **a outra aba viu na
+  hora**; botão direito removeu (e a remoção apareceu nas duas); zero erros de
+  console.
+
+## Falta verificar (em ordem de importância)
+
+1. **Nada rodou contra um Supabase real** — a 0016 não foi aplicada; a
+   persistência dos móveis (F5 do servidor), o `placed_by` e o caminho
+   `canEdit` por papel (dono vs membro) nunca executaram. Em anônimo todos
+   editam por design.
+2. **O gate de papel na prática**: membro (não-dono) NÃO deve ver o item
+   "Editar móveis" nem conseguir editar por socket adulterado (o servidor
+   recusa com `forbidden` — coberto por leitura, não executado com dois papéis
+   reais).
+3. **Mover** foi exercitado por socket (16/16), mas o fluxo de PEGAR com clique
+   e soltar noutro lugar não foi visto na tela (o teste visual usou
+   colocar/remover).
+4. **Ghost inválido (vermelho)** sobre parede/móvel — a regra local espelha a
+   do servidor por leitura; o tint vermelho não foi visto.
+5. **O teto de 200** exigiria 200 cliques; não exercitado.
+6. **Hydrate descartando móvel órfão** (ASCII mudou depois de colocado) — o
+   log `[furniture] descartado no hydrate` nunca disparou de verdade.
+7. **Zoom mínimo/máximo com o ghost** (a conta usa `world.toLocal`, que já
+   embute zoom — por leitura).
+
+---
+
+# Cenários Escritório e Café (fase 6 do plano de assets) — 2026-08-21
+
+Docs: [`cenarios-e-mapas.md`](docs/features/cenarios-e-mapas.md) (atualizado).
+Dois `ScenarioDef` novos (40x24 e 30x20) com legenda compartilhada
+(`MODERN_CHAR_TO_TILE`), temas próprios (`scenarioThemes.ts`), 9 frames novos no
+atlas (pisos + quadro branco + impressora + venda + estação de café — recortes
+medidos por bounding box de alpha, e conferidos em contato visual), migração
+**0015** + seed, emojis. `MULTIPLE_SCENARIOS` voltou a `true` — **o seletor de
+cenário executou pela primeira vez na história**. Toca `shared/`, `client/`, `db/`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` limpo, `npm run build` OK, `npm run atlas` regenerado
+  (44 frames, 33 KB).
+- ✅ **Script de validação dos mapas** (rodado da raiz, apagado): os 3 parseiam
+  (comprimento de linha), todos os spawns em tile caminhável, e as **soleiras**
+  das 3 zonas novas dentro do retângulo (e o tile adjacente de fora, fora).
+- ✅ **`smoke-test.mts` 15/15** (headless :3099) — `shared/` mudou.
+- ✅ **Visto num navegador**: o seletor com os 3 cartões (emoji + nome +
+  descrição) renderiza na entrada; entrar no **Escritório** e no **Café** por
+  abas separadas mostra os dois mapas inteiros, distintos e sem buracos; zero
+  erros de console. (Primeira tentativa do driver clicou por texto e caiu no
+  Estúdio — a descrição dele contém "Escritório"; ficou o aviso para testes.)
+
+## Falta verificar (em ordem de importância)
+
+1. **LobbyScreen com a linha de cenário** ("Novo mundo" com 3 opções) — só o
+   JoinScreen foi visto; o formulário do lobby exige Supabase logado.
+2. **As zonas novas com voz/HUD** (nome da sala no HUD, isolamento em duas
+   abas) — as soleiras foram verificadas por função pura, não na tela.
+3. **0015 + seed nunca rodaram num banco** (nem a 0013/0014, registradas antes).
+   Ordem: 0013 → 0014 → 0015 → seed. O local de demo dos cenários novos nasce
+   do cross join do seed.
+4. **Sentar nas cadeiras dos mapas novos** (>T< do café e da copa do office).
+5. **Balanço estético** — mobília reaproveitada do Estúdio nos dois mapas
+   (decisão de escopo); se o Escritório merecer mesas próprias do pack Office,
+   é adicionar frames ao manifest e trocar o tema.
+
+---
+
+# Emotes/reações (fase 5 do plano de assets) — 2026-08-21
+
+Doc: [`emotes.md`](docs/features/emotes.md). Dois eventos novos
+(`player:emote`/`player:emoted`), cooldown de 2s no servidor, 6 tiras montadas
+pelo script de assets, balão com intro+loop+envelope, seletor na barra. Toca
+`shared/`, `server/` e client; nada no banco (efêmero, por escolha).
+
+## Já verificado
+
+- ✅ `npm run typecheck` limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 15/15** (headless :3099), com caso novo: emote propaga
+  para todos **inclusive o emissor**; o segundo imediato (cooldown) e id
+  inválido são calados sem derrubar socket.
+- ✅ **Visto num navegador, duas abas** (build servido pelo server na :3099):
+  seletor abre com os 6 ícones pixel-art; "Adorei" fez o balão de corações
+  aparecer sobre o Davi NAS DUAS abas; sumiu sozinho após ~3s; zero erros de
+  console.
+
+## Falta verificar (em ordem de importância)
+
+1. **Os 6 ícones um a um** — só o coração foi disparado; os outros 5 foram
+   vistos apenas no seletor. Se algum ícone estiver trocado, é um par
+   [linha, coluna] em `EMOTE_ICONS` no `build-character-assets.mjs`.
+2. **Emote sobre avatar sentado/ausente** (o balão é independente da pose — por
+   leitura) e **em cima do balão de booble** (os dois convivem ao lado da
+   cabeça; pode ficar apertado).
+3. **O ritmo** (0,12s/quadro) e o envelope (subida 6px, fade) foram escolhidos
+   por cálculo, não por olho.
+4. **Zoom mínimo**: o balão de 32px de mundo fica pequeno; ninguém olhou.
+
+---
+
+# Gerador de aparência por camadas (fase 4 do plano de assets) — 2026-08-21
+
+Doc: [`personagens-e-aparencia.md`](docs/features/personagens-e-aparencia.md)
+(reescrito). `Appearance` substituiu `character` no protocolo
+(`PlayerState`/`WorldBinding`/`join`); composição em canvas 2D no client;
+montador com preview animado na tela de entrada; migração **0014** (3 colunas
+jsonb); curadoria de 51 camadas (~2 MB) no repo; os 4 premades da fase 1
+saíram (viraram combos legadas). Toca `shared/`, `server/`, `client/`, `db/` e
+o `smoke-test.mts`.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 14/14** contra servidor headless anônimo (3099), com os
+  casos reescritos para `appearance` e um caso NOVO: aparência adulterada no 6º
+  argumento cai no padrão do legado; `character` legado no 4º vira a combo
+  mapeada e propaga no broadcast.
+- ✅ **Visto num navegador, com duas abas** (Chrome headless contra o próprio
+  server servindo o build em 3099 — stack isolada): o montador renderiza
+  (preview ANIMADO andando, setas por camada com contagem, aleatório,
+  quick-picks); Ana e Bia entraram com combinações diferentes e **cada uma vê a
+  outra com o visual certo** (`__togetherAvatars()` devolvendo as duas
+  `appearanceKey`s distintas); zero erros de console.
+- ✅ O caso "servidor velho + client novo" foi EXERCITADO sem querer (o dev
+  server da 3001 estava com o código antigo): remotos vinham sem `appearance` e
+  quebravam — corrigido com fallback `?? DEFAULT_APPEARANCE` no
+  `Game.framesFor`, com o sintoma documentado no doc ("todo mundo igual =
+  servidor velho").
+
+## Falta verificar (em ordem de importância)
+
+1. **Nada rodou contra um Supabase real.** A 0014 **não foi aplicada** — e ela é
+   obrigatória: o servidor agora seleciona `appearance` em `profiles` e
+   `presence_state`; sem a coluna, perfil/vínculo falham com 42703 e o sintoma
+   é "ninguém consegue logar". Aplicar 0013 → 0014, entrar, F5, conferir o
+   vínculo mantendo a aparência, e um perfil antigo (só `character_id`)
+   entrando com o visual mapeado.
+2. **O montador em tela pequena** — o grid `auto 1fr` do `.builder` nunca foi
+   visto abaixo de ~700px de largura.
+3. **A escolha estética da curadoria** (10 estilos de cabelo × 2 cores, 15
+   roupas — arrays no `build-character-assets.mjs` + `shared/src/appearance.ts`)
+   não passou pelo usuário; as cores `_05` de cabelo foram escolhidas às cegas.
+4. **Peso real do preload** (~2 MB de camadas): não medido em rede lenta; se
+   incomodar, recorte de rows no pipeline (exigiria `sharp` — perguntar antes).
+5. **As combos legadas** (adam/alex/amelia/bob) são aproximações — vale um olho
+   humano para ver se lembram os antigos.
+
+---
+
+# Objetos animados no cenário (fase 3 do plano de assets) — 2026-08-21
+
+Doc: [`objetos-animados.md`](docs/features/objetos-animados.md). Café (copa),
+aquário (open space, run `AA`) e TV de telejornal (parede `q` da reunião).
+`AnimatedProp.ts` novo, `TilemapBase.animate` preenchido, dois `TileType` novos
+(`CoffeeMachine`, `Aquarium` — sólidos), seção `animations` no manifest do
+atlas. **Toca `shared/`** (enum + legenda + 3 chars no ASCII do Estúdio).
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ **`smoke-test.mts` 14/14** contra servidor headless anônimo em :3099 (cópia
+  temporária do script com a porta trocada, apagada depois) — importa porque
+  `shared/` mudou (enum ganhou dois valores no fim, sem renumerar nada).
+- ✅ **Visto num navegador** (Chrome headless): os três objetos desenhados no
+  lugar certo, e a TV visivelmente trocando de quadro entre duas capturas com
+  0,5s de intervalo; zero erros de console. O avatar não atravessa café nem
+  aquário (sólidos pelo `isSolid`).
+- ✅ `width % frameW` validado no load (uma tira trocada falha alto).
+
+## Falta verificar (em ordem de importância)
+
+1. **Café e aquário animando a olho** — a TV provou o mecanismo (mesmo código),
+   mas o vapor do café e os peixes só foram vistos em quadros estáticos; o
+   ritmo (`frameS` 0,22/0,28/0,24) foi escolhido por bom senso, não por olho.
+2. **Custo de frame** — três `AnimatedProp` são desprezíveis, mas ninguém mediu
+   com o profiler; vale um olhar quando houver dezenas (fase dos cenários).
+3. **Posição da TV no zoom mínimo** (ela é 3 tiles de largura numa parede de 5).
+4. **A posição salva de quem estava nos tiles que viraram `C`/`AA`** — o
+   `validResume` manda para o spawn; nunca observado com linha real no banco.
+
+---
+
+# Tiles do pack pago via atlas (fase 2 do plano de assets) — 2026-08-21
+
+Docs: [`atlas-de-tiles.md`](docs/features/atlas-de-tiles.md) e
+[`cenarios-e-mapas.md`](docs/features/cenarios-e-mapas.md) (atualizado). O
+Estúdio agora é desenhado de um atlas (35 frames, 512×248, 27 KB) gerado por
+`npm run atlas` das sheets master pagas; as sheets free saíram do repo.
+`ModernTilemap` virou orientado a dados (`scenarioThemes.ts`); `Game.create`
+carrega `loadTileAtlas()`. Zero mudança em `shared/`, `server/` e banco.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo.
+- ✅ **As coordenadas do manifest não foram medidas no olho**: casamento pixel a
+  pixel dos 35 recortes free contra as masters pagas — 33 exatos, `easel` e
+  `plant_3` com ~3% de divergência (retoques da arte paga).
+- ✅ `npm run atlas` idempotente (duas execuções, mesmo arquivo).
+- ✅ **Visto num navegador** (Chrome headless): o Estúdio inteiro desenhado do
+  atlas — lounge/espinha-de-peixe, open space com workstations, sala de reunião
+  (piso verde-água, lousa, globo), copa, janelas e quadros — visualmente igual
+  ao screenshot de antes da troca; zero erros de console.
+
+## Falta verificar (em ordem de importância)
+
+1. **Zoom mínimo e máximo sobre as paredes e o `PAD` do atlas** (sangria de
+   vizinho apareceria no zoom; o respiro é 2px).
+2. **Duas abas** (o atlas é cache de módulo — segunda sessão na mesma aba).
+3. **Deploy**: o build do Railway nunca rodou com os gerados commitados (não há
+   passo novo — só conferir que `client/dist` os carrega).
+
+---
+
+# Personagens com as sheets do pack pago (fase 1 do plano de assets) — 2026-08-21
+
+Doc: [`personagens-e-aparencia.md`](docs/features/personagens-e-aparencia.md).
+Os 4 ids agora usam 4 premades do Modern Interiors FULL
+(`client/public/characters/v2/premade/`, copiados por
+`scripts/build-character-assets.mjs`); as sheets free saíram do repo. Grade nova
+em `characterDefs.ts`, `phoneIntro` no `sprites.ts`, `Avatar.update` →
+`resolvePose()` com intro. Zero mudança em `shared/`, `server/` e banco.
+
+## Já verificado
+
+- ✅ `npm run typecheck` (server + client) limpo e `npm run build` do client OK.
+- ✅ **A grade nova foi medida, não suposta** (script `pngjs` sobre as sheets,
+  apagado depois): grade estrita de 56×20 quadros de 16×32 (sheet 896×656);
+  ordem das direções idêntica à do free (pele: ~192px de frente, ~24 de costas,
+  perfis ~104 com cx 19,2/11,8); sentar na linha 4 com direita nas colunas 0-5 e
+  esquerda nas 6-11 (medido pela posição do rosto); celular na linha 6 com 12
+  quadros (0-3 intro, 4-9 loop, 10-11 guardar — não usados); arte ocupando
+  y9..31 do quadro como no free (âncora/label/hitArea intactos).
+- ✅ A versão "32x32" do pack é upscale 2× por vizinho-mais-próximo da 16x16
+  (todas as linhas/colunas duplicadas no ASCII do script) — por isso ficamos na
+  16x16 com `scale: 2`. Não é regressão de qualidade.
+- ✅ As 4 sheets copiadas validadas em dimensão (896×656) pelo script.
+- ✅ `grep` de `/characters/` no client: só o caminho novo é referenciado.
+- ✅ **Aberto num navegador de verdade** (Chrome headless via playwright-core no
+  scratchpad, fora do repo; `npm run dev` + screenshots): a tela de entrada com
+  as 4 miniaturas novas renderizando; o avatar no jogo com nome em cima; as 4
+  teclas de direção exercitadas; o modo ausente ligado pelo botão — pastilha
+  `ausente`, telinha do feed E o celular na mão do pack, **sem sobreposição
+  ruim** (a telinha fica ao lado da cabeça, o aparelho na mão); zero erros de
+  console; `__togetherAvatars()` no estado ausente devolvendo `frameY: 192`
+  (linha 6 = celular ✓) e `frameX: 96` (coluna 6, dentro do loop 4-9 ✓ — ou
+  seja, a intro passou e o loop assumiu).
+
+## Falta verificar (em ordem de importância)
+
+1. **Sentar dos dois lados.** O teste automatizado apertou `E` longe de cadeira
+   (no-op). Falta: sentar numa cadeira `>` e numa `<` e conferir
+   `__togetherAvatars()` (sentado à direita ≠ à esquerda, `frameY: 128`).
+2. **A intro do celular quadro a quadro.** O estado final provou intro→loop, mas
+   ninguém VIU o boneco tirar o celular do bolso (0,64s) — e a intro deve
+   repetir a cada entrada em ausente.
+3. **Duas abas** (remoto renderizando com as sheets novas; a direção do sentar
+   do remoto vem do tile, não da rede).
+4. ~~A escolha estética dos 4 premades~~ — **RESOLVIDO pela fase 4** (mesmo
+   dia): os premades saíram; os 4 nomes viraram combinações do gerador
+   (`LEGACY_CHARACTER_APPEARANCE`).
+5. **O repo ainda estava público** quando as sheets pagas entraram no working
+   tree. A decisão de torná-lo privado é do usuário e precisa acontecer ANTES do
+   push (licença proíbe redistribuição).
 # Prévia de tela no topo-centro — 2026-08-21
 
 Mudança de layout numa feature que já existia e **ganhou doc nesta entrega**:

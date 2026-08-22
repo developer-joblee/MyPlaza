@@ -1,11 +1,17 @@
 import {
   AVATAR_COLORS,
   CHAT_HISTORY_LIMIT,
+  DEFAULT_APPEARANCE,
   DEFAULT_CHARACTER,
   DEFAULT_SCENARIO,
+  LEGACY_CHARACTER_APPEARANCE,
+  isAppearance,
+  isCharacterId,
   isScenarioId,
+  type Appearance,
   type CharacterId,
   type ChatMessage,
+  type PlacedFurniture,
   type AssignableWorldRole,
   type PendingInvite,
   SOUND_VOLUME_DEFAULT,
@@ -28,6 +34,19 @@ import { ORG_SLUG, client, dedupe, guard } from './supabase';
  * Tudo que lê e escreve nas TABELAS. Conexão, timeout e dedupe vivem em
  * `supabase.ts`; verificação de login, em `auth.ts`.
  */
+
+/**
+ * A escada de leitura da aparência, aplicada em TODO lugar que lê linha com
+ * `appearance`/`character_id`: jsonb válido > tradução do personagem legado
+ * (linhas de antes da 0014) > padrão. Nunca devolve null — ninguém entra sem
+ * aparência, nem com o banco em qualquer estado.
+ */
+function toAppearance(raw: unknown, characterId: unknown): Appearance {
+  if (isAppearance(raw)) return raw;
+  return isCharacterId(characterId)
+    ? LEGACY_CHARACTER_APPEARANCE[characterId]
+    : DEFAULT_APPEARANCE;
+}
 
 // -----------------------------------------------------------------------------
 // Resolução de empresa e local.
@@ -164,6 +183,7 @@ export async function findOrCreateProfile(
   displayName: string,
   avatarColor: number,
   characterId: CharacterId,
+  appearance: Appearance,
 ): Promise<string | null> {
   return guard<string | null>(
     'findOrCreateProfile',
@@ -182,6 +202,7 @@ export async function findOrCreateProfile(
             display_name: displayName,
             avatar_color: avatarColor,
             character_id: characterId,
+            appearance,
             last_seen_at: new Date().toISOString(),
           })
           .eq('id', found.id as string);
@@ -196,6 +217,7 @@ export async function findOrCreateProfile(
           display_name: displayName,
           avatar_color: avatarColor,
           character_id: characterId,
+          appearance,
           last_seen_at: new Date().toISOString(),
         })
         .select('id')
@@ -370,6 +392,8 @@ export async function savePosition(
     y: number;
     sitting: boolean;
     away: boolean;
+    appearance: Appearance;
+    /** legado: só para a coluna `character_id` (FK/NOT NULL) — ver 0014 */
     character: CharacterId;
     name: string;
     color: number;
@@ -387,12 +411,96 @@ export async function savePosition(
           sitting: state.sitting,
           away: state.away,
           character_id: state.character,
+          appearance: state.appearance,
           display_name: state.name,
           avatar_color: state.color,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'place_id,profile_id' },
       );
+      if (error) throw error;
+      return true;
+    },
+    false,
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Móveis dinâmicos (editor de móveis) — ver shared/src/furniture.ts e a 0016.
+// Fail-soft como tudo aqui: sem banco, o editor funciona só em memória.
+// -----------------------------------------------------------------------------
+
+export async function loadWorldFurniture(placeId: string): Promise<PlacedFurniture[]> {
+  return guard<PlacedFurniture[]>(
+    'loadWorldFurniture',
+    async () => {
+      const { data, error } = await client!
+        .from('world_furniture')
+        .select('id, furniture_id, tile_x, tile_y, rotation')
+        .eq('place_id', placeId);
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        id: r.id as string,
+        furnitureId: r.furniture_id as PlacedFurniture['furnitureId'],
+        tileX: Number(r.tile_x),
+        tileY: Number(r.tile_y),
+        rotation: Number(r.rotation ?? 0),
+      }));
+    },
+    [],
+  );
+}
+
+export async function insertWorldFurniture(
+  placeId: string,
+  item: PlacedFurniture,
+  placedBy: string | null,
+): Promise<void> {
+  await guard(
+    'insertWorldFurniture',
+    async () => {
+      // o id vem do servidor (World cunha o uuid), para o broadcast não esperar o banco
+      const { error } = await client!.from('world_furniture').insert({
+        id: item.id,
+        place_id: placeId,
+        furniture_id: item.furnitureId,
+        tile_x: item.tileX,
+        tile_y: item.tileY,
+        rotation: item.rotation,
+        placed_by: placedBy,
+      });
+      if (error) throw error;
+      return true;
+    },
+    false,
+  );
+}
+
+export async function moveWorldFurniture(
+  id: string,
+  tileX: number,
+  tileY: number,
+  rotation: number,
+): Promise<void> {
+  await guard(
+    'moveWorldFurniture',
+    async () => {
+      const { error } = await client!
+        .from('world_furniture')
+        .update({ tile_x: tileX, tile_y: tileY, rotation })
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    },
+    false,
+  );
+}
+
+export async function deleteWorldFurniture(id: string): Promise<void> {
+  await guard(
+    'deleteWorldFurniture',
+    async () => {
+      const { error } = await client!.from('world_furniture').delete().eq('id', id);
       if (error) throw error;
       return true;
     },
@@ -409,6 +517,7 @@ export async function openSession(
   profileId: string,
   socketId: string,
   characterId: CharacterId,
+  appearance: Appearance,
   userAgent: string | null,
 ): Promise<string | null> {
   return guard<string | null>(
@@ -421,6 +530,7 @@ export async function openSession(
           profile_id: profileId,
           socket_id: socketId,
           character_id: characterId,
+          appearance,
           user_agent: userAgent,
         })
         .select('id')
@@ -696,14 +806,14 @@ export async function ensureProfile(
   const appearanceOf = (row: Record<string, unknown>): WorldBinding => ({
     name: (row.display_name as string | null) ?? fallbackName,
     color: Number(row.avatar_color ?? AVATAR_COLORS[0]),
-    character: (row.character_id as CharacterId | null) ?? DEFAULT_CHARACTER,
+    appearance: toAppearance(row.appearance, row.character_id),
   });
   return guard<ProfileRef | null>(
     'ensureProfile',
     async () => {
       const { data: found, error: findErr } = await client!
         .from('profiles')
-        .select('id, display_name, avatar_color, character_id')
+        .select('id, display_name, avatar_color, character_id, appearance')
         .eq('auth_user_id', authUserId)
         .maybeSingle();
       if (findErr) throw findErr;
@@ -712,7 +822,7 @@ export async function ensureProfile(
       const { data: created, error: insErr } = await client!
         .from('profiles')
         .insert({ auth_user_id: authUserId, display_name: fallbackName })
-        .select('id, display_name, avatar_color, character_id')
+        .select('id, display_name, avatar_color, character_id, appearance')
         .single();
       if (insErr) throw insErr;
       if (!created?.id) return null;
@@ -785,7 +895,7 @@ export async function listWorldsFor(
     async () => {
       const { data, error } = await client!
         .from('presence_state')
-        .select('place_id, display_name, avatar_color, character_id')
+        .select('place_id, display_name, avatar_color, character_id, appearance')
         .eq('profile_id', profileId)
         .not('display_name', 'is', null);
       if (error) throw error;
@@ -795,7 +905,7 @@ export async function listWorldsFor(
           {
             name: r.display_name as string,
             color: Number(r.avatar_color ?? AVATAR_COLORS[0]),
-            character: r.character_id as CharacterId,
+            appearance: toAppearance(r.appearance, r.character_id),
           },
         ]),
       );

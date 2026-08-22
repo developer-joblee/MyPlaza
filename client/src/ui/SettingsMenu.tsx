@@ -34,6 +34,9 @@ export function SettingsMenu({ onClose }: { onClose: () => void }) {
   const selfWorldName = useStore((s) => s.selfWorldName);
   const selfScenario = useStore((s) => s.selfScenario);
   const leave = useStore((s) => s.leave);
+  const furnitureCanEdit = useStore((s) => s.furnitureCanEdit);
+  const furnitureEditing = useStore((s) => s.furnitureEditing);
+  const setFurnitureEditing = useStore((s) => s.setFurnitureEditing);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const [memberId, setMemberId] = useState('');
@@ -199,6 +202,20 @@ export function SettingsMenu({ onClose }: { onClose: () => void }) {
       )}
 
       {error && <p className="settings-error" role="alert">{error}</p>}
+
+      {/* editor de móveis: só aparece para quem pode editar (o servidor decide) */}
+      {furnitureCanEdit && (
+        <button
+          className="settings-action"
+          type="button"
+          onClick={() => {
+            setFurnitureEditing(!furnitureEditing);
+            onClose();
+          }}
+        >
+          🛋️ {furnitureEditing ? 'Concluir edição de móveis' : 'Editar móveis'}
+        </button>
+      )}
 
       {/* a divisória isola a ação destrutiva do resto, como fazia na barra */}
       <span className="settings-divider" aria-hidden="true" />

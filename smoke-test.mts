@@ -35,23 +35,28 @@ try {
   a.emit('join', 'Alice', 0xe63946);
   const playersA = await snapA;
   if (playersA.length !== 1 || playersA[0].name !== 'Alice') fail('snapshot de A inválido');
-  // compatibilidade: cliente que não manda personagem cai no padrão
-  if (playersA[0].character !== 'adam') {
-    fail(`join sem personagem deveria cair no padrão, veio: ${playersA[0].character}`);
+  // compatibilidade: cliente que não manda nada cai na aparência do legado padrão
+  const aApp = playersA[0].appearance;
+  if (!aApp || typeof aApp.body !== 'string' || typeof aApp.outfit !== 'string') {
+    fail(`join sem aparência deveria cair no padrão, veio: ${JSON.stringify(aApp)}`);
   }
   if (playersA[0].sitting !== false) fail('quem entra deveria começar de pé');
   if (playersA[0].away !== false) fail('quem entra deveria começar presente');
-  results.push('join + snapshot OK (personagem padrão, de pé, presente)');
+  results.push('join + snapshot OK (aparência padrão, de pé, presente)');
 
   // B entra escolhendo personagem; A deve ver player:joined com a escolha
   const joinedSeen = wait<any>('A vê B entrar', (done) =>
     a.on('player:joined', (p: any) => done(p)),
   );
+  // `character` legado no 4º argumento: o servidor traduz para a combinação
+  // equivalente do gerador (LEGACY_CHARACTER_APPEARANCE) e propaga a aparência
   b.emit('join', 'Bob', 0x2a9d8f, undefined, 'bob');
   const bob = await joinedSeen;
   if (bob.name !== 'Bob') fail('broadcast player:joined inválido');
-  if (bob.character !== 'bob') fail(`personagem escolhido não propagou: ${bob.character}`);
-  results.push('broadcast de entrada OK (personagem propagado)');
+  if (bob.appearance?.outfit !== 'outfit_27_01') {
+    fail(`personagem legado não virou a aparência mapeada: ${JSON.stringify(bob.appearance)}`);
+  }
+  results.push('broadcast de entrada OK (aparência do legado propagada)');
 
   // B se move; A deve receber
   const moved = wait<[string, number, number]>('A vê B mover', (done) =>
@@ -139,6 +144,91 @@ try {
   if (msg.text !== 'olá equipe!' || msg.senderName !== 'Bob') fail('chat inválido');
   results.push('chat OK');
 
+  // emote: chega em TODOS do mundo, inclusive o emissor (caminho único de render)
+  const emoteSeenA = wait<[string, string]>('A vê emote de B', (done) =>
+    a.on('player:emoted', (id: string, e: string) => done([id, e])),
+  );
+  const emoteSeenB = wait<[string, string]>('B vê o próprio emote', (done) =>
+    b.on('player:emoted', (id: string, e: string) => done([id, e])),
+  );
+  b.emit('player:emote', 'duvida');
+  const [emFrom, emId] = await emoteSeenA;
+  const [emFromB, emIdB] = await emoteSeenB;
+  if (emFrom !== b.id || emId !== 'duvida') fail(`emote não propagou: ${emFrom} ${emId}`);
+  if (emFromB !== b.id || emIdB !== 'duvida') fail('emissor não recebeu o próprio emote');
+  // cooldown: o segundo imediato é recusado em silêncio; id inválido idem
+  let extra = 0;
+  const countExtra = () => extra++;
+  a.on('player:emoted', countExtra);
+  b.emit('player:emote', 'coracao');
+  b.emit('player:emote', 'nao-existe');
+  await new Promise((r) => setTimeout(r, 400));
+  a.off('player:emoted', countExtra);
+  if (extra !== 0) fail(`cooldown/validação não seguraram: ${extra} emotes extras`);
+  results.push('emote propaga (incl. emissor); cooldown e id inválido calados OK');
+
+  // editor de móveis (modo anônimo: todos podem editar)
+  const placedSeenA = wait<any>('A vê móvel colocado', (done) =>
+    a.on('furniture:changed', (item: any) => done(item)),
+  );
+  const placedSeenB = wait<any>('B vê móvel colocado', (done) =>
+    b.on('furniture:changed', (item: any) => done(item)),
+  );
+  const placeAck = wait<any>('ack do place', (done) =>
+    b.emit('furniture:place', 'plant_small', 12, 10, 0, (res: any) => done(res)),
+  );
+  const [placed, placedB, ackRes] = await Promise.all([placedSeenA, placedSeenB, placeAck]);
+  if (!ackRes.ok) fail(`place recusado: ${ackRes.reason}`);
+  if (placed.furnitureId !== 'plant_small' || placed.tileX !== 12) fail('broadcast do place inválido');
+  if (placedB.id !== placed.id) fail('emissor não recebeu o próprio móvel');
+  // mover para tile válido; depois tentar EM CIMA de parede (0,0) e ser barrado
+  const moveAck = await wait<any>('ack do move', (done) =>
+    b.emit('furniture:move', placed.id, 13, 10, 1, (res: any) => done(res)),
+  );
+  if (!moveAck.ok) fail(`move recusado: ${moveAck.reason}`);
+  const blockedAck = await wait<any>('ack do move barrado', (done) =>
+    b.emit('furniture:move', placed.id, 0, 0, 0, (res: any) => done(res)),
+  );
+  if (blockedAck.ok || blockedAck.reason !== 'blocked') {
+    fail(`mover para parede deveria ser blocked: ${JSON.stringify(blockedAck)}`);
+  }
+  // sobreposição: outro móvel no MESMO tile é barrado
+  const overlapAck = await wait<any>('ack do overlap', (done) =>
+    b.emit('furniture:place', 'globe', 13, 10, 0, (res: any) => done(res)),
+  );
+  if (overlapAck.ok || overlapAck.reason !== 'blocked') {
+    fail(`sobreposição deveria ser blocked: ${JSON.stringify(overlapAck)}`);
+  }
+  // id de catálogo inválido; e remover de verdade, com broadcast nos dois
+  const invalidAck = await wait<any>('ack do id inválido', (done) =>
+    b.emit('furniture:place', 'sofa-hackeado', 5, 10, 0, (res: any) => done(res)),
+  );
+  if (invalidAck.ok || invalidAck.reason !== 'invalid') fail('id inválido deveria ser invalid');
+  // v2: rotação fora da faixa é invalid; colocar EM CIMA de uma pessoa é blocked
+  const badRotAck = await wait<any>('ack da rotação inválida', (done) =>
+    b.emit('furniture:place', 'globe', 5, 10, 99, (res: any) => done(res)),
+  );
+  if (badRotAck.ok || badRotAck.reason !== 'invalid') fail('rotação 99 deveria ser invalid');
+  b.emit('move', 8 * 32 + 16, 10 * 32 + 16); // B fica parado no tile (8,10)
+  await new Promise((r) => setTimeout(r, 150));
+  const onPlayerAck = await wait<any>('ack do place sobre pessoa', (done) =>
+    b.emit('furniture:place', 'sofa_big', 7, 10, 0, (res: any) => done(res)), // cobre (7..9,10)
+  );
+  if (onPlayerAck.ok || onPlayerAck.reason !== 'blocked') {
+    fail(`colocar sobre uma pessoa deveria ser blocked: ${JSON.stringify(onPlayerAck)}`);
+  }
+  const removedSeenA = wait<string>('A vê remoção', (done) =>
+    a.on('furniture:removed', (id: string) => done(id)),
+  );
+  const removeAck = await wait<any>('ack do remove', (done) =>
+    b.emit('furniture:remove', placed.id, (res: any) => done(res)),
+  );
+  if (!removeAck.ok) fail(`remove recusado: ${removeAck.reason}`);
+  if ((await removedSeenA) !== placed.id) fail('broadcast da remoção inválido');
+  results.push(
+    'móveis: place/move/remove propagam; parede, sobreposição, pessoa, id e rotação inválidos barrados OK',
+  );
+
   // B sai; A deve ver player:left
   const leftSeen = wait<string>('A vê B sair', (done) => a.on('player:left', (id: string) => done(id)));
   b.disconnect();
@@ -155,10 +245,25 @@ try {
   d.emit('join', 'Dave', 0xe9c46a, undefined, 'nao-existe' as any);
   const dave = (await snapD).find((p) => p.name === 'Dave');
   if (!dave) fail('Dave não entrou');
-  if (dave.character !== 'adam') {
-    fail(`personagem inválido deveria cair no padrão, veio: ${dave.character}`);
+  // personagem legado inválido cai no padrão (a aparência do adam)
+  if (dave.appearance?.outfit !== 'outfit_02_01') {
+    fail(`personagem inválido deveria cair no padrão, veio: ${JSON.stringify(dave.appearance)}`);
   }
-  results.push('personagem inválido cai no padrão OK');
+  // e aparência ADULTERADA (6º argumento) também cai no padrão
+  const e = io(URL);
+  const snapE = wait<any[]>('snapshot E', (done) =>
+    e.on('world:snapshot', (players: any[]) => done(players)),
+  );
+  e.emit('join', 'Eve', 0xe9c46a, undefined, undefined, undefined, {
+    body: 'hack', eyes: 1, outfit: null, hair: 'x', accessory: 'y',
+  } as any);
+  const eve = (await snapE).find((p) => p.name === 'Eve');
+  if (!eve) fail('Eve não entrou');
+  if (eve.appearance?.body !== 'body_02') {
+    fail(`aparência adulterada deveria cair no padrão do legado, veio: ${JSON.stringify(eve.appearance)}`);
+  }
+  e.disconnect();
+  results.push('personagem/aparência inválidos caem no padrão OK');
   d.disconnect();
 
   // voz: pedir token ANTES de entrar deve ser recusado

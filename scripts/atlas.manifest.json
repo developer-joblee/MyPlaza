@@ -1,0 +1,269 @@
+﻿{
+    "comment":  "Manifest do atlas de tiles: nome semantico -\u003e recorte nas sheets master do pack pago (assets_temp/). Consumido por scripts/build-atlas.mjs. Coordenadas obtidas por casamento pixel a pixel com os recortes calibrados da versao free (2026-08-21); easel e plant_3 casados com ~3% de divergencia (retoques da arte paga).",
+    "sources":  {
+                    "interiors":  "assets_temp/moderninteriors-win/1_Interiors/32x32/Interiors_32x32.png",
+                    "room":  "assets_temp/moderninteriors-win/1_Interiors/32x32/Room_Builder_32x32.png",
+                    "office":  "assets_temp/Modern_Office_Revamped_v1.2/Modern_Office_32x32.png"
+                },
+    "animations":  {
+                    "coffee":  "assets_temp/moderninteriors-win/3_Animated_objects/32x32/spritesheets/animated_coffee_32x32.png",
+                    "aquarium":  "assets_temp/moderninteriors-win/3_Animated_objects/32x32/spritesheets/animated_fishtank_orange_32x32.png",
+                    "tv":  "assets_temp/moderninteriors-win/3_Animated_objects/32x32/spritesheets/animated_TV_reportage_32x32.png"
+                },
+    "frames":  {
+                   "office/whiteboard":  { "src": "office", "x": 284, "y": 334, "w": 64, "h": 46 },
+                   "office/printer":  { "src": "office", "x": 262, "y": 596, "w": 50, "h": 40 },
+                   "office/vending":  { "src": "office", "x": 74, "y": 746, "w": 46, "h": 68 },
+                   "office/floor_carpet":  { "src": "room", "x": 1472, "y": 800, "w": 32, "h": 32 },
+                   "office/floor_meeting":  { "src": "room", "x": 1344, "y": 800, "w": 32, "h": 32 },
+                   "office/floor_cream":  { "src": "room", "x": 1088, "y": 544, "w": 32, "h": 32 },
+                   "cafe/coffee_station":  { "src": "office", "x": 264, "y": 1230, "w": 52, "h": 64 },
+                   "cafe/floor_wood":  { "src": "room", "x": 1088, "y": 672, "w": 32, "h": 32 },
+                   "cafe/floor_checker":  { "src": "room", "x": 1216, "y": 928, "w": 32, "h": 32 },
+                   "floor/gray":  {
+                                      "src":  "room",
+                                      "x":  1472,
+                                      "y":  544,
+                                      "w":  32,
+                                      "h":  32
+                                  },
+                   "floor/herringbone":  {
+                                             "src":  "room",
+                                             "x":  1344,
+                                             "y":  608,
+                                             "w":  32,
+                                             "h":  32
+                                         },
+                   "floor/teal":  {
+                                      "src":  "room",
+                                      "x":  1344,
+                                      "y":  1120,
+                                      "w":  32,
+                                      "h":  32
+                                  },
+                   "floor/yellow":  {
+                                        "src":  "room",
+                                        "x":  1088,
+                                        "y":  576,
+                                        "w":  32,
+                                        "h":  32
+                                    },
+                   "studio/art_beach":  {
+                                            "src":  "interiors",
+                                            "x":  262,
+                                            "y":  727,
+                                            "w":  54,
+                                            "h":  28
+                                        },
+                   "studio/art_fire":  {
+                                           "src":  "interiors",
+                                           "x":  262,
+                                           "y":  656,
+                                           "w":  54,
+                                           "h":  28
+                                       },
+                   "studio/art_planner":  {
+                                              "src":  "interiors",
+                                              "x":  32,
+                                              "y":  506,
+                                              "w":  63,
+                                              "h":  56
+                                          },
+                   "studio/art_tv":  {
+                                         "src":  "interiors",
+                                         "x":  10,
+                                         "y":  432,
+                                         "w":  44,
+                                         "h":  14
+                                     },
+                   "studio/chair_left_1":  {
+                                               "src":  "interiors",
+                                               "x":  130,
+                                               "y":  8642,
+                                               "w":  26,
+                                               "h":  42
+                                           },
+                   "studio/chair_left_2":  {
+                                               "src":  "interiors",
+                                               "x":  162,
+                                               "y":  8642,
+                                               "w":  26,
+                                               "h":  42
+                                           },
+                   "studio/chair_right_1":  {
+                                                "src":  "interiors",
+                                                "x":  132,
+                                                "y":  8578,
+                                                "w":  26,
+                                                "h":  42
+                                            },
+                   "studio/chair_right_2":  {
+                                                "src":  "interiors",
+                                                "x":  164,
+                                                "y":  8578,
+                                                "w":  26,
+                                                "h":  42
+                                            },
+                   "studio/chalkboard":  {
+                                             "src":  "interiors",
+                                             "x":  4,
+                                             "y":  10830,
+                                             "w":  56,
+                                             "h":  46
+                                         },
+                   "studio/counter_1":  {
+                                            "src":  "interiors",
+                                            "x":  358,
+                                            "y":  978,
+                                            "w":  54,
+                                            "h":  64
+                                        },
+                   "studio/counter_2":  {
+                                            "src":  "interiors",
+                                            "x":  422,
+                                            "y":  978,
+                                            "w":  54,
+                                            "h":  64
+                                        },
+                   "studio/easel":  {
+                                        "src":  "interiors",
+                                        "x":  66,
+                                        "y":  10848,
+                                        "w":  62,
+                                        "h":  64
+                                    },
+                   "studio/fridge":  {
+                                         "src":  "interiors",
+                                         "x":  390,
+                                         "y":  10800,
+                                         "w":  26,
+                                         "h":  48
+                                     },
+                   "studio/globe_1":  {
+                                          "src":  "interiors",
+                                          "x":  418,
+                                          "y":  10658,
+                                          "w":  26,
+                                          "h":  42
+                                      },
+                   "studio/globe_2":  {
+                                          "src":  "interiors",
+                                          "x":  450,
+                                          "y":  10658,
+                                          "w":  26,
+                                          "h":  42
+                                      },
+                   "studio/long_desk":  {
+                                            "src":  "interiors",
+                                            "x":  32,
+                                            "y":  10658,
+                                            "w":  128,
+                                            "h":  46
+                                        },
+                   "studio/plant_1":  {
+                                          "src":  "interiors",
+                                          "x":  334,
+                                          "y":  850,
+                                          "w":  36,
+                                          "h":  60
+                                      },
+                   "studio/plant_2":  {
+                                          "src":  "interiors",
+                                          "x":  34,
+                                          "y":  19300,
+                                          "w":  28,
+                                          "h":  46
+                                      },
+                   "studio/plant_3":  {
+                                          "src":  "interiors",
+                                          "x":  426,
+                                          "y":  832,
+                                          "w":  46,
+                                          "h":  62
+                                      },
+                   "studio/rug_2x1":  {
+                                          "src":  "interiors",
+                                          "x":  6,
+                                          "y":  7492,
+                                          "w":  86,
+                                          "h":  56
+                                      },
+                   "studio/rug_3x1":  {
+                                          "src":  "interiors",
+                                          "x":  0,
+                                          "y":  7556,
+                                          "w":  96,
+                                          "h":  56
+                                      },
+                   "studio/rug_3x2":  {
+                                          "src":  "interiors",
+                                          "x":  228,
+                                          "y":  488,
+                                          "w":  120,
+                                          "h":  80
+                                      },
+                   "studio/shelf_1":  {
+                                          "src":  "interiors",
+                                          "x":  64,
+                                          "y":  592,
+                                          "w":  64,
+                                          "h":  64
+                                      },
+                   "studio/shelf_2":  {
+                                          "src":  "interiors",
+                                          "x":  128,
+                                          "y":  592,
+                                          "w":  64,
+                                          "h":  64
+                                      },
+                   "studio/sofa_big":  {
+                                           "src":  "interiors",
+                                           "x":  256,
+                                           "y":  576,
+                                           "w":  96,
+                                           "h":  52
+                                       },
+                   "studio/sofa_small":  {
+                                             "src":  "interiors",
+                                             "x":  234,
+                                             "y":  432,
+                                             "w":  76,
+                                             "h":  42
+                                         },
+                   "studio/stool":  {
+                                        "src":  "interiors",
+                                        "x":  194,
+                                        "y":  418,
+                                        "w":  28,
+                                        "h":  28
+                                    },
+                   "studio/window":  {
+                                         "src":  "interiors",
+                                         "x":  298,
+                                         "y":  7156,
+                                         "w":  42,
+                                         "h":  36
+                                     },
+                   "studio/workstation_1":  {
+                                                "src":  "interiors",
+                                                "x":  238,
+                                                "y":  10646,
+                                                "w":  48,
+                                                "h":  70
+                                            },
+                   "studio/workstation_2":  {
+                                                "src":  "interiors",
+                                                "x":  354,
+                                                "y":  10646,
+                                                "w":  48,
+                                                "h":  70
+                                            },
+                   "wall/face":  {
+                                     "src":  "room",
+                                     "x":  4,
+                                     "y":  672,
+                                     "w":  32,
+                                     "h":  64
+                                 }
+               }
+}

@@ -7,6 +7,8 @@ import { SCENARIOS, type ScenarioId } from '@together/shared';
  */
 export const SCENARIO_EMOJI: Record<ScenarioId, string> = {
   studio: '🛋️',
+  office: '🏢',
+  cafe: '☕',
 };
 
 /**

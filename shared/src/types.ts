@@ -1,12 +1,12 @@
-import type { CharacterId } from './constants';
+import type { Appearance } from './appearance';
 import type { ScenarioId } from './scenarios';
 
 export interface PlayerState {
   id: string;
   name: string;
   color: number;
-  /** qual boneco desenhar; é por aqui que os outros clientes descobrem */
-  character: CharacterId;
+  /** qual boneco desenhar (camadas); é por aqui que os outros clientes descobrem */
+  appearance: Appearance;
   x: number;
   y: number;
   /**
@@ -114,7 +114,7 @@ export type AssignableWorldRole = 'host' | 'member';
 export interface WorldBinding {
   name: string;
   color: number;
-  character: CharacterId;
+  appearance: Appearance;
 }
 
 /** Um mundo na lista do lobby. */

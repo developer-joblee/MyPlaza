@@ -10,11 +10,24 @@ import type {
   VoiceTokenResponse,
   WorldPatch,
 } from './types';
-import type { CharacterId } from './constants';
+import type { Appearance } from './appearance';
+import type { CharacterId, EmoteId } from './constants';
+import type { FurnitureResult, PlacedFurniture } from './furniture';
 import type { ScenarioId } from './scenarios';
 
 export interface ServerToClientEvents {
   'world:snapshot': (players: PlayerState[], chat: ChatMessage[], scenarioId: ScenarioId) => void;
+  /** alguém do mundo (inclusive você) disparou um emote — ver `player:emote` */
+  'player:emoted': (id: string, emoteId: EmoteId) => void;
+  /**
+   * A camada de móveis dinâmicos deste mundo, logo após o `world:snapshot`.
+   * `canEdit` diz se ESTE socket pode editar (administra o mundo; em modo
+   * anônimo, todos podem — não há papel sem banco).
+   */
+  'furniture:snapshot': (items: PlacedFurniture[], canEdit: boolean) => void;
+  /** um móvel entrou ou mudou de lugar (place e move chegam iguais) */
+  'furniture:changed': (item: PlacedFurniture) => void;
+  'furniture:removed': (id: string) => void;
   'player:joined': (player: PlayerState) => void;
   'player:left': (id: string) => void;
   'player:moved': (id: string, x: number, y: number) => void;
@@ -145,6 +158,12 @@ export interface ClientToServerEvents {
     name: string,
     color: number,
     scenarioId?: ScenarioId,
+    /**
+     * LEGADO, mantido na posição por compatibilidade de assinatura: cliente
+     * antigo (ou payload sem `appearance`) cai em
+     * `LEGACY_CHARACTER_APPEARANCE[character]`. Cliente novo manda `undefined`
+     * aqui e a aparência real no 6º argumento.
+     */
     character?: CharacterId,
     /**
      * Em QUAL mundo entrar (`places.id`), escolhido no lobby.
@@ -155,6 +174,8 @@ export interface ClientToServerEvents {
      * decide é o mundo, e o servidor devolve o valor real no `world:snapshot`.
      */
     worldId?: string,
+    /** a aparência por camadas; validada por `isAppearance` no servidor */
+    appearance?: Appearance,
   ) => void;
   move: (x: number, y: number) => void;
   /**
@@ -165,6 +186,34 @@ export interface ClientToServerEvents {
   sit: (sitting: boolean) => void;
   /** Ficar ausente ou voltar. Sem validação: é só intenção do usuário. */
   away: (away: boolean) => void;
+  /**
+   * Editor de móveis — só quem pode editar (ver `furniture:snapshot`). Tudo por
+   * ack com `FurnitureResult`; o efeito volta como broadcast
+   * (`furniture:changed`/`removed`) para o mundo INTEIRO, inclusive quem pediu.
+   * O servidor valida footprint contra o mapa estático e os outros móveis.
+   */
+  'furniture:place': (
+    furnitureId: string,
+    tileX: number,
+    tileY: number,
+    rotation: number,
+    ack: (res: FurnitureResult) => void,
+  ) => void;
+  'furniture:move': (
+    id: string,
+    tileX: number,
+    tileY: number,
+    rotation: number,
+    ack: (res: FurnitureResult) => void,
+  ) => void;
+  'furniture:remove': (id: string, ack: (res: FurnitureResult) => void) => void;
+  /**
+   * Dispara um emote (reação sobre a cabeça). O servidor valida o id e impõe
+   * `EMOTE_COOLDOWN_MS` por socket, recusando em silêncio — o efeito volta pelo
+   * broadcast `player:emoted`, para TODOS do mundo, inclusive quem disparou
+   * (caminho único de render: o emissor desenha o mesmo evento que os outros).
+   */
+  'player:emote': (emoteId: string) => void;
   /**
    * Comecei / parei de compartilhar a tela.
    *

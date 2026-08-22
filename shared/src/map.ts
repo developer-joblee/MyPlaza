@@ -41,6 +41,13 @@ export enum TileType {
    */
   ChairLeft = 19,
   ChairRight = 20,
+  /**
+   * Móveis ANIMADOS (client/src/game/AnimatedProp.ts). Para colisão e mapa são
+   * móveis sólidos como os demais; a animação é só desenho. O aquário ocupa
+   * dois tiles em run horizontal (`AA`), como estante.
+   */
+  CoffeeMachine = 21,
+  Aquarium = 22,
 }
 
 /** Tiles que se comportam como parede (cap + face no tema modern). */
@@ -105,6 +112,8 @@ export function isSolid(tile: TileType): boolean {
     case TileType.Counter:
     case TileType.Fridge:
     case TileType.Globe:
+    case TileType.CoffeeMachine:
+    case TileType.Aquarium:
     case TileType.WallWindow:
     case TileType.WallArt:
     case TileType.WallBoard:

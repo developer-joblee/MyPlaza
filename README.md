@@ -111,9 +111,9 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 - **lobby** — a lista de mundos que você pode acessar, **o seu ID** (é o que você
   passa para ser adicionado a um mundo de outra pessoa) e criar mundo. Quem criou
   o mundo administra: adicionar gente pelo ID, papéis, lotação, arquivar.
-- **entrada** — nome, personagem e cor. Não há seletor de cenário: existe um
-  cenário só (o Estúdio), e o mapa de um mundo vem do mundo. O seletor volta
-  sozinho nas duas telas se um segundo cenário entrar em `SCENARIOS` — ver
+- **entrada** — nome, personagem e cor. Em modo anônimo há também o seletor de
+  **cenário** (Estúdio, Escritório ou Café); com login, o mapa vem do mundo
+  escolhido no lobby e o seletor some — ver
   [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md). **Só aparece na
   primeira vez em cada mundo**: depois disso o nome fica guardado no vínculo com
   aquele mundo e "Entrar" vai direto para o jogo, mesmo depois de um logout — ver
@@ -133,6 +133,7 @@ com Supabase:   login -> lobby -> entrada (nome, personagem, cor) -> jogo
 | Conversa paralela (**booble**) | **Botão direito** no boneco de alguém → **booble** (ou **entrar na booble**, se ela já tiver uma), **de qualquer distância**: se estiver longe, seu avatar vai até lá caminhando e a booble abre na chegada — andar, clicar no chão ou o **Cancelar** do aviso desistem. Dentro da booble vocês se ouvem a 100% e o resto da sala cai a 7% — nos dois sentidos. Um círculo violeta no chão envolve o grupo e cresce a cada pessoa que entra, e um balãozinho de cochicho ao lado de cada cabeça mostra que a conversa está rolando. Sai-se pelo **Sair** no aviso, ou dando dois passos para o lado (3 tiles) — ver [Booble](docs/features/booble.md) |
 | Compartilhar tela | Botão de tela na barra inferior. Quem está perto (ou na sua **booble**) vê uma **prévia no topo-centro da tela**; clicar nela amplia para a janela inteira, com `⛶`/`F` para fullscreen e `Esc` para voltar — ver [Compartilhamento de tela](docs/features/compartilhamento-de-tela.md) |
 | Tocar um som seu | Botão de **grade** na barra inferior: sobe seus sons (áudio maior que 5s abre um seletor de trecho, com a onda e prévia) e toca para quem está perto. O mesmo painel tem o **volume do soundboard**, separado da voz e salvo no seu perfil. Quantos sons você pode ter é liberado pelo **tempo na plataforma** — ver [Soundboard gamificado](docs/features/soundboard.md) |
+| Reagir (emote) | Botão de **carinha** na barra inferior: escolha uma das 6 reações e um balãozinho animado aparece sobre a sua cabeça por 3s, para todos — ver [Emotes](docs/features/emotes.md) |
 | Chat | Painel no canto inferior direito (global) |
 | Menu de um personagem | **Botão direito** em cima do boneco (o seu ou o de outra pessoa) abre um menu com o nome de quem foi clicado e as ações sobre essa pessoa: **booble**, **chamar** e o **volume dela**. É o lugar das ações *sobre uma pessoa* — na lista do canto superior esquerdo ficam os selos de status — ver [Menu de contexto no avatar](docs/features/menu-de-contexto.md) |
 | Ajustar o volume de UMA pessoa | **Botão direito** no boneco dela → a seção **Áudio de X**, com dois sliders: **voz** e **sons** (soundboard), independentes. 0% é mudo, e o ajuste **fica salvo na sua conta** — vale em qualquer navegador e sobrevive ao F5, o seu e o dela. Ninguém é notificado — ver [Volume por pessoa](docs/features/volume-por-pessoa.md) |
@@ -159,7 +160,12 @@ código — a regra completa está em [`CLAUDE.md`](CLAUDE.md).
 | Modo ausente (celular) | [Modo ausente (celular)](docs/features/modo-ausente.md) | `client/src/presence.ts`, `client/src/game/AwayIndicator.ts`, `client/src/ui/MediaControls.tsx` |
 | Chamado de quem está ausente ("toc-toc") | [Chamado de quem está ausente](docs/features/chamado-ausente.md) | `client/src/presence.ts`, `client/src/ui/knock.ts`, `server/src/handlers.ts` |
 | Sentar em cadeiras | [Controles](#controles) *(sem doc próprio ainda)* | `client/src/game/LocalPlayer.ts`, `client/src/game/characterDefs.ts` |
-| Cenários e mapas ASCII (hoje um só: o Estúdio) | [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md) | `shared/src/scenarios.ts`, `shared/src/map.ts`, `client/src/game/ModernTilemap.ts` |
+| Personagens e aparência (gerador por camadas: corpo, olhos, roupa, cabelo) | [Personagens e aparência](docs/features/personagens-e-aparencia.md) | `shared/src/appearance.ts`, `client/src/game/composeCharacter.ts`, `client/src/ui/CharacterBuilder.tsx`, `scripts/build-character-assets.mjs` |
+| Cenários e mapas ASCII (Estúdio, Escritório e Café) | [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md) | `shared/src/scenarios.ts`, `shared/src/map.ts`, `client/src/game/ModernTilemap.ts`, `client/src/game/scenarioThemes.ts` |
+| Atlas de tiles (arte do pack pago empacotada por script) | [Atlas de tiles](docs/features/atlas-de-tiles.md) | `scripts/build-atlas.mjs`, `scripts/atlas.manifest.json`, `client/public/tiles/modern/` |
+| Objetos animados no cenário (café, aquário, TV) | [Objetos animados](docs/features/objetos-animados.md) | `client/src/game/AnimatedProp.ts`, `client/src/game/scenarioThemes.ts`, `shared/src/map.ts` |
+| Emotes/reações (balão animado sobre a cabeça) | [Emotes](docs/features/emotes.md) | `client/src/ui/EmotePicker.tsx`, `client/src/game/EmoteBubble.ts`, `server/src/handlers.ts` |
+| Editor de móveis (dono do mundo decora; persiste por mundo) | [Editor de móveis](docs/features/editor-de-moveis.md) | `shared/src/furniture.ts`, `client/src/game/FurnitureLayer.ts`, `client/src/ui/FurniturePalette.tsx`, `server/src/world.ts` |
 | Token do LiveKit (assinatura no server) | [Deploy](#deploy-railway) *(sem doc próprio ainda)* | `server/src/voice.ts`, `client/src/net/voiceApi.ts` |
 | Persistência (Supabase): perfis, empresas, locais, posição salva e atividade da sessão | [Persistência (Supabase)](docs/features/persistencia-supabase.md) | `db/`, `server/src/db.ts` |
 | Autenticação e controle de acesso (e-mail e senha sem confirmação; acesso por ID, lotação, local restrito) | [Autenticação e controle de acesso](docs/features/autenticacao-e-acesso.md) | `client/src/auth/`, `client/src/net/authToken.ts`, `server/src/auth.ts`, `server/src/socketAuth.ts`, `server/src/handlers.ts` |
@@ -300,12 +306,14 @@ O mapa é ASCII em `shared/src/scenarios.ts`: um caractere por tile, uma legenda
 `charToTile` e os spawns. Todas as linhas precisam ter o mesmo comprimento —
 `buildMap` estoura no boot se uma divergir. Mover uma mesa é trocar um caractere.
 
-Hoje existe **um cenário, o Estúdio** (Modern Interiors, by LimeZu): o projeto
-tinha quatro, de três packs diferentes, e ficou num estilo só em 2026-08-21.
-A legenda completa, o que cada `TileType` decide, como o `ModernTilemap` recorta
-as sheets e as armadilhas (editar o ASCII invalida posição salva; trocar a sheet
-invalida todos os recortes) estão em
-**[Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md)**.
+Há **três cenários, todos do mesmo estilo de arte** (Modern Interiors + Modern
+Office, by LimeZu): o Estúdio, o Escritório e o Café. Um renderer só desenha os
+três — o que muda por cenário é o tema (`client/src/game/scenarioThemes.ts`).
+A legenda completa, o que cada `TileType` decide, como o `ModernTilemap` desenha
+a partir do atlas e as armadilhas (editar o ASCII invalida posição salva; frame
+faltando no atlas falha alto no boot) estão em
+**[Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md)** e em
+**[Atlas de tiles](docs/features/atlas-de-tiles.md)**.
 
 ## Zonas de áudio (salas fechadas)
 
@@ -408,15 +416,12 @@ Um pack só, desde 2026-08-21 — os assets dos cenários que saíram (Sprout La
 by Cup Nooble, na Praça; Pixel Art Top Down by Cainos, nas Ruínas) foram
 removidos do repo junto com os mapas.
 
-- **Estúdio (interiores) e personagens**: [Modern Interiors — free](https://limezu.itch.io/moderninteriors),
-  by **LimeZu** — uso não-comercial, conforme a licença do pack. Os quatro
-  personagens (Adam, Alex, Amélia, Bob) vêm daí, incluindo as poses de sentar.
-
-> **A versão completa do pack foi comprada e ainda não entrou no repo.** O que
-> está em `client/public/tiles/modern/` e `client/public/characters/` continua
-> sendo recorte da versão **free**. Ao trocar pelas sheets do pack completo,
-> atualize este crédito (a linha acima diz "free") e confira a licença que vem
-> com ele — a do free é não-comercial, e a paga pode não ser a mesma. Os
-> retângulos de recorte do `ModernTilemap` são coordenadas em pixel das sheets
-> atuais e **não sobrevivem** à troca: ver
-> [Cenários e mapas ASCII](docs/features/cenarios-e-mapas.md#armadilhas).
+- **Personagens e Estúdio (interiores)**:
+  [Modern Interiors — versão completa](https://limezu.itch.io/moderninteriors),
+  by **LimeZu** — crédito obrigatório; a licença da versão completa permite uso
+  comercial e **proíbe redistribuir o asset**. Por isso só o subconjunto usado
+  está no repo — personagens em `client/public/characters/v2/` (copiados por
+  `npm run assets:characters`) e tiles no atlas `client/public/tiles/modern/`
+  (gerado por `npm run atlas`) — e **o repo deve permanecer privado**. Ver
+  [Personagens e aparência](docs/features/personagens-e-aparencia.md) e
+  [Atlas de tiles](docs/features/atlas-de-tiles.md).

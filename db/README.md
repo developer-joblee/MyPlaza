@@ -89,6 +89,25 @@ ordem**:
     `[db] getPlaceById: cenário "plaza" não existe mais` a cada entrada nesse
     mundo, e o mapa carregado é o do Estúdio de todo jeito.
 
+14. `migrations/0014_appearance.sql` — **aparência por camadas**.
+    Coluna `appearance` (jsonb) em `profiles`, `sessions` e `presence_state`,
+    com o objeto do Character Generator ({body, eyes, outfit, hair}). É
+    **obrigatória a partir do gerador de aparência**: o servidor passa a
+    SELECIONAR a coluna, e sem ela a leitura de perfil/vínculo falha (42703).
+    `character_id` não sai — é o fallback de leitura das linhas antigas.
+
+15. `migrations/0015_scenarios_office_cafe.sql` — **cenários Escritório e Café**.
+    Espelha os dois cenários novos de `shared/src/scenarios.ts` no catálogo
+    (`scenarios` + `audio_zones`). Requer a 0013 aplicada antes (o `office`
+    daqui é o novo, do estilo Modern — não o procedural que a 0013 removeu).
+
+16. `migrations/0016_world_furniture.sql` — **editor de móveis**.
+    A camada dinâmica de móveis por mundo (`world_furniture`). Sem ela o editor
+    funciona só em memória (fail-soft): os móveis somem no restart do servidor.
+
+17. `seed.sql` — catálogo (personagens, cenários, zonas) + empresa e locais de demo
+
+O passo 17 **não é opcional**: sem as linhas de `characters`, `scenarios` e
 14. `migrations/0014_peer_audio_prefs.sql` — **volume por pessoa**. Entra a
     tabela `peer_audio_prefs`: quanto EU ouço a voz e os sons de soundboard de
     CADA pessoa (0..100 nos dois, default 100 = como era antes). Obrigatória

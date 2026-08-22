@@ -6,10 +6,13 @@ import {
   Text,
   TextStyle,
   type FederatedPointerEvent,
+  type Texture,
 } from 'pixi.js';
 import { PROXIMITY_RADIUS, TILE_SIZE } from '@together/shared';
 import { AwayIndicator } from './AwayIndicator';
 import { BoobleWhisper } from './BoobleWhisper';
+import { EmoteBubble } from './EmoteBubble';
+import type { EmoteFrames } from './emotes';
 import type { CharacterFrames, Facing, SitFacing } from './sprites';
 
 const NAME_STYLE = new TextStyle({
@@ -42,6 +45,8 @@ export class Avatar {
   private awayIndicator: AwayIndicator | null = null;
   /** criado só na primeira booble — ver setBooble */
   private whisper: BoobleWhisper | null = null;
+  /** criado só na primeira reação — ver showEmote */
+  private emoteBubble: EmoteBubble | null = null;
 
   private facing: Facing = 'down';
   private moving = false;
@@ -193,30 +198,61 @@ export class Avatar {
     this.whisper?.setVisible(inBooble);
   }
 
+  /**
+   * Reação sobre a cabeça (balão de emote). Criado na primeira, como o
+   * `AwayIndicator` — a maioria dos avatares nunca reage. Um emote novo
+   * substitui o anterior; o balão some sozinho (`EMOTE_DURATION_MS`).
+   * A posição sai do nome, como a pastilha de ausente, para encostar na cabeça
+   * de qualquer personagem.
+   */
+  showEmote(frames: EmoteFrames): void {
+    if (!this.emoteBubble) {
+      this.emoteBubble = new EmoteBubble(this.label.y - this.label.height - 2);
+      this.view.addChild(this.emoteBubble.view);
+    }
+    this.emoteBubble.show(frames);
+  }
+
+  /**
+   * O que desenhar agora: o loop, o ritmo e uma intro opcional que toca uma vez
+   * antes de o loop começar (hoje só o celular tem — tirar o aparelho do bolso).
+   * A precedência é a mesma de sempre: ausente > sentado > andando > parado.
+   * A intro depende de `frameIndex` ser zerado quando o estado liga — é o que
+   * `setAway`/`setSitting` já fazem.
+   */
+  private resolvePose(): { loop: Texture[]; frameS: number; intro?: Texture[] } {
+    if (this.away) {
+      return {
+        loop: this.frames.phone,
+        frameS: this.frames.phoneFrameS,
+        intro: this.frames.phoneIntro,
+      };
+    }
+    if (this.sitting) {
+      return { loop: this.frames.sit[this.sitting], frameS: this.frames.sitFrameS };
+    }
+    if (this.moving) {
+      return { loop: this.frames.walk[this.facing], frameS: this.frames.walkFrameS };
+    }
+    return { loop: this.frames.idle[this.facing], frameS: this.frames.idleFrameS };
+  }
+
   /** Avança a animação. Chamar a cada frame do ticker. */
   update(dt: number): void {
-    const set = this.away
-      ? this.frames.phone
-      : this.sitting
-        ? this.frames.sit[this.sitting]
-        : this.moving
-          ? this.frames.walk[this.facing]
-          : this.frames.idle[this.facing];
-    const frameDuration = this.away
-      ? this.frames.phoneFrameS
-      : this.sitting
-        ? this.frames.sitFrameS
-        : this.moving
-          ? this.frames.walkFrameS
-          : this.frames.idleFrameS;
+    const pose = this.resolvePose();
     this.frameTimer += dt;
-    if (this.frameTimer >= frameDuration) {
-      this.frameTimer %= frameDuration;
+    if (this.frameTimer >= pose.frameS) {
+      this.frameTimer %= pose.frameS;
       this.frameIndex++;
     }
-    this.sprite.texture = set[this.frameIndex % set.length];
+    const introLen = pose.intro?.length ?? 0;
+    this.sprite.texture =
+      pose.intro && this.frameIndex < introLen
+        ? pose.intro[this.frameIndex]
+        : pose.loop[(this.frameIndex - introLen) % pose.loop.length];
     this.awayIndicator?.update(dt);
     this.whisper?.update(dt);
+    this.emoteBubble?.update(dt);
   }
 
   /**
